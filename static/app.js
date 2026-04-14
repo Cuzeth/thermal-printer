@@ -310,6 +310,241 @@ $("#r-items").addEventListener("click", (e) => {
   }
 });
 
+// ---------- codes (QR + barcodes) ----------
+
+const qrCtrl = {
+  size: $("#qr-size"),
+  sizeV: $("#qr-size-v"),
+  data: $("#qr-data"),
+  ec: $("#qr-ec"),
+};
+qrCtrl.size.addEventListener("input", () => {
+  qrCtrl.sizeV.textContent = qrCtrl.size.value;
+  debouncedQr();
+});
+qrCtrl.data.addEventListener("input", debouncedQr);
+qrCtrl.ec.addEventListener("change", debouncedQr);
+$("#qr-refresh").addEventListener("click", refreshQrPreview);
+$("#qr-print").addEventListener("click", () => {
+  guard(async () => {
+    await postJSON("/api/print/qr", {
+      data: qrCtrl.data.value,
+      ec: qrCtrl.ec.value,
+      size: Number(qrCtrl.size.value),
+    });
+  }, "printing QR…");
+});
+
+let qrT;
+function debouncedQr() {
+  clearTimeout(qrT);
+  qrT = setTimeout(refreshQrPreview, 200);
+}
+async function refreshQrPreview() {
+  if (!qrCtrl.data.value.trim()) return;
+  try {
+    const { data_url } = await postJSON("/api/code/qr/preview", {
+      data: qrCtrl.data.value,
+      ec: qrCtrl.ec.value,
+      size: Number(qrCtrl.size.value),
+      box_size: 10,
+    });
+    showPreviewImage(data_url);
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+
+const bcCtrl = {
+  kind: $("#bc-kind"),
+  data: $("#bc-data"),
+  width: $("#bc-width"),
+  widthV: $("#bc-width-v"),
+  height: $("#bc-height"),
+  heightV: $("#bc-height-v"),
+  hri: $("#bc-hri"),
+  font: $("#bc-font"),
+};
+["width", "height"].forEach((k) => {
+  bcCtrl[k].addEventListener("input", () => {
+    bcCtrl[k + "V"].textContent = bcCtrl[k].value;
+    debouncedBc();
+  });
+});
+[bcCtrl.kind, bcCtrl.data, bcCtrl.hri, bcCtrl.font].forEach((el) =>
+  el.addEventListener("input", debouncedBc)
+);
+$("#bc-refresh").addEventListener("click", refreshBcPreview);
+$("#bc-print").addEventListener("click", () => {
+  guard(async () => {
+    await postJSON("/api/print/barcode", buildBcBody());
+  }, "printing barcode…");
+});
+
+let bcT;
+function debouncedBc() {
+  clearTimeout(bcT);
+  bcT = setTimeout(refreshBcPreview, 200);
+}
+function buildBcBody() {
+  return {
+    kind: bcCtrl.kind.value,
+    data: bcCtrl.data.value,
+    width: Number(bcCtrl.width.value),
+    height: Number(bcCtrl.height.value),
+    hri: bcCtrl.hri.value,
+    font: bcCtrl.font.value,
+  };
+}
+async function refreshBcPreview() {
+  if (!bcCtrl.data.value.trim()) return;
+  try {
+    const { data_url } = await postJSON("/api/code/barcode/preview", buildBcBody());
+    showPreviewImage(data_url);
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+
+// ---------- hardware ----------
+
+$$("button[data-hw]").forEach((b) => {
+  b.addEventListener("click", () => {
+    const kind = b.dataset.hw;
+    guard(async () => {
+      if (kind === "cash_drawer") {
+        await postJSON("/api/hw/cash_drawer", { pin: Number(b.dataset.pin) });
+      } else if (kind === "beep") {
+        await postJSON("/api/hw/beep", {
+          count: Number($("#hw-beep-count").value),
+          duration_units: Number($("#hw-beep-dur").value),
+        });
+      } else if (kind === "feed") {
+        await postJSON("/api/hw/feed", { lines: Number($("#hw-feed").value) });
+      } else if (kind === "cut") {
+        await postJSON("/api/hw/cut", {
+          partial: b.dataset.partial === "true",
+        });
+      } else if (kind === "density") {
+        await postJSON("/api/hw/density", { level: Number($("#hw-dens").value) });
+      } else if (kind === "codepage") {
+        await postJSON("/api/hw/codepage", { n: Number($("#hw-cp").value) });
+      } else if (kind === "reset") {
+        await postJSON("/api/hw/reset", {});
+      } else if (kind === "self_test") {
+        await postJSON("/api/hw/self_test", {});
+      } else if (kind === "status") {
+        const j = await postJSON("/api/hw/status", {});
+        renderStatus(j.statuses);
+        return; // custom toast
+      }
+    }, kind === "cut" ? "cutting…" :
+       kind === "feed" ? "feeding…" :
+       kind === "cash_drawer" ? "kicking drawer…" :
+       kind === "beep" ? "beep!" :
+       kind === "self_test" ? "running self-test…" :
+       kind === "reset" ? "reset sent" :
+       "applied");
+  });
+});
+
+// slider labels
+$("#hw-feed").addEventListener("input", (e) => {
+  $("#hw-feed-v").textContent = e.target.value;
+});
+$("#hw-dens").addEventListener("input", (e) => {
+  $("#hw-dens-v").textContent = e.target.value;
+});
+
+function renderStatus(rows) {
+  const el = $("#hw-status-out");
+  const lines = rows.map((r) => {
+    let out = `[${r.mode}] ${r.label}: `;
+    if (r.raw === null) {
+      out += "no response";
+    } else {
+      out += `0x${r.raw.toString(16).padStart(2, "0")}`;
+      if (r.flags) {
+        const set = Object.entries(r.flags).filter(([, v]) => v).map(([k]) => k);
+        if (set.length) out += "  ⚠ " + set.join(", ");
+      }
+    }
+    return out;
+  });
+  el.textContent = lines.join("\n");
+  toast("status read", "ok");
+}
+
+// load code-pages on first hardware tab view (once)
+let cpLoaded = false;
+async function loadCodePages() {
+  if (cpLoaded) return;
+  cpLoaded = true;
+  try {
+    const r = await fetch("/api/hw/codepages").then((x) => x.json());
+    const sel = $("#hw-cp");
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    r.pages.forEach((pg) => {
+      const opt = document.createElement("option");
+      opt.value = String(pg.n);
+      opt.textContent = `${pg.n}: ${pg.label}`;
+      sel.appendChild(opt);
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+// ---------- console (raw ESC/POS) ----------
+
+$("#console-send").addEventListener("click", () => {
+  guard(async () => {
+    const r = await postJSON("/api/hw/raw", { bytes: $("#console-input").value });
+    $("#console-sent").textContent = `sent ${r.sent} bytes`;
+  }, "bytes sent");
+});
+
+let cheatLoaded = false;
+async function loadCheatSheet() {
+  if (cheatLoaded) return;
+  cheatLoaded = true;
+  try {
+    const r = await fetch("/api/hw/cheatsheet").then((x) => x.json());
+    const tbody = $("#cheat-body");
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+    r.entries.forEach((e) => {
+      const tr = document.createElement("tr");
+      const nameC = document.createElement("td");
+      nameC.textContent = e.name;
+      nameC.className = "mono";
+      const hexC = document.createElement("td");
+      hexC.textContent = e.hex;
+      hexC.className = "mono dim";
+      const descC = document.createElement("td");
+      descC.textContent = e.desc;
+      const actC = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.className = "ghost";
+      btn.textContent = "insert";
+      btn.addEventListener("click", () => {
+        const ta = $("#console-input");
+        const cur = ta.value.trimEnd();
+        ta.value = cur ? cur + "\n" + e.hex : e.hex;
+        ta.focus();
+      });
+      actC.appendChild(btn);
+      tr.append(nameC, hexC, descC, actC);
+      tbody.appendChild(tr);
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+// Lazy-load hardware/console content when those tabs are opened.
+$$(".tab").forEach((t) => {
+  t.addEventListener("click", () => {
+    if (t.dataset.tab === "hardware") loadCodePages();
+    if (t.dataset.tab === "console") loadCheatSheet();
+  });
+});
+
 // ---------- keyboard ----------
 
 document.addEventListener("keydown", (e) => {
@@ -317,5 +552,7 @@ document.addEventListener("keydown", (e) => {
     const pane = $(".tab.active").dataset.tab;
     if (pane === "compose") $("#compose-print").click();
     else if (pane === "image") $("#image-print").click();
+    else if (pane === "codes") $("#qr-print").click();
+    else if (pane === "console") $("#console-send").click();
   }
 });

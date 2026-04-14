@@ -12,6 +12,8 @@ from typing import Any, Callable
 from flask import Flask, jsonify, render_template, request
 
 import config
+from features import codes as codes_feat
+from features import hardware as hw_feat
 from features import image as image_feat
 from features import render as render_feat
 from features import text as text_feat
@@ -261,6 +263,220 @@ def print_ascii():
 @app.post("/api/print/now")
 def print_now():
     return _safe(lambda: (_print_body(widgets.now_card()), {})[1])
+
+
+# ---------- codes (QR / barcodes) ----------
+
+@app.post("/api/code/qr/preview")
+def qr_preview():
+    def run():
+        data = request.get_json(silent=True) or {}
+        opts = codes_feat.QROptions(
+            data=data.get("data", ""),
+            ec=data.get("ec", "M"),
+            size=int(data.get("size", 8)),
+            box_size=int(data.get("box_size", 10)),
+        )
+        img = codes_feat.make_qr_image(opts)
+        return {"data_url": image_feat.to_png_data_url(img),
+                "width": img.width, "height": img.height}
+    return _safe(run)
+
+
+@app.post("/api/print/qr")
+def print_qr():
+    def run():
+        data = request.get_json(silent=True) or {}
+        opts = codes_feat.QROptions(
+            data=data.get("data", ""),
+            ec=data.get("ec", "M"),
+            size=int(data.get("size", 8)),
+        )
+        if not opts.data:
+            raise ValueError("QR payload is empty.")
+        with open_printer() as p:
+            codes_feat.print_qr(p, opts)
+            footer(p)
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/code/barcode/preview")
+def barcode_preview():
+    def run():
+        data = request.get_json(silent=True) or {}
+        opts = codes_feat.BarcodeOptions(
+            kind=data.get("kind", "CODE128"),
+            data=data.get("data", ""),
+            width=int(data.get("width", 3)),
+            height=int(data.get("height", 80)),
+            hri=data.get("hri", "BELOW"),
+            font=data.get("font", "A"),
+        )
+        img = codes_feat.make_barcode_image(opts)
+        return {"data_url": image_feat.to_png_data_url(img),
+                "width": img.width, "height": img.height}
+    return _safe(run)
+
+
+@app.post("/api/print/barcode")
+def print_barcode():
+    def run():
+        data = request.get_json(silent=True) or {}
+        opts = codes_feat.BarcodeOptions(
+            kind=data.get("kind", "CODE128"),
+            data=data.get("data", ""),
+            width=int(data.get("width", 3)),
+            height=int(data.get("height", 80)),
+            hri=data.get("hri", "BELOW"),
+            font=data.get("font", "A"),
+        )
+        if not opts.data:
+            raise ValueError("Barcode payload is empty.")
+        with open_printer() as p:
+            codes_feat.print_barcode(p, opts)
+            footer(p)
+        return {}
+    return _safe(run)
+
+
+@app.get("/api/code/barcode/types")
+def barcode_types():
+    return jsonify({"ok": True,
+                    "types": list(codes_feat.BARCODE_TYPES.keys()),
+                    "hri": codes_feat.HRI_POSITIONS})
+
+
+# ---------- hardware controls ----------
+
+@app.post("/api/hw/cash_drawer")
+def hw_cash_drawer():
+    def run():
+        data = request.get_json(silent=True) or {}
+        pin = int(data.get("pin", 2))
+        with open_printer() as p:
+            hw_feat.cash_drawer(p, pin=pin)
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/beep")
+def hw_beep():
+    def run():
+        data = request.get_json(silent=True) or {}
+        with open_printer() as p:
+            hw_feat.beep(p,
+                         count=int(data.get("count", 1)),
+                         duration_units=int(data.get("duration_units", 3)))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/feed")
+def hw_feed():
+    def run():
+        data = request.get_json(silent=True) or {}
+        with open_printer() as p:
+            hw_feat.feed_lines(p, int(data.get("lines", 3)))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/cut")
+def hw_cut():
+    def run():
+        data = request.get_json(silent=True) or {}
+        with open_printer() as p:
+            hw_feat.cut_after_feed(
+                p,
+                lines=int(data.get("lines", 3)),
+                partial=bool(data.get("partial", False)),
+            )
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/reset")
+def hw_reset():
+    def run():
+        with open_printer() as p:
+            hw_feat.reset(p)
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/self_test")
+def hw_self_test():
+    def run():
+        with open_printer() as p:
+            hw_feat.self_test(p)
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/density")
+def hw_density():
+    def run():
+        data = request.get_json(silent=True) or {}
+        with open_printer() as p:
+            hw_feat.set_density(p, int(data.get("level", 8)))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/hw/codepage")
+def hw_codepage():
+    def run():
+        data = request.get_json(silent=True) or {}
+        with open_printer() as p:
+            hw_feat.set_code_page(p, int(data.get("n", 0)))
+        return {}
+    return _safe(run)
+
+
+@app.get("/api/hw/codepages")
+def hw_codepages():
+    return jsonify({
+        "ok": True,
+        "pages": [{"n": n, "label": label} for n, label in hw_feat.CODE_PAGES.items()],
+    })
+
+
+@app.post("/api/hw/status")
+def hw_status():
+    def run():
+        results = []
+        with open_printer() as p:
+            for mode, label in hw_feat.STATUS_MODES.items():
+                val = hw_feat.query_status(p, mode=mode)
+                entry = {"mode": mode, "label": label, "raw": val}
+                if val is not None:
+                    entry["flags"] = hw_feat.parse_status_byte(mode, val)
+                results.append(entry)
+        return {"statuses": results}
+    return _safe(run)
+
+
+@app.post("/api/hw/raw")
+def hw_raw():
+    def run():
+        data = request.get_json(silent=True) or {}
+        text = data.get("bytes", "")
+        with open_printer() as p:
+            n = hw_feat.send_raw(p, text)
+        return {"sent": n}
+    return _safe(run)
+
+
+@app.get("/api/hw/cheatsheet")
+def hw_cheatsheet():
+    return jsonify({
+        "ok": True,
+        "entries": [
+            {"name": n, "hex": h, "desc": d}
+            for n, h, d in hw_feat.CHEAT_SHEET
+        ],
+    })
 
 
 # ---------- health ----------

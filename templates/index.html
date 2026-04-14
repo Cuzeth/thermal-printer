@@ -17,8 +17,11 @@
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="compose">Compose</button>
     <button class="tab" data-tab="image">Image</button>
+    <button class="tab" data-tab="codes">Codes</button>
     <button class="tab" data-tab="widgets">Widgets</button>
     <button class="tab" data-tab="labs">Labs</button>
+    <button class="tab" data-tab="hardware">Hardware</button>
+    <button class="tab" data-tab="console">Console</button>
   </nav>
 </header>
 
@@ -228,6 +231,183 @@ ship the thing</textarea>
         </div>
         <button data-lab="receipt" class="primary">Print receipt</button>
       </details>
+    </div>
+
+    <!-- Codes tab -->
+    <div class="tabpane" data-pane="codes">
+      <h2>QR & Barcodes</h2>
+      <p class="help">Previews are rendered locally; prints are sent as native ESC/POS commands (sharper).</p>
+
+      <details open>
+        <summary><h3 class="inline">🔳  QR code</h3></summary>
+        <label>Data <input type="text" id="qr-data" value="https://github.com" /></label>
+        <div class="grid2">
+          <label>Error correction
+            <select id="qr-ec">
+              <option value="L">L — low (~7%)</option>
+              <option value="M" selected>M — medium (~15%)</option>
+              <option value="Q">Q — quartile (~25%)</option>
+              <option value="H">H — high (~30%)</option>
+            </select>
+          </label>
+          <label>Module size <span class="v" id="qr-size-v">8</span>
+            <input type="range" id="qr-size" min="1" max="16" step="1" value="8" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="qr-refresh" class="ghost">Preview</button>
+          <button id="qr-print" class="primary">Print QR</button>
+        </div>
+      </details>
+
+      <details>
+        <summary><h3 class="inline">▯▮▯  1D barcode</h3></summary>
+        <div class="grid2">
+          <label>Type
+            <select id="bc-kind">
+              <option>CODE128</option>
+              <option>CODE39</option>
+              <option>EAN13</option>
+              <option>EAN8</option>
+              <option>UPC-A</option>
+              <option>ITF</option>
+              <option>CODABAR</option>
+            </select>
+          </label>
+          <label>Data <input type="text" id="bc-data" value="HELLO123" /></label>
+        </div>
+        <div class="grid2">
+          <label>Width <span class="v" id="bc-width-v">3</span>
+            <input type="range" id="bc-width" min="2" max="6" step="1" value="3" />
+          </label>
+          <label>Height <span class="v" id="bc-height-v">80</span>
+            <input type="range" id="bc-height" min="20" max="200" step="5" value="80" />
+          </label>
+        </div>
+        <div class="grid2">
+          <label>Readable text
+            <select id="bc-hri">
+              <option>OFF</option>
+              <option>ABOVE</option>
+              <option selected>BELOW</option>
+              <option>BOTH</option>
+            </select>
+          </label>
+          <label>HRI font
+            <select id="bc-font">
+              <option selected>A</option>
+              <option>B</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="bc-refresh" class="ghost">Preview</button>
+          <button id="bc-print" class="primary">Print barcode</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Hardware tab -->
+    <div class="tabpane" data-pane="hardware">
+      <h2>Hardware control</h2>
+      <p class="help">Direct printer commands. Buzzer, density, code-page, and self-test aren't supported on every model — try them and see.</p>
+
+      <div class="widgets">
+        <article class="wid">
+          <h3>💵  Cash drawer</h3>
+          <p>Kick the drawer on pin 2 or pin 5.</p>
+          <div class="row mini">
+            <button data-hw="cash_drawer" data-pin="2" class="primary">Kick pin 2</button>
+            <button data-hw="cash_drawer" data-pin="5" class="ghost">Kick pin 5</button>
+          </div>
+        </article>
+
+        <article class="wid">
+          <h3>🔔  Beep</h3>
+          <div class="row mini">
+            <label>× <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
+            <label>dur <input type="number" id="hw-beep-dur" value="3" min="1" max="9" /></label>
+          </div>
+          <button data-hw="beep" class="primary">Beep</button>
+        </article>
+
+        <article class="wid">
+          <h3>📜  Feed paper</h3>
+          <label>Lines <span class="v" id="hw-feed-v">3</span>
+            <input type="range" id="hw-feed" min="1" max="20" step="1" value="3" />
+          </label>
+          <button data-hw="feed" class="primary">Feed</button>
+        </article>
+
+        <article class="wid">
+          <h3>✂️  Cut paper</h3>
+          <div class="row mini">
+            <button data-hw="cut" data-partial="false" class="primary">Full cut</button>
+            <button data-hw="cut" data-partial="true" class="ghost">Partial</button>
+          </div>
+        </article>
+
+        <article class="wid">
+          <h3>🖨  Density</h3>
+          <label>Level <span class="v" id="hw-dens-v">8</span>
+            <input type="range" id="hw-dens" min="0" max="15" step="1" value="8" />
+          </label>
+          <button data-hw="density" class="primary">Apply</button>
+        </article>
+
+        <article class="wid">
+          <h3>🌐  Code page</h3>
+          <select id="hw-cp"></select>
+          <button data-hw="codepage" class="primary">Apply</button>
+        </article>
+
+        <article class="wid">
+          <h3>♻️  Reset</h3>
+          <p>ESC @ — restore defaults.</p>
+          <button data-hw="reset" class="ghost">Reset printer</button>
+        </article>
+
+        <article class="wid">
+          <h3>🧪  Self-test</h3>
+          <p>Built-in diagnostic pattern.</p>
+          <button data-hw="self_test" class="ghost">Run self-test</button>
+        </article>
+
+        <article class="wid wid-wide">
+          <h3>📟  Status</h3>
+          <p>Ask the printer how it's doing.</p>
+          <button data-hw="status" class="primary">Query status</button>
+          <pre id="hw-status-out" class="status-box">no reading yet</pre>
+        </article>
+      </div>
+    </div>
+
+    <!-- Console tab -->
+    <div class="tabpane" data-pane="console">
+      <h2>Raw ESC/POS console</h2>
+      <p class="help">
+        Send arbitrary bytes. Format: hex tokens (<code>1b 40 48 69</code>) or
+        Python escapes (<code>\x1b@Hi\n</code>, <code>\e</code> also = ESC).
+        <strong style="color:var(--danger)">Malformed commands can confuse the printer; power-cycle if it gets stuck.</strong>
+      </p>
+
+      <textarea id="console-input" rows="6" spellcheck="false" placeholder="1b 40  1b 21 30  48 65 6c 6c 6f 0a">1b 40
+1b 61 01
+1b 21 30
+48 65 6c 6c 6f 21 0a
+1b 21 00
+1d 56 00</textarea>
+
+      <div class="row">
+        <button id="console-send" class="primary">Send to printer</button>
+        <span id="console-sent" class="muted"></span>
+      </div>
+
+      <h3 style="margin-top:18px">Cheat sheet</h3>
+      <table class="cheat">
+        <thead><tr><th>Name</th><th>Hex</th><th>Description</th><th></th></tr></thead>
+        <tbody id="cheat-body"><!-- populated --></tbody>
+      </table>
     </div>
 
   </section>

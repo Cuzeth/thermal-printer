@@ -427,6 +427,48 @@ details[open] > summary::before { content: "▾ "; }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* ---------- hardware + console ---------- */
+
+.wid-wide { grid-column: 1 / -1; }
+.muted { color: var(--dim); font-size: 12px; }
+
+.status-box {
+  background: #0d1118;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.cheat {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.cheat th, .cheat td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.cheat th {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.cheat td.mono { font-family: var(--mono); }
+.cheat td.dim { color: var(--accent); }
+.cheat tbody tr:hover { background: rgba(247,180,44,.05); }
+.cheat td button { padding: 4px 10px; font-size: 10px; }
+
 @media (max-width: 1024px) {
   main { grid-template-columns: 1fr; }
   .preview { position: static; }
