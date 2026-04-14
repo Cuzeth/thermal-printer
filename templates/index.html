@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thermal Printer Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}">
+
+<header class="top">
+  <div class="brand">
+    <span class="logo">▚▚</span>
+    <span class="title">THERMAL // CONSOLE</span>
+    <span class="sub">{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}DRY RUN{% else %}LIVE{% endif %}</span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="compose">Compose</button>
+    <button class="tab" data-tab="image">Image</button>
+    <button class="tab" data-tab="widgets">Widgets</button>
+    <button class="tab" data-tab="labs">Labs</button>
+  </nav>
+</header>
+
+<main>
+  <!-- left: controls -->
+  <section class="panel controls">
+
+    <!-- Compose tab -->
+    <div class="tabpane active" data-pane="compose">
+      <h2>Rich text composer</h2>
+      <p class="help">
+        Markup: <code># Heading</code>, <code>## Sub</code>, <code>&gt; centered</code>,
+        <code>- bullet</code>, <code>[ ] todo</code>, <code>[x] done</code>,
+        <code>---</code>, <code>===</code>, <code>!!!</code> (cut here).
+        Inline: <code>**bold**</code>, <code>__underline__</code>, <code>~big~</code>.
+      </p>
+      <textarea id="compose-body" rows="18" spellcheck="false"># HELLO WORLD
+===
+
+> a note from the printer
+> {{ '' }}to whom it may concern
+
+This is **bold** and __underline__
+and ~BIG~ text.
+
+- first thing
+- second thing
+- third thing
+
+[ ] task one
+[ ] task two
+[x] task three
+
+---
+
+thanks for reading</textarea>
+
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="compose-cut" checked /> cut paper after print</label>
+        <button id="compose-preview" class="ghost">Refresh preview</button>
+        <button id="compose-print" class="primary">Print</button>
+      </div>
+    </div>
+
+    <!-- Image tab -->
+    <div class="tabpane" data-pane="image">
+      <h2>Image printer</h2>
+      <p class="help">Drop an image, tune it, print it. Floyd-Steinberg dithering by default.</p>
+
+      <div id="drop" class="drop">
+        <input type="file" id="image-file" accept="image/*" hidden />
+        <div class="drop-inner">
+          <div class="drop-icon">⬚</div>
+          <div><strong>Click or drop an image</strong></div>
+          <div class="muted">PNG · JPG · GIF · WEBP</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <label>Mode
+          <select id="img-mode">
+            <option value="dither" selected>Dither (Floyd-Steinberg)</option>
+            <option value="threshold">Threshold</option>
+            <option value="grayscale">Grayscale</option>
+          </select>
+        </label>
+        <label>Width (px)
+          <input type="number" id="img-width" value="{{ pixel_width }}" min="64" max="{{ pixel_width }}" step="8" />
+        </label>
+        <label>Contrast <span class="v" id="img-contrast-v">1.0</span>
+          <input type="range" id="img-contrast" min="0.3" max="3.0" step="0.05" value="1.0" />
+        </label>
+        <label>Brightness <span class="v" id="img-brightness-v">1.0</span>
+          <input type="range" id="img-brightness" min="0.3" max="3.0" step="0.05" value="1.0" />
+        </label>
+        <label>Threshold <span class="v" id="img-threshold-v">128</span>
+          <input type="range" id="img-threshold" min="0" max="255" step="1" value="128" />
+        </label>
+        <label class="chk"><input type="checkbox" id="img-invert" /> invert</label>
+      </div>
+
+      <label>Caption (optional)
+        <input type="text" id="img-caption" placeholder="printed under the image" />
+      </label>
+
+      <div class="row">
+        <button id="image-refresh" class="ghost">Refresh preview</button>
+        <button id="image-print" class="primary" disabled>Print</button>
+      </div>
+    </div>
+
+    <!-- Widgets tab -->
+    <div class="tabpane" data-pane="widgets">
+      <h2>Widgets</h2>
+      <p class="help">One-click prints. Some pull live data from the internet.</p>
+
+      <div class="widgets">
+        <article class="wid">
+          <h3>🌤  Weather</h3>
+          <p>Current conditions via wttr.in.</p>
+          <input type="text" id="w-loc" placeholder="city, airport, or zip" value="San Francisco" />
+          <button data-widget="weather" class="primary">Print weather</button>
+        </article>
+
+        <article class="wid">
+          <h3>💬  Quote</h3>
+          <p>A handpicked bit of wisdom.</p>
+          <button data-widget="quote" class="primary">Print quote</button>
+        </article>
+
+        <article class="wid">
+          <h3>🤡  Dad joke</h3>
+          <p>Fresh joke from icanhazdadjoke.com.</p>
+          <button data-widget="joke" class="primary">Print joke</button>
+        </article>
+
+        <article class="wid">
+          <h3>🌸  Haiku</h3>
+          <p>17 syllables on thermal paper.</p>
+          <button data-widget="haiku" class="primary">Print haiku</button>
+        </article>
+
+        <article class="wid">
+          <h3>🎱  Magic 8 Ball</h3>
+          <input type="text" id="w-8q" placeholder="ask a yes/no question" />
+          <button data-widget="eight_ball" class="primary">Consult</button>
+        </article>
+
+        <article class="wid">
+          <h3>🎲  Dice roller</h3>
+          <div class="row mini">
+            <input type="number" id="w-dice-count" value="2" min="1" max="20" />
+            <span>d</span>
+            <input type="number" id="w-dice-sides" value="6" min="2" max="100" />
+          </div>
+          <button data-widget="dice" class="primary">Roll</button>
+        </article>
+
+        <article class="wid">
+          <h3>⏰  Now</h3>
+          <p>A tiny time-stamp card.</p>
+          <button data-widget="now" class="primary">Print now</button>
+        </article>
+
+        <article class="wid">
+          <h3>🐱  ASCII art</h3>
+          <select id="w-ascii">
+            <option value="cat">cat</option>
+            <option value="dog">dog</option>
+            <option value="heart">heart</option>
+            <option value="skull">skull</option>
+            <option value="coffee">coffee</option>
+            <option value="ghost">ghost</option>
+          </select>
+          <button data-widget="ascii" class="primary">Print art</button>
+        </article>
+      </div>
+    </div>
+
+    <!-- Labs tab -->
+    <div class="tabpane" data-pane="labs">
+      <h2>Labs</h2>
+
+      <details open>
+        <summary><h3 class="inline">✅  Todo list</h3></summary>
+        <label>Title <input id="todo-title" type="text" value="TODAY" /></label>
+        <label>Items (one per line)
+          <textarea id="todo-items" rows="6">pick up milk
+water the basil
+reply to emails
+ship the thing</textarea>
+        </label>
+        <button data-lab="todo" class="primary">Print todo</button>
+      </details>
+
+      <details>
+        <summary><h3 class="inline">🏷  Label maker</h3></summary>
+        <label>Label text <input id="label-text" type="text" value="FRAGILE" /></label>
+        <label class="chk"><input type="checkbox" id="label-big" checked /> chunky</label>
+        <button data-lab="label" class="primary">Print label</button>
+      </details>
+
+      <details>
+        <summary><h3 class="inline">🧾  Fake receipt</h3></summary>
+        <label>Store name <input id="r-store" type="text" value="MOM'S DELI" /></label>
+        <div id="r-items">
+          <div class="ritem">
+            <input class="r-name" placeholder="item" value="bagel" />
+            <input class="r-qty" type="number" value="2" min="1" />
+            <input class="r-price" type="number" value="3.50" step="0.01" min="0" />
+            <button class="ghost r-del">×</button>
+          </div>
+          <div class="ritem">
+            <input class="r-name" placeholder="item" value="coffee" />
+            <input class="r-qty" type="number" value="1" min="1" />
+            <input class="r-price" type="number" value="4.25" step="0.01" min="0" />
+            <button class="ghost r-del">×</button>
+          </div>
+        </div>
+        <button id="r-add" class="ghost">+ add item</button>
+        <div class="grid2">
+          <label>Tax rate % <input id="r-tax" type="number" value="8.75" step="0.01" min="0" /></label>
+          <label>Note <input id="r-note" type="text" placeholder="optional" /></label>
+        </div>
+        <button data-lab="receipt" class="primary">Print receipt</button>
+      </details>
+    </div>
+
+  </section>
+
+  <!-- right: receipt preview -->
+  <aside class="panel preview">
+    <div class="paper" id="paper-frame">
+      <pre id="preview-out"></pre>
+      <div id="preview-image-wrap" class="imgwrap" hidden>
+        <img id="preview-image" alt="preview" />
+      </div>
+      <div class="tear"></div>
+    </div>
+  </aside>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
