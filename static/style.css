@@ -427,6 +427,130 @@ details[open] > summary::before { content: "▾ "; }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* ---------- tooltips ---------- */
+
+.tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+  user-select: none;
+  transition: all .12s ease;
+}
+.tip:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  min-width: 240px;
+  max-width: 320px;
+  background: #10131b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+  z-index: 50;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(247,180,44,.08);
+  white-space: normal;
+}
+.tip::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border: 6px solid transparent;
+  border-top-color: var(--line);
+  opacity: 0;
+  transition: opacity .15s ease;
+  z-index: 51;
+}
+.tip:hover::after,
+.tip:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Tooltips near the right edge can overflow; flip to left-align. */
+.wid:nth-child(3n) .tip::after { left: auto; right: -4px; transform: translateX(0) translateY(4px); }
+.wid:nth-child(3n) .tip:hover::after { transform: translateX(0) translateY(0); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255,93,108,.15);
+  color: var(--danger);
+  border: 1px solid rgba(255,93,108,.3);
+  text-transform: uppercase;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ---------- LED card ---------- */
+
+.led-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  margin-top: 6px;
+  align-items: start;
+}
+.led-grid input[type=color] {
+  width: 80px;
+  height: 80px;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+.led-preset {
+  font-size: 10px;
+  padding: 5px 9px;
+  letter-spacing: 1px;
+}
+#led-bytes {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 11px;
+  padding: 4px 8px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* ---------- hardware + console ---------- */
 
 .wid-wide { grid-column: 1 / -1; }

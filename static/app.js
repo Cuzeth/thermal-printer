@@ -493,6 +493,80 @@ async function loadCodePages() {
   } catch (e) { /* non-fatal */ }
 }
 
+// ---------- LED / RGB ----------
+
+let ledLoaded = false;
+async function loadLedProtocols() {
+  if (ledLoaded) return;
+  ledLoaded = true;
+  try {
+    const r = await fetch("/api/hw/led/protocols").then((x) => x.json());
+    const sel = $("#led-protocol");
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    r.protocols.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.key;
+      opt.textContent = p.name;
+      opt.dataset.note = p.note;
+      sel.appendChild(opt);
+    });
+    updateLedNote();
+    refreshLedPreview();
+  } catch (e) { /* non-fatal */ }
+}
+
+function hexColorToRgb(hex) {
+  const m = String(hex || "").match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return { r: 0, g: 0, b: 0 };
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+}
+
+function updateLedNote() {
+  const sel = $("#led-protocol");
+  const opt = sel.options[sel.selectedIndex];
+  $("#led-protocol-note").textContent = opt ? opt.dataset.note || "" : "";
+}
+
+async function refreshLedPreview() {
+  if (!$("#led-protocol").value) return;
+  const { r, g, b } = hexColorToRgb($("#led-color").value);
+  try {
+    const j = await postJSON("/api/hw/led/preview", {
+      protocol: $("#led-protocol").value,
+      r, g, b,
+    });
+    $("#led-bytes").textContent = j.bytes;
+  } catch (e) {
+    $("#led-bytes").textContent = "(preview failed)";
+  }
+}
+
+$("#led-color")?.addEventListener("input", refreshLedPreview);
+$("#led-protocol")?.addEventListener("change", () => {
+  updateLedNote();
+  refreshLedPreview();
+});
+
+$$(".led-preset").forEach((b) => {
+  b.addEventListener("click", () => {
+    $("#led-color").value = b.dataset.color;
+    refreshLedPreview();
+  });
+});
+
+$("#led-send")?.addEventListener("click", () => {
+  const { r, g, b } = hexColorToRgb($("#led-color").value);
+  guard(async () => {
+    const j = await postJSON("/api/hw/led", {
+      protocol: $("#led-protocol").value,
+      r, g, b,
+      blink: $("#led-blink").checked,
+    });
+    $("#led-bytes").textContent = j.bytes;
+  }, "LED bytes sent");
+});
+
 // ---------- console (raw ESC/POS) ----------
 
 $("#console-send").addEventListener("click", () => {
@@ -540,7 +614,7 @@ async function loadCheatSheet() {
 // Lazy-load hardware/console content when those tabs are opened.
 $$(".tab").forEach((t) => {
   t.addEventListener("click", () => {
-    if (t.dataset.tab === "hardware") loadCodePages();
+    if (t.dataset.tab === "hardware") { loadCodePages(); loadLedProtocols(); }
     if (t.dataset.tab === "console") loadCheatSheet();
   });
 });

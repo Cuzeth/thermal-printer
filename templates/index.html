@@ -314,8 +314,8 @@ ship the thing</textarea>
 
       <div class="widgets">
         <article class="wid">
-          <h3>💵  Cash drawer</h3>
-          <p>Kick the drawer on pin 2 or pin 5.</p>
+          <h3>💵 Cash drawer <span class="tip" data-tip="Sends an electrical pulse through the RJ11 cash-drawer jack to pop the drawer. Most modern drawers wire to pin 2; pin 5 is an older alternative — try pin 5 only if pin 2 does nothing.">?</span></h3>
+          <p>Pop open the till.</p>
           <div class="row mini">
             <button data-hw="cash_drawer" data-pin="2" class="primary">Kick pin 2</button>
             <button data-hw="cash_drawer" data-pin="5" class="ghost">Kick pin 5</button>
@@ -323,7 +323,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🔔  Beep</h3>
+          <h3>🔔 Beep <span class="tip" data-tip="Fires the printer's built-in buzzer. 'count' is how many beeps in a row (1-9). 'dur' is each beep's length in 100ms units (so 3 = 300ms). Not every model has a buzzer wired up.">?</span></h3>
           <div class="row mini">
             <label>× <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
             <label>dur <input type="number" id="hw-beep-dur" value="3" min="1" max="9" /></label>
@@ -332,7 +332,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>📜  Feed paper</h3>
+          <h3>📜 Feed <span class="tip" data-tip="Advance the paper by N blank lines without printing or cutting. Handy to push a receipt past the tear bar so you can grab it.">?</span></h3>
           <label>Lines <span class="v" id="hw-feed-v">3</span>
             <input type="range" id="hw-feed" min="1" max="20" step="1" value="3" />
           </label>
@@ -340,7 +340,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>✂️  Cut paper</h3>
+          <h3>✂️ Cut <span class="tip" data-tip="Full cut slices all the way across. Partial leaves a tiny paper bridge so the receipt dangles — common in kitchens where orders should hang until someone tears them off.">?</span></h3>
           <div class="row mini">
             <button data-hw="cut" data-partial="false" class="primary">Full cut</button>
             <button data-hw="cut" data-partial="true" class="ghost">Partial</button>
@@ -348,7 +348,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🖨  Density</h3>
+          <h3>🖨 Density <span class="tip" data-tip="Print darkness, 0 = lightest and 15 = darkest. Higher = darker text but slower printing and more heat on the print head. Bump it up if your receipts look faded; drop it if they're too dark or the head is running hot. Some printers ignore this command.">?</span></h3>
           <label>Level <span class="v" id="hw-dens-v">8</span>
             <input type="range" id="hw-dens" min="0" max="15" step="1" value="8" />
           </label>
@@ -356,28 +356,60 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🌐  Code page</h3>
+          <h3>🌐 Code page <span class="tip" data-tip="Character encoding the printer's built-in ROM font uses for bytes 128-255 (symbols, accented letters, etc.). Only affects text mode — ignored when 'pretty font' is on in the composer, because that path renders text as an image. Pick the page matching the language you print most: CP437 (USA/Latin), CP850 (Western Europe), CP858 (Euro symbol), WPC1252 (Windows Latin-1).">?</span></h3>
           <select id="hw-cp"></select>
           <button data-hw="codepage" class="primary">Apply</button>
         </article>
 
         <article class="wid">
-          <h3>♻️  Reset</h3>
-          <p>ESC @ — restore defaults.</p>
+          <h3>♻️ Reset <span class="tip" data-tip="Sends ESC @ — restores every printer setting to factory defaults: alignment, font size, density, code page, line spacing, underline, inverse. Safe anytime; the next print re-applies whatever it needs.">?</span></h3>
+          <p>Restore defaults.</p>
           <button data-hw="reset" class="ghost">Reset printer</button>
         </article>
 
         <article class="wid">
-          <h3>🧪  Self-test</h3>
-          <p>Built-in diagnostic pattern.</p>
+          <h3>🧪 Self-test <span class="tip" data-tip="Triggers the printer's built-in diagnostic print: usually firmware version, DIP-switch settings, and a character test. If nothing prints, your unit probably only runs self-test via the physical paper-feed button at power-on.">?</span></h3>
+          <p>Built-in diagnostic page.</p>
           <button data-hw="self_test" class="ghost">Run self-test</button>
         </article>
 
         <article class="wid wid-wide">
-          <h3>📟  Status</h3>
+          <h3>📟 Status <span class="tip" data-tip="Reads four real-time status bytes from the printer: general status, offline cause, error cause, and paper sensor. Shows up as flags like 'cover_open', 'paper_ended', 'cutter_error'. Needs a readable IN endpoint (USB/serial usually fine; network printers sometimes don't).">?</span></h3>
           <p>Ask the printer how it's doing.</p>
           <button data-hw="status" class="primary">Query status</button>
           <pre id="hw-status-out" class="status-box">no reading yet</pre>
+        </article>
+
+        <article class="wid wid-wide">
+          <h3>🎨 RGB LED <span class="tip" data-tip="The Milestone P80E advertises customizable RGB alert lighting, but the exact command isn't publicly documented. Pick a color, choose a protocol guess, and click Send — if one works, you've found your model's dialect. If none do, grab Milestone's SDK and paste the raw bytes in the Console tab.">?</span> <span class="badge">experimental</span></h3>
+          <p>Vendor-specific — try each protocol to find the one your unit accepts.</p>
+
+          <div class="led-grid">
+            <div>
+              <label>Color</label>
+              <input type="color" id="led-color" value="#ff8a3d" />
+              <div class="row mini" style="margin-top:8px; flex-wrap:wrap;">
+                <button class="ghost led-preset" data-color="#000000">off</button>
+                <button class="ghost led-preset" data-color="#ff0000">red</button>
+                <button class="ghost led-preset" data-color="#00ff00">green</button>
+                <button class="ghost led-preset" data-color="#0000ff">blue</button>
+                <button class="ghost led-preset" data-color="#ffaa00">amber</button>
+                <button class="ghost led-preset" data-color="#00ffff">cyan</button>
+                <button class="ghost led-preset" data-color="#ff00ff">magenta</button>
+                <button class="ghost led-preset" data-color="#ffffff">white</button>
+              </div>
+            </div>
+            <div>
+              <label>Protocol guess</label>
+              <select id="led-protocol"></select>
+              <p id="led-protocol-note" class="muted" style="margin-top:6px;"></p>
+              <label class="chk" style="margin-top:10px;"><input type="checkbox" id="led-blink" /> blink once after set</label>
+              <div class="row">
+                <button id="led-send" class="primary">Send</button>
+                <code id="led-bytes" class="mono dim"></code>
+              </div>
+            </div>
+          </div>
         </article>
       </div>
     </div>

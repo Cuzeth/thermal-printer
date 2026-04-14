@@ -15,6 +15,7 @@ import config
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
+from features import led as led_feat
 from features import render as render_feat
 from features import text as text_feat
 from features import widgets
@@ -465,6 +466,52 @@ def hw_raw():
         with open_printer() as p:
             n = hw_feat.send_raw(p, text)
         return {"sent": n}
+    return _safe(run)
+
+
+@app.get("/api/hw/led/protocols")
+def hw_led_protocols():
+    return jsonify({
+        "ok": True,
+        "protocols": [
+            {"key": p.key, "name": p.name, "note": p.note}
+            for p in led_feat.PROTOCOLS.values()
+        ],
+    })
+
+
+@app.post("/api/hw/led/preview")
+def hw_led_preview():
+    def run():
+        data = request.get_json(silent=True) or {}
+        bs = led_feat.build_bytes(
+            data.get("protocol", "esc_c"),
+            int(data.get("r", 0)),
+            int(data.get("g", 0)),
+            int(data.get("b", 0)),
+        )
+        return {"bytes": led_feat.hex_preview(bs), "length": len(bs)}
+    return _safe(run)
+
+
+@app.post("/api/hw/led")
+def hw_led():
+    def run():
+        data = request.get_json(silent=True) or {}
+        protocol = data.get("protocol", "esc_c")
+        r = int(data.get("r", 0))
+        g = int(data.get("g", 0))
+        b = int(data.get("b", 0))
+        blink = bool(data.get("blink", False))
+        with open_printer() as p:
+            bs = led_feat.send_color(p, protocol, r, g, b)
+            if blink:
+                import time
+                time.sleep(0.25)
+                led_feat.send_color(p, protocol, 0, 0, 0)
+                time.sleep(0.25)
+                led_feat.send_color(p, protocol, r, g, b)
+        return {"bytes": led_feat.hex_preview(bs)}
     return _safe(run)
 
 
