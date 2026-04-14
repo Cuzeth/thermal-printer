@@ -390,6 +390,17 @@ details[open] > summary::before { content: "▾ "; }
   background: #fff;
   padding: 4px;
   border: 1px solid rgba(0,0,0,.1);
+  display: block;
+  margin: 0 auto;
+}
+.imgwrap .segcut {
+  height: 14px;
+  margin: 6px -14px;
+  background:
+    linear-gradient(135deg, var(--paper) 48%, transparent 52%) 0 0/10px 14px,
+    linear-gradient( 45deg, var(--paper) 48%, transparent 52%) 5px 0/10px 14px;
+  background-repeat: repeat-x;
+  opacity: .9;
 }
 
 /* ---------- toast ---------- */

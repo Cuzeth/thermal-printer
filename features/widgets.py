@@ -222,13 +222,13 @@ def weather(location: str) -> str:
     city = (area.get("areaName") or [{}])[0].get("value", location)
     region = (area.get("region") or [{}])[0].get("value", "")
     desc = (current.get("weatherDesc") or [{}])[0].get("value", "")
-    temp_f = current.get("temp_F", "?")
-    feels_f = current.get("FeelsLikeF", "?")
+    temp_c = current.get("temp_C", "?")
+    feels_c = current.get("FeelsLikeC", "?")
     humidity = current.get("humidity", "?")
-    wind_mph = current.get("windspeedMiles", "?")
+    wind_kph = current.get("windspeedKmph", "?")
     wind_dir = current.get("winddir16Point", "")
-    high_f = today.get("maxtempF", "?")
-    low_f = today.get("mintempF", "?")
+    high_c = today.get("maxtempC", "?")
+    low_c = today.get("mintempC", "?")
     sunrise = (today.get("astronomy") or [{}])[0].get("sunrise", "")
     sunset = (today.get("astronomy") or [{}])[0].get("sunset", "")
 
@@ -240,13 +240,13 @@ def weather(location: str) -> str:
         "",
         f"## {desc}",
         "",
-        f"# {temp_f}\u00b0F",
+        f"# {temp_c}\u00b0C",
         "",
-        f"feels like      {feels_f}\u00b0F",
+        f"feels like      {feels_c}\u00b0C",
         f"humidity        {humidity}%",
-        f"wind            {wind_mph} mph {wind_dir}",
+        f"wind            {wind_kph} km/h {wind_dir}",
         "---",
-        f"today hi/lo     {high_f}\u00b0 / {low_f}\u00b0",
+        f"today hi/lo     {high_c}\u00b0 / {low_c}\u00b0C",
         f"sunrise         {sunrise}",
         f"sunset          {sunset}",
         "---",

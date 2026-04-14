@@ -13,6 +13,7 @@ from flask import Flask, jsonify, render_template, request
 
 import config
 from features import image as image_feat
+from features import render as render_feat
 from features import text as text_feat
 from features import widgets
 from printer import PrinterError, footer, open_printer
@@ -33,9 +34,22 @@ def index():
 
 # ---------- generic body-printer helper ----------
 
-def _print_body(body: str, cut: bool = True) -> None:
+def _print_rich(p, body: str) -> None:
+    """Render markup as an image and print each `!!!`-separated segment."""
+    segments = render_feat.split_cuts(body) or [body]
+    for i, seg in enumerate(segments):
+        img = render_feat.render_markup(seg)
+        p.image(img)
+        if i < len(segments) - 1:
+            p.cut()
+
+
+def _print_body(body: str, cut: bool = True, rich: bool = True) -> None:
     with open_printer() as p:
-        text_feat.render(p, body)
+        if rich:
+            _print_rich(p, body)
+        else:
+            text_feat.render(p, body)
         if cut:
             footer(p)
 
@@ -64,6 +78,19 @@ def preview():
     return jsonify({"ok": True, "preview": text_feat.preview(body), "width": config.RECEIPT_WIDTH})
 
 
+@app.post("/api/preview/rich")
+def preview_rich():
+    def run():
+        body = (request.get_json(silent=True) or {}).get("body", "")
+        segments = render_feat.split_cuts(body) or [body or ""]
+        data_urls = []
+        for seg in segments:
+            img = render_feat.render_markup(seg)
+            data_urls.append(image_feat.to_png_data_url(img))
+        return {"segments": data_urls}
+    return _safe(run)
+
+
 @app.post("/api/print/text")
 def print_text():
     def run():
@@ -71,7 +98,11 @@ def print_text():
         body = data.get("body", "").rstrip()
         if not body:
             raise ValueError("Nothing to print.")
-        _print_body(body, cut=data.get("cut", True))
+        _print_body(
+            body,
+            cut=data.get("cut", True),
+            rich=bool(data.get("rich", True)),
+        )
         return {}
     return _safe(run)
 
@@ -114,13 +145,12 @@ def print_image():
         )
         caption = request.form.get("caption", "").strip()
         img = image_feat.process(f.read(), opts)
+        img = image_feat.pad_to_printer_width(img)
         with open_printer() as p:
-            p.set(align="center")
             p.image(img)
-            p.set(align="left")
             if caption:
                 p.text("\n")
-                text_feat.render(p, f"> {caption}")
+                _print_rich(p, f"> {caption}")
             footer(p)
         return {}
     return _safe(run)

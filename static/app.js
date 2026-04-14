@@ -69,20 +69,41 @@ function showPreviewText(text) {
   hidePreviewImage();
 }
 function showPreviewImage(url) {
-  $("#preview-image").src = url;
-  $("#preview-image-wrap").hidden = false;
+  const wrap = $("#preview-image-wrap");
+  // Replace children: one <img> per segment, separated by tear-lines.
+  while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+  const urls = Array.isArray(url) ? url : [url];
+  urls.forEach((u, i) => {
+    const img = document.createElement("img");
+    img.src = u;
+    img.alt = "preview";
+    wrap.appendChild(img);
+    if (i < urls.length - 1) {
+      const sep = document.createElement("div");
+      sep.className = "segcut";
+      wrap.appendChild(sep);
+    }
+  });
+  wrap.hidden = false;
   $("#preview-out").textContent = "";
 }
 function hidePreviewImage() {
-  $("#preview-image-wrap").hidden = true;
-  $("#preview-image").src = "";
+  const wrap = $("#preview-image-wrap");
+  wrap.hidden = true;
+  while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
 }
 
 async function refreshComposePreview() {
   const body = $("#compose-body").value;
+  const rich = $("#compose-rich").checked;
   try {
-    const { preview } = await postJSON("/api/preview", { body });
-    showPreviewText(preview);
+    if (rich) {
+      const { segments } = await postJSON("/api/preview/rich", { body });
+      showPreviewImage(segments);
+    } else {
+      const { preview } = await postJSON("/api/preview", { body });
+      showPreviewText(preview);
+    }
   } catch (e) {
     showPreviewText("(preview failed: " + e.message + ")");
   }
@@ -96,11 +117,13 @@ $("#compose-body").addEventListener("input", () => {
   composeT = setTimeout(refreshComposePreview, 180);
 });
 $("#compose-preview").addEventListener("click", refreshComposePreview);
+$("#compose-rich").addEventListener("change", refreshComposePreview);
 $("#compose-print").addEventListener("click", () => {
   guard(async () => {
     await postJSON("/api/print/text", {
       body: $("#compose-body").value,
       cut: $("#compose-cut").checked,
+      rich: $("#compose-rich").checked,
     });
   }, "printing…");
 });

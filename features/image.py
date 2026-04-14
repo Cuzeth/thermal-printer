@@ -75,3 +75,16 @@ def to_png_data_url(img: Image.Image) -> str:
     display.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{b64}"
+
+
+def pad_to_printer_width(img: Image.Image) -> Image.Image:
+    """Center a narrower image on a full-width white canvas so we don't rely
+    on the printer's own `align="center"` (which needs a profile with
+    media.width.pixel set — not always configured)."""
+    target = config.PRINTER_PIXEL_WIDTH
+    if img.width >= target:
+        return img
+    fill = 1 if img.mode == "1" else 255
+    canvas = Image.new(img.mode, (target, img.height), fill)
+    canvas.paste(img, ((target - img.width) // 2, 0))
+    return canvas
