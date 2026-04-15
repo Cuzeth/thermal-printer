@@ -49,10 +49,12 @@ Rate limits (all in-memory, reset on restart):
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python3 app.py
+COOKIE_SECURE=false python3 app.py
 ```
 
 Open <http://localhost:5005>. The startup banner prints a dev `ADMIN_TOKEN` — the main GUI inlines it automatically, so you don't need to copy it.
+
+`COOKIE_SECURE=false` is load-bearing in dev: the default is `true` (prod is HTTPS via Funnel), and without it over plain HTTP the browser silently drops the session cookie and every `/m/*` request fails as "not signed in."
 
 For a local friends demo, open <http://localhost:5005/m/>, click **Create an account**, pick any username + password (8+ chars), then approve yourself from the Admin tab in the main GUI.
 
@@ -91,6 +93,7 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 | `SECRET_KEY` | yes (prod) | random per boot | Flask session signing. Persist to keep sessions across restarts. |
 | `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer gate for `/api/admin/*` and every private console route. |
 | `HOST` / `PORT` | yes (prod) | `127.0.0.1:5005` | systemd expands `${HOST}:${PORT}` into gunicorn's `--bind`. |
+| `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (Funnel is HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
 | `USB_VENDOR_ID` / `USB_PRODUCT_ID` | no | `0x0483` / `0x5720` | Match your printer. |
 | `RECEIPT_WIDTH` / `PRINTER_PIXEL_WIDTH` | no | `42` / `576` | 42 cols / 576 px = 80mm. For 58mm use `32` / `384`. |

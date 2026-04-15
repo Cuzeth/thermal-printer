@@ -70,3 +70,8 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or secrets.token_urlsafe(32)
 _ADMIN_TOKEN_FROM_ENV = os.getenv("ADMIN_TOKEN") is not None
 
 DB_PATH = DATA_DIR / "app.db"
+
+# Defaults true so prod is secure with zero config. For local HTTP dev, set
+# COOKIE_SECURE=false in your shell — otherwise the browser won't send the
+# session cookie back and every /m/* request lands as "not signed in".
+COOKIE_SECURE = _env_bool("COOKIE_SECURE", True)

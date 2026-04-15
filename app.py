@@ -29,8 +29,10 @@ from printer import PrinterError, footer, open_printer
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=config.SECRET_KEY,
-    # Funnel is HTTPS; only relax this in dev where FLASK_DEBUG=1.
-    SESSION_COOKIE_SECURE=os.environ.get("FLASK_DEBUG") != "1",
+    # Secure requires HTTPS — true on the Pi (Funnel), false in local dev.
+    # Gated by an explicit env var rather than FLASK_DEBUG because debug is
+    # usually off in dev too, which would silently kill the session cookie.
+    SESSION_COOKIE_SECURE=config.COOKIE_SECURE,
     SESSION_COOKIE_HTTPONLY=True,
     # Lax + POST-only state changes = no CSRF surface worth protecting.
     SESSION_COOKIE_SAMESITE="Lax",
