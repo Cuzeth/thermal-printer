@@ -100,14 +100,24 @@ textarea { resize: vertical; min-height: 120px; }
 
 .msg-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  justify-content: flex-end;
   font-size: 11px;
   color: var(--dim);
   margin-top: 6px;
-  gap: 12px;
 }
-.msg-meta > span:last-child { text-align: right; max-width: 60%; line-height: 1.3; }
+.msg-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.msg-hint code {
+  background: var(--bg-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 11px;
+}
 
 .who {
   display: flex;
