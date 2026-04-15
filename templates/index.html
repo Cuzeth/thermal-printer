@@ -124,38 +124,38 @@ thanks for reading</textarea>
 
       <div class="widgets">
         <article class="wid">
-          <h3>🌤  Weather</h3>
+          <h3>Weather</h3>
           <p>Current conditions via wttr.in.</p>
           <input type="text" id="w-loc" placeholder="city, airport, or zip" value="San Francisco" />
           <button data-widget="weather" class="primary">Print weather</button>
         </article>
 
         <article class="wid">
-          <h3>💬  Quote</h3>
+          <h3>Quote</h3>
           <p>A handpicked bit of wisdom.</p>
           <button data-widget="quote" class="primary">Print quote</button>
         </article>
 
         <article class="wid">
-          <h3>🤡  Dad joke</h3>
+          <h3>Dad joke</h3>
           <p>Fresh joke from icanhazdadjoke.com.</p>
           <button data-widget="joke" class="primary">Print joke</button>
         </article>
 
         <article class="wid">
-          <h3>🌸  Haiku</h3>
+          <h3>Haiku</h3>
           <p>17 syllables on thermal paper.</p>
           <button data-widget="haiku" class="primary">Print haiku</button>
         </article>
 
         <article class="wid">
-          <h3>🎱  Magic 8 Ball</h3>
+          <h3>Magic 8 Ball</h3>
           <input type="text" id="w-8q" placeholder="ask a yes/no question" />
           <button data-widget="eight_ball" class="primary">Consult</button>
         </article>
 
         <article class="wid">
-          <h3>🎲  Dice roller</h3>
+          <h3>Dice roller</h3>
           <div class="row mini">
             <input type="number" id="w-dice-count" value="2" min="1" max="20" />
             <span>d</span>
@@ -165,13 +165,13 @@ thanks for reading</textarea>
         </article>
 
         <article class="wid">
-          <h3>⏰  Now</h3>
+          <h3>Now</h3>
           <p>A tiny time-stamp card.</p>
           <button data-widget="now" class="primary">Print now</button>
         </article>
 
         <article class="wid">
-          <h3>🐱  ASCII art</h3>
+          <h3>ASCII art</h3>
           <select id="w-ascii">
             <option value="cat">cat</option>
             <option value="dog">dog</option>
@@ -190,7 +190,7 @@ thanks for reading</textarea>
       <h2>Labs</h2>
 
       <details open>
-        <summary><h3 class="inline">✅  Todo list</h3></summary>
+        <summary><h3 class="inline">✓ Todo list</h3></summary>
         <label>Title <input id="todo-title" type="text" value="TODAY" /></label>
         <label>Items (one per line)
           <textarea id="todo-items" rows="6">pick up milk
@@ -202,14 +202,14 @@ ship the thing</textarea>
       </details>
 
       <details>
-        <summary><h3 class="inline">🏷  Label maker</h3></summary>
+        <summary><h3 class="inline">Label maker</h3></summary>
         <label>Label text <input id="label-text" type="text" value="FRAGILE" /></label>
         <label class="chk"><input type="checkbox" id="label-big" checked /> chunky</label>
         <button data-lab="label" class="primary">Print label</button>
       </details>
 
       <details>
-        <summary><h3 class="inline">🧾  Fake receipt</h3></summary>
+        <summary><h3 class="inline">Fake receipt</h3></summary>
         <label>Store name <input id="r-store" type="text" value="MOM'S DELI" /></label>
         <div id="r-items">
           <div class="ritem">
@@ -240,7 +240,7 @@ ship the thing</textarea>
       <p class="help">Previews are rendered locally; prints are sent as native ESC/POS commands (sharper).</p>
 
       <details open>
-        <summary><h3 class="inline">🔳  QR code</h3></summary>
+        <summary><h3 class="inline">QR code</h3></summary>
         <label>Data <input type="text" id="qr-data" value="https://github.com" /></label>
         <div class="grid2">
           <label>Error correction
@@ -315,7 +315,7 @@ ship the thing</textarea>
 
       <div class="widgets">
         <article class="wid">
-          <h3>💵 Cash drawer <span class="tip" data-tip="Sends an electrical pulse through the RJ11 cash-drawer jack to pop the drawer. Most modern drawers wire to pin 2; pin 5 is an older alternative — try pin 5 only if pin 2 does nothing.">?</span></h3>
+          <h3>Cash drawer <span class="tip" data-tip="Sends an electrical pulse through the RJ11 cash-drawer jack to pop the drawer. Most modern drawers wire to pin 2; pin 5 is an older alternative — try pin 5 only if pin 2 does nothing.">?</span></h3>
           <p>Pop open the till.</p>
           <div class="row mini">
             <button data-hw="cash_drawer" data-pin="2" class="primary">Kick pin 2</button>
@@ -324,7 +324,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🔔 Beep <span class="tip" data-tip="Fires the printer's built-in buzzer. 'count' is how many beeps in a row (1-9). 'dur' is each beep's length in 100ms units (so 3 = 300ms). Not every model has a buzzer wired up.">?</span></h3>
+          <h3>Beep <span class="tip" data-tip="Fires the printer's built-in buzzer. 'count' is how many beeps in a row (1-9). 'dur' is each beep's length in 100ms units (so 3 = 300ms). Not every model has a buzzer wired up.">?</span></h3>
           <div class="row mini">
             <label>× <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
             <label>dur <input type="number" id="hw-beep-dur" value="3" min="1" max="9" /></label>
@@ -333,7 +333,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>📜 Feed <span class="tip" data-tip="Advance the paper by N blank lines without printing or cutting. Handy to push a receipt past the tear bar so you can grab it.">?</span></h3>
+          <h3>Feed <span class="tip" data-tip="Advance the paper by N blank lines without printing or cutting. Handy to push a receipt past the tear bar so you can grab it.">?</span></h3>
           <label>Lines <span class="v" id="hw-feed-v">3</span>
             <input type="range" id="hw-feed" min="1" max="20" step="1" value="3" />
           </label>
@@ -341,7 +341,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>✂️ Cut <span class="tip" data-tip="Full cut slices all the way across. Partial leaves a tiny paper bridge so the receipt dangles — common in kitchens where orders should hang until someone tears them off.">?</span></h3>
+          <h3>Cut <span class="tip" data-tip="Full cut slices all the way across. Partial leaves a tiny paper bridge so the receipt dangles — common in kitchens where orders should hang until someone tears them off.">?</span></h3>
           <div class="row mini">
             <button data-hw="cut" data-partial="false" class="primary">Full cut</button>
             <button data-hw="cut" data-partial="true" class="ghost">Partial</button>
@@ -349,7 +349,7 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🖨 Density <span class="tip" data-tip="Print darkness, 0 = lightest and 15 = darkest. Higher = darker text but slower printing and more heat on the print head. Bump it up if your receipts look faded; drop it if they're too dark or the head is running hot. Some printers ignore this command.">?</span></h3>
+          <h3>Density <span class="tip" data-tip="Print darkness, 0 = lightest and 15 = darkest. Higher = darker text but slower printing and more heat on the print head. Bump it up if your receipts look faded; drop it if they're too dark or the head is running hot. Some printers ignore this command.">?</span></h3>
           <label>Level <span class="v" id="hw-dens-v">8</span>
             <input type="range" id="hw-dens" min="0" max="15" step="1" value="8" />
           </label>
@@ -357,32 +357,32 @@ ship the thing</textarea>
         </article>
 
         <article class="wid">
-          <h3>🌐 Code page <span class="tip" data-tip="Character encoding the printer's built-in ROM font uses for bytes 128-255 (symbols, accented letters, etc.). Only affects text mode — ignored when 'pretty font' is on in the composer, because that path renders text as an image. Pick the page matching the language you print most: CP437 (USA/Latin), CP850 (Western Europe), CP858 (Euro symbol), WPC1252 (Windows Latin-1).">?</span></h3>
+          <h3>Code page <span class="tip" data-tip="Character encoding the printer's built-in ROM font uses for bytes 128-255 (symbols, accented letters, etc.). Only affects text mode — ignored when 'pretty font' is on in the composer, because that path renders text as an image. Pick the page matching the language you print most: CP437 (USA/Latin), CP850 (Western Europe), CP858 (Euro symbol), WPC1252 (Windows Latin-1).">?</span></h3>
           <select id="hw-cp"></select>
           <button data-hw="codepage" class="primary">Apply</button>
         </article>
 
         <article class="wid">
-          <h3>♻️ Reset <span class="tip" data-tip="Sends ESC @ — restores every printer setting to factory defaults: alignment, font size, density, code page, line spacing, underline, inverse. Safe anytime; the next print re-applies whatever it needs.">?</span></h3>
+          <h3>♻ Reset <span class="tip" data-tip="Sends ESC @ — restores every printer setting to factory defaults: alignment, font size, density, code page, line spacing, underline, inverse. Safe anytime; the next print re-applies whatever it needs.">?</span></h3>
           <p>Restore defaults.</p>
           <button data-hw="reset" class="ghost">Reset printer</button>
         </article>
 
         <article class="wid">
-          <h3>🧪 Self-test <span class="tip" data-tip="Triggers the printer's built-in diagnostic print: usually firmware version, DIP-switch settings, and a character test. If nothing prints, your unit probably only runs self-test via the physical paper-feed button at power-on.">?</span></h3>
+          <h3>Self-test <span class="tip" data-tip="Triggers the printer's built-in diagnostic print: usually firmware version, DIP-switch settings, and a character test. If nothing prints, your unit probably only runs self-test via the physical paper-feed button at power-on.">?</span></h3>
           <p>Built-in diagnostic page.</p>
           <button data-hw="self_test" class="ghost">Run self-test</button>
         </article>
 
         <article class="wid wid-wide">
-          <h3>📟 Status <span class="tip" data-tip="Reads four real-time status bytes from the printer: general status, offline cause, error cause, and paper sensor. Shows up as flags like 'cover_open', 'paper_ended', 'cutter_error'. Needs a readable IN endpoint (USB/serial usually fine; network printers sometimes don't).">?</span></h3>
+          <h3>Status <span class="tip" data-tip="Reads four real-time status bytes from the printer: general status, offline cause, error cause, and paper sensor. Shows up as flags like 'cover_open', 'paper_ended', 'cutter_error'. Needs a readable IN endpoint (USB/serial usually fine; network printers sometimes don't).">?</span></h3>
           <p>Ask the printer how it's doing.</p>
           <button data-hw="status" class="primary">Query status</button>
           <pre id="hw-status-out" class="status-box">no reading yet</pre>
         </article>
 
         <article class="wid wid-wide">
-          <h3>🎨 RGB LED <span class="tip" data-tip="The Milestone P80E advertises customizable RGB alert lighting, but the exact command isn't publicly documented. Pick a color, choose a protocol guess, and click Send — if one works, you've found your model's dialect. If none do, grab Milestone's SDK and paste the raw bytes in the Console tab.">?</span> <span class="badge">experimental</span></h3>
+          <h3>RGB LED <span class="tip" data-tip="The Milestone P80E advertises customizable RGB alert lighting, but the exact command isn't publicly documented. Pick a color, choose a protocol guess, and click Send — if one works, you've found your model's dialect. If none do, grab Milestone's SDK and paste the raw bytes in the Console tab.">?</span> <span class="badge">experimental</span></h3>
           <p>Vendor-specific — try each protocol to find the one your unit accepts.</p>
 
           <div class="led-grid">
