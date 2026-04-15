@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>Send Cuzeth a receipt</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='friends.css') }}" />
+</head>
+<body class="friends">
+
+<header class="top friends-top">
+  <div class="brand">
+    <span class="logo">▚▚</span>
+    <span class="title">SEND CUZETH A RECEIPT</span>
+  </div>
+  <div class="who" id="who" hidden>
+    <span class="who-name"></span>
+    <button class="ghost tiny" id="logout">sign out</button>
+  </div>
+</header>
+
+<main class="friends-main">
+
+  <!-- LOADING -->
+  <section class="card" data-state="loading">
+    <p class="dim">connecting…</p>
+  </section>
+
+  <!-- GUEST -->
+  <section class="card" data-state="guest" hidden>
+    <h1>print something on his desk</h1>
+    <p class="dim">cuzeth has a thermal receipt printer in his apartment. message him and it pops out of the printer.</p>
+    <p class="dim">passkey only — no passwords, ever.</p>
+
+    <div class="guest-actions">
+      <button class="primary block" id="go-register">Make a passkey</button>
+      <button class="ghost block" id="go-login">I already have one</button>
+    </div>
+  </section>
+
+  <!-- REGISTER -->
+  <section class="card" data-state="register" hidden>
+    <h1>pick a name</h1>
+    <p class="dim">what should cuzeth call you when your message prints?</p>
+    <form id="register-form" autocomplete="off">
+      <input
+        type="text"
+        id="reg-username"
+        placeholder="your name"
+        maxlength="20"
+        pattern="[a-zA-Z0-9_\-]{1,20}"
+        required
+        autofocus
+      />
+      <p class="hint">letters, digits, _ or -. up to 20 chars.</p>
+      <div class="row">
+        <button type="submit" class="primary">Create passkey</button>
+        <button type="button" class="ghost" data-back>Back</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- LOGIN -->
+  <section class="card" data-state="login" hidden>
+    <h1>welcome back</h1>
+    <form id="login-form" autocomplete="off">
+      <input
+        type="text"
+        id="login-username"
+        placeholder="your name"
+        maxlength="20"
+        pattern="[a-zA-Z0-9_\-]{1,20}"
+        required
+        autofocus
+      />
+      <div class="row">
+        <button type="submit" class="primary">Sign in with passkey</button>
+        <button type="button" class="ghost" data-back>Back</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- PENDING -->
+  <section class="card pending-card" data-state="pending" hidden>
+    <div class="pending-stamp">PENDING</div>
+    <h1>you're in the queue</h1>
+    <p>cuzeth needs to give you the green light. he'll see <code id="pending-name"></code> pop up next time he opens the printer console.</p>
+    <p class="dim">leave this tab open or check back later — once he approves you, refresh and you can start printing.</p>
+    <div class="row">
+      <button class="ghost" id="recheck">Check again</button>
+    </div>
+  </section>
+
+  <!-- BLOCKED -->
+  <section class="card blocked-card" data-state="blocked" hidden>
+    <h1>blocked</h1>
+    <p>cuzeth has revoked your access. if this is a mistake, ask him directly.</p>
+  </section>
+
+  <!-- ALLOWED -->
+  <section class="card" data-state="allowed" hidden>
+    <h1>send a receipt</h1>
+    <p class="dim">it'll print immediately on cuzeth's thermal printer with your name attached.</p>
+
+    <form id="msg-form">
+      <textarea
+        id="msg-body"
+        rows="6"
+        maxlength="800"
+        placeholder="say something nice. or weird. up to you."
+        required
+      ></textarea>
+      <div class="msg-meta">
+        <span id="msg-count">0 / 800</span>
+        <span class="dim">supports **bold**, __italic__, ~strike~, # heading, ## subheading, ===, ---, &gt; centered.</span>
+      </div>
+      <div class="row">
+        <button type="submit" class="primary">Print it</button>
+      </div>
+    </form>
+
+    <div class="recents" id="recents" hidden>
+      <h2>just sent</h2>
+      <ul id="recents-list"></ul>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="{{ url_for('static', filename='friends.js') }}"></script>
+</body>
+</html>
