@@ -70,11 +70,4 @@ SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or secrets.token_urlsafe(32)
 _ADMIN_TOKEN_FROM_ENV = os.getenv("ADMIN_TOKEN") is not None
 
-# WebAuthn relying-party identifiers. RP_ID must match the hostname the
-# browser sees. In dev, "localhost" works. In prod set to the full
-# Tailscale hostname, e.g. "printer-nas.tail-scales.ts.net".
-RP_ID = os.getenv("RP_ID", "localhost")
-RP_NAME = os.getenv("RP_NAME", "Thermal Printer")
-ORIGIN = os.getenv("ORIGIN", f"http://localhost:{PORT}")
-
 DB_PATH = DATA_DIR / "app.db"

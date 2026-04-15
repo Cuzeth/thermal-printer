@@ -6,4 +6,3 @@ pyusb>=1.2.1
 qrcode>=7.4.2
 python-barcode>=0.15.1
 gunicorn>=21.0
-webauthn>=2.2

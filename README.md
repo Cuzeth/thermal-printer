@@ -17,10 +17,10 @@ Not a product. Just fun stuff to do with a roll of thermal paper.
 - **Console** — raw ESC/POS byte sender + cheat sheet
 - **Admin** — approve/block friends, see recent prints
 
-**Friends page (`/m/`)** — public-facing, passkey-only. Friends register
-with a passkey, I approve them, they send me messages that print
+**Friends page (`/m/`)** — public-facing. Friends register with a
+username + password, I approve them, they send me messages that print
 immediately with their name attached. Rate-limited to one message per
-10 seconds.
+10 seconds. Failed logins throttled to 10 per 15 minutes per username.
 
 ## Run it locally
 
@@ -34,10 +34,9 @@ Open <http://localhost:5005>. The startup banner prints a dev
 `ADMIN_TOKEN` — the main GUI inlines it automatically, so you don't
 need to copy it.
 
-For a local "friends" demo, open <http://localhost:5005/m/> and use
-Touch ID / Apple Passwords to make a passkey (Proton Pass and other
-third-party password managers refuse to create passkeys on `http://`;
-they're fine once the app is behind real HTTPS on the NAS).
+For a local "friends" demo, open <http://localhost:5005/m/>, click
+**Create an account**, pick any username + password (8+ chars), then
+approve yourself from the Admin tab in the main GUI.
 
 Set `DRY_RUN=true` in the env to skip USB and dump ESC/POS bytes to
 `./data/last_print.bin` instead. Useful for iterating on layouts
@@ -72,10 +71,9 @@ features/
   text.py               plain-text composer
   widgets.py            quote/joke/haiku/weather/dice/...
 auth/
-  db.py                 SQLite (users, credentials, messages)
-  webauthn_flow.py      py_webauthn 2.x wrappers
+  db.py                 SQLite (users + messages, werkzeug password hashing)
   session.py            require_allowed / require_admin decorators
-  blueprint.py          /api/m/auth/* endpoints
+  blueprint.py          /api/m/auth/{register,login,logout} + /me
 templates/
   index.html            main GUI (tabs)
   friends.html          public friends page
@@ -94,7 +92,7 @@ DEPLOY.md               NAS run-book
 
 Everything lives in env vars with dev defaults. Copy
 [`.env.example`](.env.example) to `.env` on the NAS and fill in the
-required values (SECRET_KEY, ADMIN_TOKEN, RP_ID, ORIGIN, RP_NAME).
+required values (SECRET_KEY, ADMIN_TOKEN).
 
 The printer is assumed to be a USB device with VID `0x0483` / PID
 `0x5720`. Change `USB_VENDOR_ID` / `USB_PRODUCT_ID` in the env if yours

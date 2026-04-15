@@ -75,9 +75,6 @@ ssh you@your-nas.local "mkdir -p /volume1/docker/thermal-printer/data"
 ```
 SECRET_KEY=...
 ADMIN_TOKEN=...
-RP_ID=printer-nas.tail-XXXX.ts.net    # set after you know your tailnet hostname
-RP_NAME=Cuzeth's Printer
-ORIGIN=https://printer-nas.tail-XXXX.ts.net
 ```
 
 ---
@@ -137,12 +134,7 @@ curl http://localhost:5005/api/ping
    (or just to your specific device by name.)
 
 Find the device hostname from the admin panel — something like
-`printer-nas.tail-XXXX.ts.net`. Update `RP_ID` and `ORIGIN` in the NAS's
-`.env` to match, then restart the container:
-
-```sh
-sudo docker compose restart
-```
+`printer-nas.tail-XXXX.ts.net`. That's the URL your friends will use.
 
 ---
 
@@ -175,8 +167,8 @@ You should now have:
 ## 8. End-to-end smoke test
 
 1. From a phone on cellular: open
-   `https://printer-nas.tail-XXXX.ts.net/m/` → tap **Make a passkey** →
-   pick a username → save passkey to your phone (Touch ID / Face ID).
+   `https://printer-nas.tail-XXXX.ts.net/m/` → tap **Create an account**
+   → pick a username + password → submit.
 2. From your Mac (on the tailnet): open the main GUI →
    **Admin** tab → see the pending user → click **Approve**.
 3. Back on the phone: tap **Check again** → state flips to ALLOWED →
@@ -224,10 +216,10 @@ approved friends and their passkeys stick.
   443 and 5005 aren't blocked on the `tailscale0` interface. Default
   policy on most installs is "allow all" until you create rules.
 
-**WebAuthn fails with "RP ID mismatch"**
-- The browser's hostname in the URL bar must exactly equal `RP_ID` in
-  the container's env. Funnel hostnames are case-sensitive. Restart
-  the container after editing `.env`.
+**Login returns 429 "too many failed attempts"**
+- Default lock window is 10 failed attempts per 15 minutes per username
+  (in-memory, per-container). Restart the container to clear, or just
+  wait it out.
 
 **"can't connect to the server" toast on the friends page**
 - From the NAS: `curl http://localhost:5005/m/` should return HTML. If

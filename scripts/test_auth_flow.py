@@ -1,24 +1,20 @@
-"""Smoke test for Phase 2 auth plumbing.
+"""Smoke test for the username/password auth plumbing.
 
-Exercises the parts that don't need a real authenticator:
+Exercises:
 - DB CRUD via the auth.db module
 - Admin Bearer-token guard
-- /api/m/auth/register/begin happy path + duplicate-username 409
-- /api/m/auth/login/begin missing-user 404
-- /api/m/me when signed-out
+- Register happy path + duplicate-username 409 + validation 400s
+- Login wrong password / unknown user / too-many-failures
+- /api/m/me when signed-out + signed-in
+- Approve + revoke + delete
 
-The cryptographic finish flows are validated end-to-end in Phase 3 via
-Playwright's virtual-authenticator (Chrome supports software passkeys
-for testing). Running this script doesn't talk to USB.
-
-Run from repo root:
+Run from repo root (doesn't touch USB):
     DRY_RUN=true ADMIN_TOKEN=test-token DATA_DIR=/tmp/tp-test \\
         python3 scripts/test_auth_flow.py
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
@@ -29,14 +25,13 @@ _TMP = tempfile.mkdtemp(prefix="tp-auth-test-")
 os.environ["DATA_DIR"] = _TMP
 os.environ.setdefault("ADMIN_TOKEN", "test-token-please-replace")
 os.environ.setdefault("DRY_RUN", "true")
-os.environ.setdefault("RP_ID", "localhost")
-os.environ.setdefault("ORIGIN", "http://localhost:5005")
 
 # Ensure project root is importable when this script is invoked directly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config  # noqa: E402
 import app as app_module  # noqa: E402
+from auth import blueprint as auth_bp_mod  # noqa: E402
 from auth import db as auth_db  # noqa: E402
 
 
@@ -55,16 +50,12 @@ def main() -> None:
     bearer = {"Authorization": f"Bearer {config.ADMIN_TOKEN}"}
 
     print("\n[1] DB layer")
-    u = auth_db.create_pending_user("alice")
-    _ok("create_pending_user", u["status"] == "pending" and len(u["user_handle"]) == 16)
-
-    auth_db.add_credential(u["id"], b"\x01" * 32, b"\x02" * 32, 0, ["internal"])
-    creds = auth_db.get_credentials_for_user(u["id"])
-    _ok("get_credentials_for_user", len(creds) == 1 and creds[0]["sign_count"] == 0)
-
-    auth_db.update_sign_count(b"\x01" * 32, 5)
-    creds = auth_db.get_credentials_for_user(u["id"])
-    _ok("update_sign_count", creds[0]["sign_count"] == 5)
+    u = auth_db.create_pending_user("alice", "hunter2hunter")
+    _ok("create_pending_user", u["status"] == "pending" and u["id"] > 0)
+    user = auth_db.get_user(u["id"])
+    _ok("password stored hashed", user["password_hash"] and not user["password_hash"].startswith("hunter2"))
+    _ok("verify_password good", auth_db.verify_password(user, "hunter2hunter"))
+    _ok("verify_password bad",  not auth_db.verify_password(user, "wrong"))
 
     auth_db.set_status(u["id"], "allowed")
     user = auth_db.get_user(u["id"])
@@ -85,46 +76,70 @@ def main() -> None:
     _ok("valid token -> 200", r.status_code == 200)
     _ok("alice in users", any(u["username"] == "alice" for u in r.get_json()["users"]))
 
-    print("\n[3] Register-begin (no real authenticator)")
-    r = client.post("/api/m/auth/register/begin", json={"username": "bob"})
-    _ok("register/begin returns options", r.status_code == 200)
-    body = r.get_json()
-    _ok("options has challenge", "challenge" in body["options"])
-    _ok("options has user.id", "id" in body["options"]["user"])
+    print("\n[3] Register happy path")
+    fresh = app_module.app.test_client()
+    r = fresh.post("/api/m/auth/register", json={"username": "bob", "password": "correct-horse"})
+    _ok("register/bob -> 200", r.status_code == 200)
+    _ok("bob is pending + session set", r.get_json()["user"]["status"] == "pending")
 
-    print("\n[4] Duplicate username")
-    r = client.post("/api/m/auth/register/begin", json={"username": "bob"})
+    # After register, same client is logged in → /me should return bob
+    r = fresh.get("/api/m/me")
+    _ok("me reflects session", r.get_json()["user"]["username"] == "bob")
+
+    print("\n[4] Register validation")
+    r = client.post("/api/m/auth/register", json={"username": "bob", "password": "another-pass"})
     _ok("dup username -> 409", r.status_code == 409)
 
-    print("\n[5] Username validation")
-    r = client.post("/api/m/auth/register/begin", json={"username": "no spaces!"})
+    r = client.post("/api/m/auth/register", json={"username": "no spaces!", "password": "whatever-long"})
     _ok("bad chars -> 400", r.status_code == 400)
-    r = client.post("/api/m/auth/register/begin", json={"username": "x" * 30})
-    _ok("too long -> 400", r.status_code == 400)
 
-    print("\n[6] Login-begin")
-    r = client.post("/api/m/auth/login/begin", json={"username": "ghost"})
-    _ok("missing user -> 404", r.status_code == 404)
+    r = client.post("/api/m/auth/register", json={"username": "shortpw", "password": "nope"})
+    _ok("short password -> 400", r.status_code == 400)
 
-    r = client.post("/api/m/auth/login/begin", json={"username": "alice"})
-    _ok("no passkey... wait, alice DOES have one", r.status_code == 200)
+    print("\n[5] Login")
+    # reset rate limiter between runs
+    auth_bp_mod._failures.clear()
 
-    print("\n[7] /api/m/me when signed-out")
-    fresh = app_module.app.test_client()
-    r = fresh.get("/api/m/me")
-    _ok("me returns user=null", r.status_code == 200 and r.get_json()["user"] is None)
+    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    _ok("alice login -> 200", r.status_code == 200)
+    _ok("alice now signed in", r.get_json()["user"]["status"] == "allowed")
 
-    print("\n[8] Approve/revoke endpoints")
+    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "wrongpass"})
+    _ok("wrong pw -> 401", r.status_code == 401)
+
+    r = client.post("/api/m/auth/login", json={"username": "ghost", "password": "whatever-long"})
+    _ok("unknown user -> 401", r.status_code == 401)
+
+    print("\n[6] Login rate limit")
+    auth_bp_mod._failures.clear()
+    for _ in range(auth_bp_mod._MAX_FAILURES):
+        client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
+    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
+    _ok("11th attempt -> 429", r.status_code == 429)
+
+    # A successful auth shouldn't be reachable during lockout
+    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    _ok("correct pw during lockout -> 429", r.status_code == 429)
+
+    auth_bp_mod._failures.clear()
+    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    _ok("after clear, correct pw -> 200", r.status_code == 200)
+
+    print("\n[7] Logout")
+    r = client.post("/api/m/auth/logout")
+    _ok("logout -> 200", r.status_code == 200)
+    r = client.get("/api/m/me")
+    _ok("me=null after logout", r.get_json()["user"] is None)
+
+    print("\n[8] Approve/revoke/delete")
     bob = auth_db.get_user_by_username("bob")
     r = client.post(f"/api/admin/users/{bob['id']}/approve", headers=bearer)
     _ok("approve bob -> 200", r.status_code == 200)
-    bob = auth_db.get_user_by_username("bob")
-    _ok("bob is allowed", bob["status"] == "allowed")
+    _ok("bob is allowed", auth_db.get_user_by_username("bob")["status"] == "allowed")
 
     r = client.post(f"/api/admin/users/{bob['id']}/revoke", headers=bearer)
     _ok("revoke bob -> 200", r.status_code == 200)
-    bob = auth_db.get_user_by_username("bob")
-    _ok("bob is blocked", bob["status"] == "blocked")
+    _ok("bob is blocked", auth_db.get_user_by_username("bob")["status"] == "blocked")
 
     r = client.post(f"/api/admin/users/{bob['id']}/delete", headers=bearer)
     _ok("delete bob -> 200", r.status_code == 200)

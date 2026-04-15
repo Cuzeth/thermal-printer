@@ -61,6 +61,7 @@ body.friends {
 .block { width: 100%; padding: 14px 16px; font-size: 14px; }
 
 input[type=text],
+input[type=password],
 textarea {
   width: 100%;
   background: var(--bg-2);
@@ -73,10 +74,23 @@ textarea {
   margin-top: 8px;
 }
 input[type=text]:focus,
+input[type=password]:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(247,180,44,.18);
+}
+
+label {
+  display: block;
+  margin-top: 14px;
+}
+label .label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
 }
 
 textarea { resize: vertical; min-height: 120px; }

@@ -1,15 +1,20 @@
-"""SQLite for users, credentials, messages.
+"""SQLite for users + messages.
 
 One file at config.DB_PATH. WAL mode + FKs on. Single-process gunicorn means
 we don't need a connection pool; every request opens its own conn.
+
+Schema note: this file assumes a fresh DB. If you have a pre-existing
+`app.db` from the old passkey-based schema, delete it before the next
+boot (`rm data/app.db`) — init() won't migrate the old columns.
 """
 
 from __future__ import annotations
 
-import secrets
 import sqlite3
 from contextlib import contextmanager
 from typing import Iterator, Optional
+
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 
@@ -19,25 +24,13 @@ PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS users (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-  user_handle BLOB    NOT NULL UNIQUE,
-  status      TEXT    NOT NULL DEFAULT 'pending',
-  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-  approved_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS credentials (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  credential_id BLOB    NOT NULL UNIQUE,
-  public_key    BLOB    NOT NULL,
-  sign_count    INTEGER NOT NULL DEFAULT 0,
-  transports    TEXT,
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT    NOT NULL,
+  status        TEXT    NOT NULL DEFAULT 'pending',
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  approved_at   TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_creds_user ON credentials(user_id);
 
 CREATE TABLE IF NOT EXISTS messages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,18 +74,35 @@ def init() -> None:
 VALID_STATUSES = ("pending", "allowed", "blocked")
 
 
-def create_pending_user(username: str) -> dict:
-    """Insert a new pending user with a random WebAuthn user_handle.
+def create_pending_user(username: str, password: str) -> dict:
+    """Insert a new pending user with a hashed password.
 
     Raises sqlite3.IntegrityError if the username is taken.
     """
-    handle = secrets.token_bytes(16)
+    hashed = generate_password_hash(password)
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO users (username, user_handle, status) VALUES (?, ?, 'pending')",
-            (username, handle),
+            "INSERT INTO users (username, password_hash, status) VALUES (?, ?, 'pending')",
+            (username, hashed),
         )
-        return {"id": cur.lastrowid, "username": username, "user_handle": handle, "status": "pending"}
+        return {
+            "id": cur.lastrowid,
+            "username": username,
+            "status": "pending",
+        }
+
+
+def verify_password(user: dict, password: str) -> bool:
+    """Constant-time compare against the stored hash."""
+    return check_password_hash(user.get("password_hash") or "", password)
+
+
+def set_password(user_id: int, password: str) -> None:
+    with db() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(password), user_id),
+        )
 
 
 def get_user(user_id: int) -> Optional[dict]:
@@ -138,50 +148,6 @@ def set_status(user_id: int, status: str) -> None:
 def delete_user(user_id: int) -> None:
     with db() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
-
-
-# ---------- credentials ----------
-
-def add_credential(
-    user_id: int,
-    credential_id: bytes,
-    public_key: bytes,
-    sign_count: int,
-    transports: Optional[list[str]] = None,
-) -> None:
-    transports_csv = ",".join(transports) if transports else None
-    with db() as conn:
-        conn.execute(
-            "INSERT INTO credentials (user_id, credential_id, public_key, sign_count, transports) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (user_id, credential_id, public_key, sign_count, transports_csv),
-        )
-
-
-def get_credentials_for_user(user_id: int) -> list[dict]:
-    with db() as conn:
-        rows = conn.execute(
-            "SELECT id, credential_id, public_key, sign_count, transports "
-            "FROM credentials WHERE user_id = ?",
-            (user_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-def get_credential(credential_id: bytes) -> Optional[dict]:
-    with db() as conn:
-        row = conn.execute(
-            "SELECT * FROM credentials WHERE credential_id = ?", (credential_id,)
-        ).fetchone()
-        return dict(row) if row else None
-
-
-def update_sign_count(credential_id: bytes, new_count: int) -> None:
-    with db() as conn:
-        conn.execute(
-            "UPDATE credentials SET sign_count = ? WHERE credential_id = ?",
-            (new_count, credential_id),
-        )
 
 
 # ---------- messages ----------

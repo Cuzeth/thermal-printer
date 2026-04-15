@@ -32,31 +32,60 @@
   <section class="card" data-state="guest" hidden>
     <h1>print something on his desk</h1>
     <p class="dim">cuzeth has a thermal receipt printer in his apartment. message him and it pops out of the printer.</p>
-    <p class="dim">passkey only — no passwords, ever.</p>
 
     <div class="guest-actions">
-      <button class="primary block" id="go-register">Make a passkey</button>
+      <button class="primary block" id="go-register">Create an account</button>
       <button class="ghost block" id="go-login">I already have one</button>
     </div>
   </section>
 
   <!-- REGISTER -->
   <section class="card" data-state="register" hidden>
-    <h1>pick a name</h1>
-    <p class="dim">what should cuzeth call you when your message prints?</p>
+    <h1>pick a name + password</h1>
+    <p class="dim">cuzeth will approve your account before you can send messages.</p>
     <form id="register-form" autocomplete="off">
-      <input
-        type="text"
-        id="reg-username"
-        placeholder="your name"
-        maxlength="20"
-        pattern="[a-zA-Z0-9_\-]{1,20}"
-        required
-        autofocus
-      />
+      <label>
+        <span class="label">username</span>
+        <input
+          type="text"
+          id="reg-username"
+          placeholder="your name"
+          maxlength="20"
+          pattern="[a-zA-Z0-9_\-]{1,20}"
+          autocomplete="username"
+          required
+        />
+      </label>
       <p class="hint">letters, digits, _ or -. up to 20 chars.</p>
+
+      <label>
+        <span class="label">password</span>
+        <input
+          type="password"
+          id="reg-password"
+          placeholder="at least 8 characters"
+          minlength="8"
+          maxlength="200"
+          autocomplete="new-password"
+          required
+        />
+      </label>
+
+      <label>
+        <span class="label">confirm password</span>
+        <input
+          type="password"
+          id="reg-password-2"
+          placeholder="type it again"
+          minlength="8"
+          maxlength="200"
+          autocomplete="new-password"
+          required
+        />
+      </label>
+
       <div class="row">
-        <button type="submit" class="primary">Create passkey</button>
+        <button type="submit" class="primary">Create account</button>
         <button type="button" class="ghost" data-back>Back</button>
       </div>
     </form>
@@ -65,18 +94,32 @@
   <!-- LOGIN -->
   <section class="card" data-state="login" hidden>
     <h1>welcome back</h1>
-    <form id="login-form" autocomplete="off">
-      <input
-        type="text"
-        id="login-username"
-        placeholder="your name"
-        maxlength="20"
-        pattern="[a-zA-Z0-9_\-]{1,20}"
-        required
-        autofocus
-      />
+    <form id="login-form" autocomplete="on">
+      <label>
+        <span class="label">username</span>
+        <input
+          type="text"
+          id="login-username"
+          placeholder="your name"
+          maxlength="20"
+          pattern="[a-zA-Z0-9_\-]{1,20}"
+          autocomplete="username"
+          required
+          autofocus
+        />
+      </label>
+      <label>
+        <span class="label">password</span>
+        <input
+          type="password"
+          id="login-password"
+          maxlength="200"
+          autocomplete="current-password"
+          required
+        />
+      </label>
       <div class="row">
-        <button type="submit" class="primary">Sign in with passkey</button>
+        <button type="submit" class="primary">Sign in</button>
         <button type="button" class="ghost" data-back>Back</button>
       </div>
     </form>
