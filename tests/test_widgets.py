@@ -31,18 +31,6 @@ def test_dice_clamps_input():
     assert "20d100" in out
 
 
-def test_eight_ball_without_question():
-    random.seed(0)
-    out = widgets.magic_eight_ball("")
-    assert "MAGIC 8 BALL" in out
-    assert "Q:" not in out
-
-
-def test_eight_ball_with_question():
-    out = widgets.magic_eight_ball("will it print?")
-    assert "Q: will it print?" in out
-
-
 def test_todo_renders_checkboxes():
     out = widgets.todo("today", ["buy milk", "", "water plants"])
     # Empty item is dropped.

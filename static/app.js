@@ -254,8 +254,6 @@ $$("button[data-widget]").forEach((b) => {
     guard(async () => {
       if (kind === "weather") {
         await postJSON("/api/print/weather", { location: $("#w-loc").value });
-      } else if (kind === "eight_ball") {
-        await postJSON("/api/print/eight_ball", { question: $("#w-8q").value });
       } else if (kind === "dice") {
         await postJSON("/api/print/dice", {
           count: Number($("#w-dice-count").value),

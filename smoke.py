@@ -22,9 +22,6 @@ print("POST /api/print/quote  ->", r.status_code, r.get_json())
 r = client.post("/api/print/dice", headers=AUTH, json={"count": 3, "sides": 20})
 print("POST /api/print/dice   ->", r.status_code, r.get_json())
 
-r = client.post("/api/print/eight_ball", headers=AUTH, json={"question": "will it print?"})
-print("POST /api/print/8ball  ->", r.status_code, r.get_json())
-
 r = client.post("/api/print/todo", headers=AUTH, json={"title": "X", "items": ["a", "b"]})
 print("POST /api/print/todo   ->", r.status_code, r.get_json())
 

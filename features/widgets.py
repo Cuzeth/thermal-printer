@@ -47,38 +47,6 @@ JOKES = [
     "Real programmers count from 0.",
 ]
 
-HAIKUS = [
-    "morning fog lifting\ncoffee steam curls to the light\nthe keyboard clatters",
-    "small gear turns inside\nthermal paper hums its song\nwarm words on the roll",
-    "autumn leaf falling\nprinter whirs and hums along\nink-less magic scroll",
-    "midnight terminal\ncursor blinks an empty prayer\nsomewhere a bug sleeps",
-    "on thermal paper\nhaiku fades in summer heat\nimpermanent art",
-]
-
-EIGHT_BALL = [
-    "It is certain.",
-    "It is decidedly so.",
-    "Without a doubt.",
-    "Yes, definitely.",
-    "You may rely on it.",
-    "As I see it, yes.",
-    "Most likely.",
-    "Outlook good.",
-    "Yes.",
-    "Signs point to yes.",
-    "Reply hazy, try again.",
-    "Ask again later.",
-    "Better not tell you now.",
-    "Cannot predict now.",
-    "Concentrate and ask again.",
-    "Don't count on it.",
-    "My reply is no.",
-    "My sources say no.",
-    "Outlook not so good.",
-    "Very doubtful.",
-]
-
-
 # ---------- dice ----------
 
 # Unicode die faces for visual flair
@@ -158,33 +126,6 @@ def dad_joke() -> str:
             "---",
         ]
     )
-
-
-def haiku() -> str:
-    poem = random.choice(HAIKUS)
-    parts = ["# HAIKU", "===", ""]
-    for line in poem.splitlines():
-        parts.append("> " + line)
-    parts.extend(["", "---"])
-    return "\n".join(parts)
-
-
-def magic_eight_ball(question: str = "") -> str:
-    answer = random.choice(EIGHT_BALL)
-    parts = ["# MAGIC 8 BALL", "==="]
-    if question.strip():
-        parts.extend(["", textwrap.fill("Q: " + question.strip(), width=config.RECEIPT_WIDTH)])
-    parts.extend(
-        [
-            "",
-            "## the answer is...",
-            "",
-            f"# {answer}",
-            "",
-            "===",
-        ]
-    )
-    return "\n".join(parts)
 
 
 # ---------- weather ----------
@@ -383,7 +324,7 @@ def ascii_art(name: str) -> str:
     art = ASCII_ART.get(name.lower())
     if not art:
         art = random.choice(list(ASCII_ART.values()))
-    return "## " + name.upper() + "\n---\n" + art + "\n---"
+    return "## " + name.upper() + "\n---\n```\n" + art.strip("\n") + "\n```\n---"
 
 
 # ---------- agenda-style "now" card ----------

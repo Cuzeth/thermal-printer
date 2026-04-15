@@ -26,7 +26,7 @@
 | **Compose** | Rich-text editor with live preview. Markup: `**bold**`, `__underline__`, `~big~`, `#`/`##` headings, `>` centered, `-` bullets, `[ ]`/`[x]` todos, `---`/`===` rules, `!!!` cut markers. |
 | **Image** | Drop an image, tune contrast/brightness/threshold, Floyd–Steinberg dither, print. |
 | **Codes** | QR + 1D barcodes (CODE128, CODE39, EAN-13, EAN-8, UPC-A, ITF, CODABAR). Preview in the browser, print natively via ESC/POS. |
-| **Widgets** | Weather (wttr.in), quotes, dad jokes, haiku, magic 8-ball, dice, ASCII art, "now" card. |
+| **Widgets** | Weather (wttr.in), quotes, dad jokes, dice, ASCII art, "now" card. |
 | **Labs** | Todo list, label maker, fake receipt. |
 | **Hardware** | Cash drawer, beep, feed, cut, density, code page, LED (best-effort), status query. |
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
@@ -140,7 +140,7 @@ features/
   led.py                LED protocol candidates for vendor-specific units
   render.py             PIL-based rich-text rasterizer (growable canvas)
   text.py               plain-text composer (ROM-font path)
-  widgets.py            quote / joke / haiku / weather / dice / todo / …
+  widgets.py            quote / joke / weather / dice / todo / …
 auth/
   db.py                 SQLite schema + CRUD (users, messages)
   session.py            require_allowed / require_admin / require_owner

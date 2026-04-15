@@ -152,7 +152,14 @@ class Renderer:
         self.draw = ImageDraw.Draw(self.canvas)
 
     def render(self, body: str) -> None:
+        in_pre = False
         for raw in body.splitlines():
+            if raw.strip() == "```":
+                in_pre = not in_pre
+                continue
+            if in_pre:
+                self._pre_line(raw)
+                continue
             self._emit(raw.rstrip())
 
     def finish(self) -> Image.Image:
@@ -269,6 +276,12 @@ class Renderer:
             )
             self.y += 6
         self.y += 10
+
+    def _pre_line(self, line: str) -> None:
+        font = _font("mono_regular", BODY)
+        self._ensure_room(BODY + LINE_GAP)
+        self.draw.text((self.pad, self.y), line, font=font, fill=0)
+        self.y += BODY + LINE_GAP
 
     def _scissors(self) -> None:
         self._ensure_room(20)

@@ -208,25 +208,6 @@ def print_joke():
     return _safe(run)
 
 
-@app.post("/api/print/haiku")
-@require_owner
-def print_haiku():
-    def run():
-        _print_body(widgets.haiku())
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/print/eight_ball")
-@require_owner
-def print_eight_ball():
-    def run():
-        q = (request.get_json(silent=True) or {}).get("question", "")
-        _print_body(widgets.magic_eight_ball(q))
-        return {}
-    return _safe(run)
-
-
 @app.post("/api/print/weather")
 @require_owner
 def print_weather():
