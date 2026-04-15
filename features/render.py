@@ -127,14 +127,29 @@ def _parse_inline(line: str) -> list[Span]:
 # ---------- renderer ----------
 
 class Renderer:
+    # Start modest and grow on demand. Most widget prints fit under 1 KiB tall;
+    # the old fixed 16000-px canvas cost ~9 MB/request for nothing.
+    _INITIAL_H = 1024
+    _GROW_PAD = 512
+
     def __init__(self, width: Optional[int] = None):
         self.width = width or config.PRINTER_PIXEL_WIDTH
         self.pad = 8
         self.draw_w = self.width - 2 * self.pad
-        # Allocate generously; we crop at the end.
-        self.canvas = Image.new("L", (self.width, 16000), 255)
+        self.canvas = Image.new("L", (self.width, self._INITIAL_H), 255)
         self.draw = ImageDraw.Draw(self.canvas)
         self.y = 8
+
+    def _ensure_room(self, needed: int) -> None:
+        """Grow the canvas if the next block won't fit. O(n) paste per grow,
+        but bodies rarely grow more than once."""
+        if self.y + needed <= self.canvas.height:
+            return
+        new_h = max(self.canvas.height * 2, self.y + needed + self._GROW_PAD)
+        bigger = Image.new("L", (self.width, new_h), 255)
+        bigger.paste(self.canvas, (0, 0))
+        self.canvas = bigger
+        self.draw = ImageDraw.Draw(self.canvas)
 
     def render(self, body: str) -> None:
         for raw in body.splitlines():
@@ -150,6 +165,7 @@ class Renderer:
 
     def _emit(self, line: str) -> None:
         if not line:
+            self._ensure_room(BODY // 2)
             self.y += BODY // 2
             return
         if line == "---":
@@ -200,6 +216,7 @@ class Renderer:
             tracking = 1
             widths = [self.draw.textlength(ch, font=font) for ch in text]
             total = sum(widths) + tracking * max(0, len(text) - 1)
+        self._ensure_room(size + BLOCK_GAP)
         x = self.pad + (self.draw_w - int(total)) // 2
         self.y += BLOCK_GAP // 2
         for i, ch in enumerate(text):
@@ -239,6 +256,7 @@ class Renderer:
         self._spans(_parse_inline(text), align="left", indent=indent)
 
     def _hr(self, double: bool) -> None:
+        self._ensure_room(24)
         self.y += 6
         y = self.y
         self.draw.line(
@@ -253,6 +271,7 @@ class Renderer:
         self.y += 10
 
     def _scissors(self) -> None:
+        self._ensure_room(20)
         self.y += 4
         y = self.y
         x = self.pad
@@ -312,6 +331,7 @@ class Renderer:
             widths = [p[4] for p in line]
             total = sum(widths)
             max_size = max((p[3] for p in line), default=BODY)
+            self._ensure_room(max_size + LINE_GAP)
             if align == "center":
                 x = self.pad + (self.draw_w - total) // 2
             elif align == "right":

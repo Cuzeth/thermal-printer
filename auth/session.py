@@ -63,9 +63,25 @@ def require_admin(fn):
     return wrapper
 
 
+def require_owner(fn):
+    """Bearer-token gate for private console routes (/api/hw/*, /api/print/*,
+    /api/preview*, /api/image/*, /api/code/*).
+
+    Uses the same ADMIN_TOKEN as /api/admin/*. The main GUI already inlines it
+    into the page body; app.js attaches it to every fetch. Keeps the console
+    safe if the tailnet ever sprouts an extra device.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        token = _bearer_token()
+        if not token or not hmac.compare_digest(token, config.ADMIN_TOKEN):
+            return jsonify({"ok": False, "error": "auth required"}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
+
 def _bearer_token() -> Optional[str]:
     auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    # also accept ?admin_token=… for browser convenience in dev
-    return request.args.get("admin_token")
+    return None

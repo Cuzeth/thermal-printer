@@ -87,11 +87,21 @@ static/
 scripts/
   test_auth_flow.py     Flask-test-client smoke test
 deploy/
-  thermal-printer.service   systemd unit
+  thermal-printer.service   systemd unit (runs gunicorn, workers=1)
   99-thermal-printer.rules  udev rule (USB access for non-root)
   setup.sh                  idempotent Pi bootstrapper
+tests/                  pytest suite (render/widgets/image/routes)
+.github/workflows/ci.yml    pytest + auth smoke on push/PR
 DEPLOY.md               Raspberry Pi run-book
 .env.example            what to fill into .env on the Pi
+```
+
+## Running the tests
+
+```sh
+pip install pytest
+pytest                              # render/widgets/image/routes suite
+python scripts/test_auth_flow.py    # end-to-end auth
 ```
 
 ## Configuration

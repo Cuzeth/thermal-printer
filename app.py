@@ -6,6 +6,7 @@ Open:      http://127.0.0.1:5005
 
 from __future__ import annotations
 
+import os
 import traceback
 from typing import Any, Callable
 
@@ -14,7 +15,7 @@ from flask import Flask, jsonify, render_template, request
 import config
 from auth import auth_bp
 from auth import db as auth_db
-from auth.session import current_user, require_admin, require_allowed
+from auth.session import current_user, require_admin, require_allowed, require_owner
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
@@ -26,7 +27,15 @@ from printer import PrinterError, footer, open_printer
 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = config.SECRET_KEY
+app.config.update(
+    SECRET_KEY=config.SECRET_KEY,
+    # Funnel is HTTPS; only relax this in dev where FLASK_DEBUG=1.
+    SESSION_COOKIE_SECURE=os.environ.get("FLASK_DEBUG") != "1",
+    SESSION_COOKIE_HTTPONLY=True,
+    # Lax + POST-only state changes = no CSRF surface worth protecting.
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,  # 30 days
+)
 app.register_blueprint(auth_bp)
 auth_db.init()
 
@@ -89,12 +98,14 @@ def _safe(handler: Callable[[], Any]):
 # ---------- text composer ----------
 
 @app.post("/api/preview")
+@require_owner
 def preview():
     body = (request.get_json(silent=True) or {}).get("body", "")
     return jsonify({"ok": True, "preview": text_feat.preview(body), "width": config.RECEIPT_WIDTH})
 
 
 @app.post("/api/preview/rich")
+@require_owner
 def preview_rich():
     def run():
         body = (request.get_json(silent=True) or {}).get("body", "")
@@ -108,6 +119,7 @@ def preview_rich():
 
 
 @app.post("/api/print/text")
+@require_owner
 def print_text():
     def run():
         data = request.get_json(silent=True) or {}
@@ -126,6 +138,7 @@ def print_text():
 # ---------- image ----------
 
 @app.post("/api/image/preview")
+@require_owner
 def image_preview():
     def run():
         if "file" not in request.files:
@@ -146,6 +159,7 @@ def image_preview():
 
 
 @app.post("/api/print/image")
+@require_owner
 def print_image():
     def run():
         if "file" not in request.files:
@@ -175,21 +189,34 @@ def print_image():
 # ---------- widget routes ----------
 
 @app.post("/api/print/quote")
+@require_owner
 def print_quote():
-    return _safe(lambda: (_print_body(widgets.random_quote()), {})[1])
+    def run():
+        _print_body(widgets.random_quote())
+        return {}
+    return _safe(run)
 
 
 @app.post("/api/print/joke")
+@require_owner
 def print_joke():
-    return _safe(lambda: (_print_body(widgets.dad_joke()), {})[1])
+    def run():
+        _print_body(widgets.dad_joke())
+        return {}
+    return _safe(run)
 
 
 @app.post("/api/print/haiku")
+@require_owner
 def print_haiku():
-    return _safe(lambda: (_print_body(widgets.haiku()), {})[1])
+    def run():
+        _print_body(widgets.haiku())
+        return {}
+    return _safe(run)
 
 
 @app.post("/api/print/eight_ball")
+@require_owner
 def print_eight_ball():
     def run():
         q = (request.get_json(silent=True) or {}).get("question", "")
@@ -199,6 +226,7 @@ def print_eight_ball():
 
 
 @app.post("/api/print/weather")
+@require_owner
 def print_weather():
     def run():
         loc = (request.get_json(silent=True) or {}).get("location", "").strip()
@@ -210,6 +238,7 @@ def print_weather():
 
 
 @app.post("/api/print/dice")
+@require_owner
 def print_dice():
     def run():
         data = request.get_json(silent=True) or {}
@@ -222,6 +251,7 @@ def print_dice():
 
 
 @app.post("/api/print/todo")
+@require_owner
 def print_todo():
     def run():
         data = request.get_json(silent=True) or {}
@@ -237,6 +267,7 @@ def print_todo():
 
 
 @app.post("/api/print/receipt")
+@require_owner
 def print_receipt():
     def run():
         data = request.get_json(silent=True) or {}
@@ -254,6 +285,7 @@ def print_receipt():
 
 
 @app.post("/api/print/label")
+@require_owner
 def print_label():
     def run():
         data = request.get_json(silent=True) or {}
@@ -266,6 +298,7 @@ def print_label():
 
 
 @app.post("/api/print/ascii")
+@require_owner
 def print_ascii():
     def run():
         data = request.get_json(silent=True) or {}
@@ -275,13 +308,18 @@ def print_ascii():
 
 
 @app.post("/api/print/now")
+@require_owner
 def print_now():
-    return _safe(lambda: (_print_body(widgets.now_card()), {})[1])
+    def run():
+        _print_body(widgets.now_card())
+        return {}
+    return _safe(run)
 
 
 # ---------- codes (QR / barcodes) ----------
 
 @app.post("/api/code/qr/preview")
+@require_owner
 def qr_preview():
     def run():
         data = request.get_json(silent=True) or {}
@@ -298,6 +336,7 @@ def qr_preview():
 
 
 @app.post("/api/print/qr")
+@require_owner
 def print_qr():
     def run():
         data = request.get_json(silent=True) or {}
@@ -316,6 +355,7 @@ def print_qr():
 
 
 @app.post("/api/code/barcode/preview")
+@require_owner
 def barcode_preview():
     def run():
         data = request.get_json(silent=True) or {}
@@ -334,6 +374,7 @@ def barcode_preview():
 
 
 @app.post("/api/print/barcode")
+@require_owner
 def print_barcode():
     def run():
         data = request.get_json(silent=True) or {}
@@ -355,6 +396,7 @@ def print_barcode():
 
 
 @app.get("/api/code/barcode/types")
+@require_owner
 def barcode_types():
     return jsonify({"ok": True,
                     "types": list(codes_feat.BARCODE_TYPES.keys()),
@@ -364,6 +406,7 @@ def barcode_types():
 # ---------- hardware controls ----------
 
 @app.post("/api/hw/cash_drawer")
+@require_owner
 def hw_cash_drawer():
     def run():
         data = request.get_json(silent=True) or {}
@@ -375,6 +418,7 @@ def hw_cash_drawer():
 
 
 @app.post("/api/hw/beep")
+@require_owner
 def hw_beep():
     def run():
         data = request.get_json(silent=True) or {}
@@ -387,6 +431,7 @@ def hw_beep():
 
 
 @app.post("/api/hw/feed")
+@require_owner
 def hw_feed():
     def run():
         data = request.get_json(silent=True) or {}
@@ -397,6 +442,7 @@ def hw_feed():
 
 
 @app.post("/api/hw/cut")
+@require_owner
 def hw_cut():
     def run():
         data = request.get_json(silent=True) or {}
@@ -411,6 +457,7 @@ def hw_cut():
 
 
 @app.post("/api/hw/reset")
+@require_owner
 def hw_reset():
     def run():
         with open_printer() as p:
@@ -420,6 +467,7 @@ def hw_reset():
 
 
 @app.post("/api/hw/self_test")
+@require_owner
 def hw_self_test():
     def run():
         with open_printer() as p:
@@ -429,6 +477,7 @@ def hw_self_test():
 
 
 @app.post("/api/hw/density")
+@require_owner
 def hw_density():
     def run():
         data = request.get_json(silent=True) or {}
@@ -439,6 +488,7 @@ def hw_density():
 
 
 @app.post("/api/hw/codepage")
+@require_owner
 def hw_codepage():
     def run():
         data = request.get_json(silent=True) or {}
@@ -449,6 +499,7 @@ def hw_codepage():
 
 
 @app.get("/api/hw/codepages")
+@require_owner
 def hw_codepages():
     return jsonify({
         "ok": True,
@@ -457,6 +508,7 @@ def hw_codepages():
 
 
 @app.post("/api/hw/status")
+@require_owner
 def hw_status():
     def run():
         results = []
@@ -471,18 +523,28 @@ def hw_status():
     return _safe(run)
 
 
+_MAX_RAW_BYTES = 4096
+
+
 @app.post("/api/hw/raw")
+@require_owner
 def hw_raw():
     def run():
         data = request.get_json(silent=True) or {}
         text = data.get("bytes", "")
+        parsed = hw_feat.parse_raw_input(text)
+        if not parsed:
+            raise ValueError("nothing to send")
+        if len(parsed) > _MAX_RAW_BYTES:
+            raise ValueError(f"parsed {len(parsed)} bytes; max is {_MAX_RAW_BYTES}")
         with open_printer() as p:
-            n = hw_feat.send_raw(p, text)
-        return {"sent": n}
+            hw_feat._send(p, parsed)
+        return {"sent": len(parsed)}
     return _safe(run)
 
 
 @app.get("/api/hw/led/protocols")
+@require_owner
 def hw_led_protocols():
     return jsonify({
         "ok": True,
@@ -494,6 +556,7 @@ def hw_led_protocols():
 
 
 @app.post("/api/hw/led/preview")
+@require_owner
 def hw_led_preview():
     def run():
         data = request.get_json(silent=True) or {}
@@ -508,27 +571,35 @@ def hw_led_preview():
 
 
 @app.post("/api/hw/led")
+@require_owner
 def hw_led():
     def run():
+        import time
         data = request.get_json(silent=True) or {}
         protocol = data.get("protocol", "esc_c")
         r = int(data.get("r", 0))
         g = int(data.get("g", 0))
         b = int(data.get("b", 0))
         blink = bool(data.get("blink", False))
-        with open_printer() as p:
-            bs = led_feat.send_color(p, protocol, r, g, b)
-            if blink:
-                import time
-                time.sleep(0.25)
-                led_feat.send_color(p, protocol, 0, 0, 0)
-                time.sleep(0.25)
-                led_feat.send_color(p, protocol, r, g, b)
+
+        def set_color(pr, pg, pb):
+            with open_printer() as p:
+                return led_feat.send_color(p, protocol, pr, pg, pb)
+
+        bs = set_color(r, g, b)
+        if blink:
+            # Release the USB lock between flashes so other requests aren't
+            # blocked for 500ms while we sleep.
+            time.sleep(0.25)
+            set_color(0, 0, 0)
+            time.sleep(0.25)
+            set_color(r, g, b)
         return {"bytes": led_feat.hex_preview(bs)}
     return _safe(run)
 
 
 @app.get("/api/hw/cheatsheet")
+@require_owner
 def hw_cheatsheet():
     return jsonify({
         "ok": True,
@@ -570,14 +641,17 @@ def friend_print():
             "kind": "rate_limit",
         }), 429
 
-    formatted = widgets.friend_message(user["username"], body)
     try:
+        formatted = widgets.friend_message(user["username"], body)
         _print_body(formatted)
+        _LAST_PRINT[user["id"]] = now
+        auth_db.log_message(user["id"], body)
     except PrinterError as e:
         return jsonify({"ok": False, "error": str(e), "kind": "printer"}), 503
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "print failed", "kind": "server"}), 500
 
-    _LAST_PRINT[user["id"]] = now
-    auth_db.log_message(user["id"], body)
     return jsonify({"ok": True})
 
 
@@ -647,6 +721,7 @@ _print_banner()
 
 
 if __name__ == "__main__":
-    # Single entrypoint for both dev (Mac) and prod (Pi/systemd).
-    # debug=True is fine here: only ever one user, no public exposure of /.
-    app.run(host=config.HOST, port=config.PORT, debug=True)
+    # Dev server. Prod runs under gunicorn (see deploy/thermal-printer.service).
+    # FLASK_DEBUG=1 opts in to the Werkzeug reloader/debugger; never set it on
+    # the Pi — /m/* is public via Funnel and the debugger = RCE.
+    app.run(host=config.HOST, port=config.PORT, debug=os.environ.get("FLASK_DEBUG") == "1")

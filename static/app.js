@@ -10,16 +10,38 @@ const state = {
 
 // ---------- tabs ----------
 
-$$(".tab").forEach((t) => {
-  t.addEventListener("click", () => {
-    $$(".tab").forEach((x) => x.classList.toggle("active", x === t));
-    const pane = t.dataset.tab;
-    $$(".tabpane").forEach((p) =>
-      p.classList.toggle("active", p.dataset.pane === pane)
-    );
-    if (pane !== "image") hidePreviewImage();
-    if (pane === "compose") refreshComposePreview();
+function activateTab(t, { focus = false } = {}) {
+  const pane = t.dataset.tab;
+  $$(".tab").forEach((x) => {
+    const on = x === t;
+    x.classList.toggle("active", on);
+    x.setAttribute("aria-selected", on ? "true" : "false");
+    x.tabIndex = on ? 0 : -1;
   });
+  $$(".tabpane").forEach((p) => p.classList.toggle("active", p.dataset.pane === pane));
+  if (focus) t.focus();
+  if (pane !== "image") hidePreviewImage();
+  if (pane === "compose") refreshComposePreview();
+  if (pane === "hardware") { loadCodePages(); loadLedProtocols(); }
+  if (pane === "console") loadCheatSheet();
+  if (pane === "admin") refreshAdmin();
+}
+
+$$(".tab").forEach((t) => t.addEventListener("click", () => activateTab(t)));
+
+// Arrow-key navigation per WAI-ARIA tabs pattern.
+$(".tabs").addEventListener("keydown", (e) => {
+  const tabs = $$(".tab");
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  let next = i;
+  if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+  else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
+  else if (e.key === "Home") next = 0;
+  else if (e.key === "End") next = tabs.length - 1;
+  else return;
+  e.preventDefault();
+  activateTab(tabs[next], { focus: true });
 });
 
 // ---------- toast ----------
@@ -35,22 +57,33 @@ function toast(msg, kind = "ok") {
 
 // ---------- api helper ----------
 
+// The owner token doubles as the admin token. It's inlined in the page body
+// by Flask and added to every request the main console makes.
+const OWNER_TOKEN = document.body.dataset.adminToken || "";
+const AUTH_HEADER = { Authorization: `Bearer ${OWNER_TOKEN}` };
+
+async function apiFetch(url, init = {}) {
+  const headers = { ...AUTH_HEADER, ...(init.headers || {}) };
+  const r = await fetch(url, { ...init, headers });
+  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
 async function postJSON(url, data) {
-  const r = await fetch(url, {
+  return apiFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data || {}),
   });
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
-  if (!j.ok) throw new Error(j.error || "unknown error");
-  return j;
 }
 
 async function postForm(url, formData) {
-  const r = await fetch(url, { method: "POST", body: formData });
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
-  if (!j.ok) throw new Error(j.error || "unknown error");
-  return j;
+  return apiFetch(url, { method: "POST", body: formData });
+}
+
+async function getJSON(url) {
+  return apiFetch(url, { method: "GET" });
 }
 
 async function guard(fn, okMsg = "sent to printer") {
@@ -481,7 +514,7 @@ async function loadCodePages() {
   if (cpLoaded) return;
   cpLoaded = true;
   try {
-    const r = await fetch("/api/hw/codepages").then((x) => x.json());
+    const r = await getJSON("/api/hw/codepages");
     const sel = $("#hw-cp");
     while (sel.firstChild) sel.removeChild(sel.firstChild);
     r.pages.forEach((pg) => {
@@ -500,7 +533,7 @@ async function loadLedProtocols() {
   if (ledLoaded) return;
   ledLoaded = true;
   try {
-    const r = await fetch("/api/hw/led/protocols").then((x) => x.json());
+    const r = await getJSON("/api/hw/led/protocols");
     const sel = $("#led-protocol");
     while (sel.firstChild) sel.removeChild(sel.firstChild);
     r.protocols.forEach((p) => {
@@ -581,7 +614,7 @@ async function loadCheatSheet() {
   if (cheatLoaded) return;
   cheatLoaded = true;
   try {
-    const r = await fetch("/api/hw/cheatsheet").then((x) => x.json());
+    const r = await getJSON("/api/hw/cheatsheet");
     const tbody = $("#cheat-body");
     while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
     r.entries.forEach((e) => {
@@ -611,35 +644,11 @@ async function loadCheatSheet() {
   } catch (e) { /* non-fatal */ }
 }
 
-// Lazy-load hardware/console content when those tabs are opened.
-$$(".tab").forEach((t) => {
-  t.addEventListener("click", () => {
-    if (t.dataset.tab === "hardware") { loadCodePages(); loadLedProtocols(); }
-    if (t.dataset.tab === "console") loadCheatSheet();
-    if (t.dataset.tab === "admin") refreshAdmin();
-  });
-});
-
 // ---------- admin tab ----------
 
-const ADMIN_TOKEN = document.body.dataset.adminToken || "";
-
-async function adminGET(url) {
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
-  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-  return j;
-}
-
-async function adminPOST(url) {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
-  });
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
-  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-  return j;
-}
+// Admin + owner share the same bearer today — apiFetch attaches it for us.
+const adminGET = (url) => apiFetch(url, { method: "GET" });
+const adminPOST = (url) => apiFetch(url, { method: "POST" });
 
 function fmtWhen(iso) {
   if (!iso) return "";
@@ -688,7 +697,7 @@ function userRow(u, opts) {
     }));
   }
   actions.appendChild(adminButton("Delete", "delete", async () => {
-    if (!confirm(`Delete ${u.username}? Their passkey will stop working.`)) return;
+    if (!confirm(`Delete ${u.username}? Their account and messages will be removed.`)) return;
     await adminPOST(`/api/admin/users/${u.id}/delete`);
     await refreshAdmin();
   }));

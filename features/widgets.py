@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import random
 import textwrap
+from urllib.parse import quote
 
 import requests
 
@@ -193,7 +194,7 @@ def weather(location: str) -> str:
     location = location.strip() or "Cupertino"
     try:
         r = requests.get(
-            f"https://wttr.in/{location}",
+            f"https://wttr.in/{quote(location, safe='')}",
             params={"format": "j1"},
             timeout=5,
             headers={"User-Agent": "thermal-printer-gui"},

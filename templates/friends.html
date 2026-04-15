@@ -158,7 +158,7 @@
       <div class="msg-meta">
         <span id="msg-count">0 / 800</span>
       </div>
-      <p class="msg-hint">supports <code>**bold**</code>, <code>__italic__</code>, <code>~strike~</code>, <code>#</code> heading, <code>##</code> subheading, <code>===</code>, <code>---</code>, <code>&gt;</code> centered.</p>
+      <p class="msg-hint">supports <code>**bold**</code>, <code>__underline__</code>, <code>~big~</code>, <code>#</code> heading, <code>##</code> subheading, <code>===</code>, <code>---</code>, <code>&gt;</code> centered.</p>
       <div class="row">
         <button type="submit" class="primary">Print it</button>
       </div>
@@ -172,7 +172,7 @@
 
 </main>
 
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="{{ url_for('static', filename='friends.js') }}"></script>
 </body>

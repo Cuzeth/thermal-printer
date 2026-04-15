@@ -59,7 +59,7 @@ sed \
   -e "s|^Group=.*|Group=$SERVICE_USER|" \
   -e "s|^WorkingDirectory=.*|WorkingDirectory=$REPO_DIR|" \
   -e "s|^EnvironmentFile=.*|EnvironmentFile=$REPO_DIR/.env|" \
-  -e "s|^ExecStart=.*|ExecStart=$REPO_DIR/.venv/bin/python app.py|" \
+  -e "s|/home/pi/thermal-printer/\.venv|$REPO_DIR/.venv|g" \
   "$REPO_DIR/deploy/thermal-printer.service" > "$UNIT_TMP"
 need_sudo install -m 0644 "$UNIT_TMP" /etc/systemd/system/thermal-printer.service
 rm -f "$UNIT_TMP"

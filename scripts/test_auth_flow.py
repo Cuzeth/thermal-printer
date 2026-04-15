@@ -97,8 +97,10 @@ def main() -> None:
     _ok("short password -> 400", r.status_code == 400)
 
     print("\n[5] Login")
-    # reset rate limiter between runs
+    # reset rate limiters between runs
     auth_bp_mod._failures.clear()
+    auth_bp_mod._ip_failures.clear()
+    auth_bp_mod._register_attempts.clear()
 
     r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
     _ok("alice login -> 200", r.status_code == 200)
@@ -112,6 +114,7 @@ def main() -> None:
 
     print("\n[6] Login rate limit")
     auth_bp_mod._failures.clear()
+    auth_bp_mod._ip_failures.clear()
     for _ in range(auth_bp_mod._MAX_FAILURES):
         client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
     r = client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
@@ -122,6 +125,7 @@ def main() -> None:
     _ok("correct pw during lockout -> 429", r.status_code == 429)
 
     auth_bp_mod._failures.clear()
+    auth_bp_mod._ip_failures.clear()
     r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
     _ok("after clear, correct pw -> 200", r.status_code == 200)
 

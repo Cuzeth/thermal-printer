@@ -14,15 +14,15 @@
     <span class="title">THERMAL // CONSOLE</span>
     <span class="sub">{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}DRY RUN{% else %}LIVE{% endif %}</span>
   </div>
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="compose">Compose</button>
-    <button class="tab" data-tab="image">Image</button>
-    <button class="tab" data-tab="codes">Codes</button>
-    <button class="tab" data-tab="widgets">Widgets</button>
-    <button class="tab" data-tab="labs">Labs</button>
-    <button class="tab" data-tab="hardware">Hardware</button>
-    <button class="tab" data-tab="console">Console</button>
-    <button class="tab" data-tab="admin">Admin</button>
+  <nav class="tabs" role="tablist" aria-label="Console sections">
+    <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0">Compose</button>
+    <button class="tab"        data-tab="image"    role="tab" id="tab-image"    aria-controls="pane-image"    aria-selected="false" tabindex="-1">Image</button>
+    <button class="tab"        data-tab="codes"    role="tab" id="tab-codes"    aria-controls="pane-codes"    aria-selected="false" tabindex="-1">Codes</button>
+    <button class="tab"        data-tab="widgets"  role="tab" id="tab-widgets"  aria-controls="pane-widgets"  aria-selected="false" tabindex="-1">Widgets</button>
+    <button class="tab"        data-tab="labs"     role="tab" id="tab-labs"     aria-controls="pane-labs"     aria-selected="false" tabindex="-1">Labs</button>
+    <button class="tab"        data-tab="hardware" role="tab" id="tab-hardware" aria-controls="pane-hardware" aria-selected="false" tabindex="-1">Hardware</button>
+    <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">Console</button>
+    <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">Admin</button>
   </nav>
 </header>
 
@@ -31,7 +31,7 @@
   <section class="panel controls">
 
     <!-- Compose tab -->
-    <div class="tabpane active" data-pane="compose">
+    <div class="tabpane active" data-pane="compose" role="tabpanel" id="pane-compose" aria-labelledby="tab-compose" tabindex="0">
       <h2>Rich text composer</h2>
       <p class="help">
         Markup: <code># Heading</code>, <code>## Sub</code>, <code>&gt; centered</code>,
@@ -71,7 +71,7 @@ thanks for reading</textarea>
     </div>
 
     <!-- Image tab -->
-    <div class="tabpane" data-pane="image">
+    <div class="tabpane" data-pane="image" role="tabpanel" id="pane-image" aria-labelledby="tab-image" tabindex="0">
       <h2>Image printer</h2>
       <p class="help">Drop an image, tune it, print it. Floyd-Steinberg dithering by default.</p>
 
@@ -118,7 +118,7 @@ thanks for reading</textarea>
     </div>
 
     <!-- Widgets tab -->
-    <div class="tabpane" data-pane="widgets">
+    <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
       <h2>Widgets</h2>
       <p class="help">One-click prints. Some pull live data from the internet.</p>
 
@@ -186,7 +186,7 @@ thanks for reading</textarea>
     </div>
 
     <!-- Labs tab -->
-    <div class="tabpane" data-pane="labs">
+    <div class="tabpane" data-pane="labs" role="tabpanel" id="pane-labs" aria-labelledby="tab-labs" tabindex="0">
       <h2>Labs</h2>
 
       <details open>
@@ -235,7 +235,7 @@ ship the thing</textarea>
     </div>
 
     <!-- Codes tab -->
-    <div class="tabpane" data-pane="codes">
+    <div class="tabpane" data-pane="codes" role="tabpanel" id="pane-codes" aria-labelledby="tab-codes" tabindex="0">
       <h2>QR & Barcodes</h2>
       <p class="help">Previews are rendered locally; prints are sent as native ESC/POS commands (sharper).</p>
 
@@ -309,7 +309,7 @@ ship the thing</textarea>
     </div>
 
     <!-- Hardware tab -->
-    <div class="tabpane" data-pane="hardware">
+    <div class="tabpane" data-pane="hardware" role="tabpanel" id="pane-hardware" aria-labelledby="tab-hardware" tabindex="0">
       <h2>Hardware control</h2>
       <p class="help">Direct printer commands. Buzzer, density, code-page, and self-test aren't supported on every model — try them and see.</p>
 
@@ -416,7 +416,7 @@ ship the thing</textarea>
     </div>
 
     <!-- Console tab -->
-    <div class="tabpane" data-pane="console">
+    <div class="tabpane" data-pane="console" role="tabpanel" id="pane-console" aria-labelledby="tab-console" tabindex="0">
       <h2>Raw ESC/POS console</h2>
       <p class="help">
         Send arbitrary bytes. Format: hex tokens (<code>1b 40 48 69</code>) or
@@ -444,9 +444,9 @@ ship the thing</textarea>
     </div>
 
     <!-- Admin tab -->
-    <div class="tabpane" data-pane="admin">
+    <div class="tabpane" data-pane="admin" role="tabpanel" id="pane-admin" aria-labelledby="tab-admin" tabindex="0">
       <h2>Friend approvals</h2>
-      <p class="help">Friends sign in at <code>/m/</code> with a passkey. They sit pending until you approve.</p>
+      <p class="help">Friends sign in at <code>/m/</code> with a username + password. They sit pending until you approve.</p>
 
       <div class="admin-section">
         <div class="admin-head">
@@ -487,7 +487,7 @@ ship the thing</textarea>
   </aside>
 </main>
 
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
