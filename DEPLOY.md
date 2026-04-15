@@ -1,141 +1,183 @@
-# Deploying to your Synology NAS — the slow, friendly version
+# Deploying to a Raspberry Pi — the slow, friendly version
 
-You're going to do **six things** in order:
+Target hardware: a **Raspberry Pi Zero 2W** (but any Pi works) running
+**Raspberry Pi OS Lite (64-bit)**. The printer plugs into the Pi over
+USB; the Pi joins your tailnet; friends reach `/m/` over Tailscale
+Funnel.
 
-1. **Build** the app into a Docker image on your Mac.
-2. **Move** that image to your NAS.
-3. **Set up** the NAS (enable SSH, install Container Manager, put files in place, fill in secrets).
-4. **Plug in** the printer.
-5. **Start** the container.
-6. **Open it up** through Tailscale (private main GUI + public friends page).
+End state:
 
-None of this is clever. It's just a lot of small steps. Work top-to-bottom;
-if something looks weird, scroll up and re-read rather than improvise.
+- Main GUI at `https://thermal-printer.<tailnet>.ts.net/` — tailnet-only.
+- Friends page at `https://thermal-printer.<tailnet>.ts.net/m/` — public.
+- Runs as a `systemd` service. Survives reboots. Logs with `journalctl`.
 
----
-
-## 1 · Build the image on your Mac
-
-**What a Docker image is:** one self-contained file that bundles your
-code + Python + every library it needs. The NAS runs that file without
-caring what's installed on it.
-
-**You'll need:** [OrbStack](https://orbstack.dev) or Docker Desktop
-running on your Mac (OrbStack is lighter). Open it and make sure the
-whale/penguin icon in your menu bar is solid, not spinning.
-
-From the `thermal-printer/` folder on your Mac:
-
-```sh
-docker buildx build --platform linux/amd64 -t thermal-printer:latest --load .
-```
-
-Breakdown:
-
-- `--platform linux/amd64` — your Mac might be an M-series (ARM) chip
-  but the NAS is Intel. This flag tells Docker to build an Intel image
-  anyway.
-- `-t thermal-printer:latest` — names the image.
-- `--load .` — build from the current folder, load the result into your
-  local Docker.
-
-First build takes ~3 min (downloading Python, installing libs). After
-that it's closer to 15 s.
-
-**How to know it worked:**
-
-```sh
-docker images | grep thermal-printer
-# thermal-printer   latest   abc123def456   2 minutes ago   380MB
-```
+Work top-to-bottom. Nothing clever, just a lot of small steps.
 
 ---
 
-## 2 · Move the image to the NAS
+## 1 · Flash the SD card
 
-Two ways, pick one.
+**On your Mac**, use [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
 
-### Option A — the NAS mounted in Finder (recommended, no SSH yet)
+1. Choose the device (Pi Zero 2W).
+2. Choose OS → **Raspberry Pi OS Lite (64-bit)**. No desktop needed.
+3. Choose storage → your SD card.
+4. Before writing, click the **gear icon** for OS customization:
+   - **Hostname**: `thermal-printer`
+   - **Enable SSH**: yes, "use password authentication" (or paste a
+     public key — whatever you prefer).
+   - **Username / password**: default to `pi` + a password you'll
+     remember. If you pick a different username, swap it in everywhere
+     below.
+   - **Wi-Fi**: your SSID + password, locale.
+5. Write. Eject. Put the card in the Pi. Plug in power.
 
-1. In Finder, press **⌘K** (Go → Connect to Server).
-2. Type `smb://your-nas.local` (or the NAS's IP address).
-3. Sign in with your DSM username + password.
-4. Mount the `docker` share. If you don't have one yet, make it in DSM:
-   **Control Panel → Shared Folder → Create → name it `docker`, put it
-   on `volume1`**.
-5. On your Mac, save the image directly onto the mounted share:
-
-   ```sh
-   mkdir -p /Volumes/docker/thermal-printer
-   docker save thermal-printer:latest \
-       -o /Volumes/docker/thermal-printer/thermal-printer.tar
-   ```
-
-That's it — the ~200 MB file now lives on the NAS at
-`/volume1/docker/thermal-printer/thermal-printer.tar`.
-
-### Option B — scp over SSH (if Option A is annoying)
-
-Once you've turned on SSH (step 3a below):
+First boot takes ~90 seconds. When it's done, find it from your Mac:
 
 ```sh
-docker save thermal-printer:latest -o thermal-printer.tar
-scp thermal-printer.tar you@your-nas.local:/volume1/docker/thermal-printer/
+ssh pi@thermal-printer.local
 ```
+
+If `.local` mDNS isn't working, find the IP in your router's admin UI
+and SSH to that instead.
 
 ---
 
-## 3 · Set up the NAS
+## 2 · Install system dependencies
 
-### 3a. Turn on SSH
-
-In DSM (your NAS's web UI):
-
-1. **Control Panel → Terminal & SNMP → Enable SSH service → Apply**.
-2. From your Mac, test it: `ssh your-dsm-username@your-nas.local`. You
-   should land in a shell. `exit` to come back.
-
-### 3b. Install Container Manager
-
-This is Synology's friendly name for Docker.
-
-1. DSM → **Package Center** → search "Container Manager" → **Install**.
-2. Wait a minute. The icon appears on the DSM desktop when it's ready.
-
-### 3c. Drop the project files next to the image tarball
-
-You need `docker-compose.yml` and an `.env` file in the same folder as
-`thermal-printer.tar`. With the NAS mounted on your Mac:
+Once you're SSH'd in, update the system and grab what the app needs to
+build and run:
 
 ```sh
-# on your Mac, still in the thermal-printer/ repo folder
-cp docker-compose.yml /Volumes/docker/thermal-printer/
-cp .env.example        /Volumes/docker/thermal-printer/.env
-mkdir -p               /Volumes/docker/thermal-printer/data
+sudo apt-get update
+sudo apt-get full-upgrade -y
+
+sudo apt-get install -y --no-install-recommends \
+    python3 python3-venv python3-pip \
+    libusb-1.0-0-dev libjpeg-dev zlib1g-dev \
+    fonts-dejavu-core git curl
 ```
 
-The `data/` folder is where the SQLite database (users + messages) and
-DRY_RUN bytes will live. It persists across container restarts.
+`libusb-1.0-0-dev` is what `pyusb` talks to. `libjpeg-dev` and
+`zlib1g-dev` are for Pillow. `fonts-dejavu-core` is what the rich-text
+renderer draws with — without it the output looks wrong.
 
-### 3d. Fill in `.env`
+---
 
-Open `/Volumes/docker/thermal-printer/.env` in any text editor. You
-need to set two things:
+## 3 · Install Tailscale
 
+The official installer script is the easiest path and stays
+up-to-date with apt:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
 ```
-SECRET_KEY=<paste 64-char hex here>
-ADMIN_TOKEN=<paste 43-char url-safe string here>
+
+`tailscale up` prints a login URL. Open it on your Mac, sign in, and
+the Pi shows up in your tailnet as `thermal-printer`. Confirm:
+
+```sh
+tailscale ip -4
+# e.g. 100.x.y.z
 ```
 
-Generate both on your Mac:
+We'll wire up `serve` / `funnel` later, after the app is running.
+
+---
+
+## 4 · Clone the repo and set up the venv
+
+```sh
+cd ~
+git clone https://github.com/Cuzeth/thermal-printer.git
+cd thermal-printer
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
+```
+
+> **Shortcut:** steps 2 + 4 + 5 + 6 are all bundled in
+> `deploy/setup.sh` — run `bash deploy/setup.sh` from the repo root
+> and skip straight to step 7 (fill in `.env`). The script is
+> idempotent; safe to run twice.
+
+---
+
+## 5 · USB permissions (udev rule)
+
+By default, only root can open raw USB devices on Linux. The app runs
+as `pi`, so we need a udev rule that marks the printer world-writable:
+
+```sh
+sudo install -m 0644 \
+    ~/thermal-printer/deploy/99-thermal-printer.rules \
+    /etc/udev/rules.d/99-thermal-printer.rules
+
+sudo udevadm control --reload
+sudo udevadm trigger
+```
+
+The rule matches VID `0x0483` / PID `0x5720` (the default printer in
+`config.py`). If your printer reports different IDs, edit the rule
+before installing and also set `USB_VENDOR_ID` / `USB_PRODUCT_ID` in
+`.env`.
+
+**Verify it took:** plug the printer in and run `lsusb` — you should
+see a line with `0483:5720`. Then:
+
+```sh
+ls -l /dev/bus/usb/*/* | grep -i '0483\|ID'
+```
+
+Any entry for your printer bus should show `crw-rw-rw-` (world-writable).
+If it's `crw-------`, unplug / replug the printer so the rule re-fires.
+
+---
+
+## 6 · systemd service
+
+Install the unit:
+
+```sh
+sudo install -m 0644 \
+    ~/thermal-printer/deploy/thermal-printer.service \
+    /etc/systemd/system/thermal-printer.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable thermal-printer.service
+```
+
+The unit is already pointed at `/home/pi/thermal-printer` and runs as
+the `pi` user. If your username is different, open
+`/etc/systemd/system/thermal-printer.service` and replace `pi`
+everywhere — or just re-run `bash deploy/setup.sh`, which templates
+the paths for the invoking user.
+
+Don't start it yet — it'll crash without `.env`.
+
+---
+
+## 7 · Fill in `.env`
+
+```sh
+cd ~/thermal-printer
+cp .env.example .env
+```
+
+Generate the two required secrets:
 
 ```sh
 python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
 python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
 ```
 
-Paste the full output lines into `.env`, replacing the empty
-placeholders.
+Paste each full line into `.env`, replacing the blank placeholders. The
+rest of `.env.example` is just documented defaults — leave them alone
+unless you know you need to override something.
 
 > You don't need to memorize `ADMIN_TOKEN`. The main GUI reads it from
 > the env and inlines it in the page automatically. Keep it secret —
@@ -143,187 +185,126 @@ placeholders.
 
 ---
 
-## 4 · Plug in the printer
-
-1. Plug the printer's USB-B cable into any USB port on the NAS.
-2. Power-cycle the printer (off/on) just to be safe.
-3. SSH into the NAS:
-   ```sh
-   ssh you@your-nas.local
-   ```
-4. Check Linux is seeing USB devices:
-   ```sh
-   ls /dev/bus/usb/
-   # You should see numbered directories like  001  002
-   ```
-
-   If those folders exist, the kernel has a USB stack and the
-   printer is visible somewhere inside them. The container mounts the
-   whole `/dev/bus/usb` tree, so it doesn't matter which bus number
-   your printer gets.
-
----
-
-## 5 · Start the container
-
-Still SSH'd into the NAS:
+## 8 · Start the service
 
 ```sh
-cd /volume1/docker/thermal-printer
-
-# Load the image from the tarball into Docker
-sudo docker load -i thermal-printer.tar
-# -> Loaded image: thermal-printer:latest
-
-# Start the container (detached, restarts on boot)
-sudo docker compose up -d
+sudo systemctl start thermal-printer
+sudo systemctl status thermal-printer    # should say "active (running)"
 ```
 
-**`sudo` is required** because the container needs `--privileged` +
-USB device mounts, which DSM only allows for root.
+Tail the logs:
 
-**Check it's alive:**
+```sh
+journalctl -u thermal-printer -f
+# Ctrl+C to stop watching; the service keeps running.
+```
+
+You should see the startup banner:
+
+```
+Thermal Printer GUI -> http://0.0.0.0:5005
+```
+
+Smoke test from the Pi itself:
 
 ```sh
 curl http://localhost:5005/api/ping
-# -> {"ok": true, "dry_run": false}
+# {"ok": true, "dry_run": false}
 ```
 
-**See live logs** (useful when something is wrong):
-
-```sh
-sudo docker compose logs -f
-# Ctrl+C to detach; the container keeps running
-```
-
-Right now the app is reachable at `http://your-nas.local:5005` from any
-device on your home network. That's enough to print a test page — try
-opening that URL in your Mac's browser. Admin tab works, Compose
-works, Widgets work.
-
-But the whole point is accessing it from outside the house, which is
-the next part.
+If the service is crashing, `journalctl -u thermal-printer -n 100`
+shows the traceback. Most common issue: `.env` has a typo or a missing
+`SECRET_KEY`.
 
 ---
 
-## 6 · Open it up through Tailscale
+## 9 · Tailscale serve + funnel
 
-Tailscale gives you two things here:
+Now we expose it. Two knobs:
 
-- **`tailscale serve`** — makes the main GUI reachable from any of your
-  own devices (your phone, your laptop, your iPad) on your tailnet, no
-  matter where they are. Not reachable from the public internet.
-- **`tailscale funnel`** — exposes exactly the `/m/` path on the public
-  internet, with a real HTTPS cert, so friends can send you messages.
+- **`tailscale serve`** — reverse-proxies the full app on your tailnet
+  only (private).
+- **`tailscale funnel`** — exposes a specific path to the public
+  internet with a real HTTPS cert.
 
-### 6a. Install Tailscale on the NAS
-
-1. DSM → **Package Center** → search "Tailscale" → **Install**.
-2. Open the Tailscale app in DSM → **Sign in**. Complete the sign-in
-   flow in the popup — this enrolls the NAS onto your tailnet.
-
-### 6b. One-time outbound routing setup
-
-This lets other apps (specifically Serve + Funnel) send traffic
-through Tailscale:
+We want the whole GUI on the tailnet, and only `/m/` public.
 
 ```sh
-sudo /var/packages/Tailscale/target/bin/tailscale set --advertise-routes=
-sudo /var/packages/Tailscale/target/bin/tailscale up
+# tailnet-only: whole app reachable at https://thermal-printer.<tailnet>.ts.net/
+sudo tailscale serve --bg 5005
+
+# public: expose only /m/ via Funnel
+sudo tailscale funnel --bg --set-path=/m 5005
 ```
 
-### 6c. Find your NAS's tailnet hostname
+The first `serve` command sets the root path `/` → `http://127.0.0.1:5005`.
+The `funnel` command adds a public override for `/m` pointing at the
+same local port.
 
-Open the [Tailscale admin console →
-Machines](https://login.tailscale.com/admin/machines). Find the NAS in
-the list. Its hostname looks like:
+> Funnel requires one-time setup in the Tailscale admin console: make
+> sure **MagicDNS** is on, **HTTPS Certificates** is enabled
+> ([DNS settings](https://login.tailscale.com/admin/dns)), and your
+> ACLs grant the `funnel` nodeAttr to this device
+> ([ACL editor](https://login.tailscale.com/admin/acls)). Tailscale
+> will tell you if you're missing either.
 
-```
-your-nas.tail-XXXX.ts.net
-```
-
-(The `tail-XXXX` slug is unique to your tailnet.) Copy that down.
-
-### 6d. Make the main GUI reachable on your tailnet
-
-Back on the NAS via SSH:
+Check what's wired up:
 
 ```sh
-TS=/var/packages/Tailscale/target/bin/tailscale
-sudo $TS serve --bg --set-path=/ http://localhost:5005
+tailscale serve status
+tailscale funnel status
 ```
-
-From any device on your tailnet (your Mac, your iPhone with the
-Tailscale app running) open:
-
-```
-https://your-nas.tail-XXXX.ts.net/
-```
-
-That's the full GUI, with a real TLS cert, reachable from anywhere via
-Tailscale.
-
-### 6e. Expose `/m/` publicly via Funnel
-
-First, two clicks in the Tailscale admin console:
-
-1. [DNS settings](https://login.tailscale.com/admin/dns) — make sure
-   **MagicDNS** is on and **HTTPS Certificates** is enabled.
-2. [ACL editor](https://login.tailscale.com/admin/acls) — in the
-   `nodeAttrs` block, grant `"funnel"` to this device (or to a tag it
-   has). Save.
-
-Then on the NAS:
-
-```sh
-sudo $TS funnel --bg --set-path=/m http://localhost:5005/m
-```
-
-Now `https://your-nas.tail-XXXX.ts.net/m/` works from the open
-internet. That's the URL you share with friends.
-
-**Sanity check:**
-
-- From your phone on cellular (tailnet OFF): open `/m/` → friends
-  page loads. Open `/` → blocked (502 or timeout). 
-- From your laptop on the tailnet: both work.
 
 ---
 
-## You're done. Now use it.
+## 10 · Verify it works
 
-1. Open the friends URL on your phone, tap **Create an account**, pick
-   a username + password (8+ chars), submit.
-2. From your Mac → open the main GUI URL → click the **Admin** tab →
-   see yourself in **Pending** → click **Approve**.
-3. Back on your phone → tap **Check again** → state flips to ALLOWED.
-4. Type a message → **Print it** → the printer hums and spits out a
-   receipt with your name at the top.
+1. **Local** (SSH'd in on the Pi):
+   ```sh
+   curl http://localhost:5005/api/ping
+   # {"ok": true, "dry_run": false}
+   ```
 
-Share the friends URL with whoever you want to let in.
+2. **Tailnet** (laptop/phone on your tailnet, Tailscale app on):
+   Open `https://thermal-printer.<tailnet>.ts.net/` — full GUI, real TLS cert.
+
+3. **Public** (phone on cellular, Tailscale **off**):
+   - `https://thermal-printer.<tailnet>.ts.net/m/` → friends page loads.
+   - `https://thermal-printer.<tailnet>.ts.net/` → 502 / timeout.
+     That's correct. Private stays private.
+
+Find your exact `<tailnet>` slug in the
+[admin console → Machines](https://login.tailscale.com/admin/machines).
+
+---
+
+## 11 · Use it
+
+1. Open `/m/` on your phone, tap **Create an account**, username +
+   password (8+ chars), submit.
+2. On your laptop, open `/` → **Admin** tab → see yourself in
+   **Pending** → **Approve**.
+3. Back on the phone → tap **Check again** → state flips to ALLOWED.
+4. Type a message → **Print it** → paper comes out.
+
+Share the `/m/` URL with whoever you want to let in.
 
 ---
 
 ## Updating later
 
-Anytime you change code on your Mac:
-
 ```sh
-# 1. Rebuild on your Mac
-docker buildx build --platform linux/amd64 -t thermal-printer:latest --load .
-
-# 2. Save the new image straight to the mounted share
-docker save thermal-printer:latest \
-    -o /Volumes/docker/thermal-printer/thermal-printer.tar
-
-# 3. Reload + restart on the NAS
-ssh you@your-nas.local
-cd /volume1/docker/thermal-printer
-sudo docker load -i thermal-printer.tar
-sudo docker compose up -d --force-recreate
+ssh pi@thermal-printer.local
+cd ~/thermal-printer
+git pull
+source .venv/bin/activate
+pip install -r requirements.txt
+deactivate
+sudo systemctl restart thermal-printer
 ```
 
-`data/` survives restarts. Approved friends and their passwords stick.
+`data/` is inside the repo but gitignored, so the SQLite DB (users +
+messages) and any DRY_RUN bytes survive `git pull`.
 
 ---
 
@@ -331,31 +312,34 @@ sudo docker compose up -d --force-recreate
 
 | Symptom | Usual cause / fix |
 | --- | --- |
-| `permission denied` on `docker` commands | Missing `sudo`. DSM requires root for privileged containers + USB. |
-| Container starts but "Could not connect to printer" on every print | USB passthrough. `sudo docker exec -it thermal-printer ls /dev/bus/usb/` should show numbered folders. If empty, the container is missing `privileged: true` — check the compose file landed correctly on the NAS. |
-| Funnel URL returns 502 | Run `sudo $TS funnel status` — confirm `/m` is listed. If not, re-run step 6e. If it is, make sure the container is up (`sudo docker compose ps`). |
-| Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo docker compose restart` clears it, or wait 15 minutes. |
-| Friends page says "couldn't reach the server" | Container isn't running, or port 5005 isn't bound. Check `sudo docker compose logs` for tracebacks. |
-| After deploy, `register` 500s with "no column named password_hash" | An old `data/app.db` from a pre-password schema is lying around. The app auto-renames it to `app.db.bak-*` on first boot — just restart the container once. |
+| `Could not connect to printer` on every print | udev rule didn't apply. Unplug/replug the printer, or re-run `sudo udevadm trigger`. Check `ls -l /dev/bus/usb/...` — expect `crw-rw-rw-`. |
+| Service crashes on start with `USBError: Access denied` | Same as above — the app is running as `pi` but the device is still root-only. |
+| `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
+| Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or `tailscale funnel status` doesn't list `/m`. Re-run step 9. |
+| Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
+| `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. The app auto-renames it to `app.db.bak-*` on first boot — just `sudo systemctl restart thermal-printer` once. |
+| Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some routers. Use the IP from `tailscale ip -4` (the tailnet IP always works once Tailscale is up). |
 
 ---
 
 ## Cheat sheet
 
-Commands you'll want to remember, once everything works:
-
 ```sh
-# Check the container
-sudo docker compose ps
-sudo docker compose logs -f
-sudo docker compose restart
+# service
+sudo systemctl status thermal-printer
+sudo systemctl restart thermal-printer
+journalctl -u thermal-printer -f
 
-# Update after a code change
-sudo docker load -i thermal-printer.tar && sudo docker compose up -d --force-recreate
+# tailscale
+tailscale status
+tailscale serve status
+tailscale funnel status
 
-# Check tailscale wiring
-sudo /var/packages/Tailscale/target/bin/tailscale serve status
-sudo /var/packages/Tailscale/target/bin/tailscale funnel status
+# pull a code change
+cd ~/thermal-printer && git pull && \
+  .venv/bin/pip install -r requirements.txt && \
+  sudo systemctl restart thermal-printer
 ```
 
-That's it. Deep breath. You're running Docker on a NAS now.
+That's it. Deep breath. You're running a Flask app as a systemd
+service on a Raspberry Pi now.

@@ -42,19 +42,23 @@ Set `DRY_RUN=true` in the env to skip USB and dump ESC/POS bytes to
 `./data/last_print.bin` instead. Useful for iterating on layouts
 without burning paper.
 
-## Deploy to the NAS
+## Deploy to a Raspberry Pi
 
 The short version:
 
-1. Build an `amd64` image on your Mac.
-2. Ship it to the DS225+ (save → scp → load, OR build directly on the NAS).
-3. `docker compose up -d` on the NAS.
-4. Install the Tailscale Synology package. Use `tailscale serve` for
-   the main GUI (tailnet-only) and `tailscale funnel --set-path=/m`
-   for the friends page (public via a `*.ts.net` URL).
+1. Flash Raspberry Pi OS Lite (64-bit) to an SD card, set hostname
+   `thermal-printer`, enable SSH.
+2. On the Pi: install system deps, clone the repo, create a venv, pip
+   install requirements. (`bash deploy/setup.sh` does all this.)
+3. Copy `.env.example` → `.env`, fill in `SECRET_KEY` + `ADMIN_TOKEN`.
+4. Install the udev rule + systemd unit (also handled by `setup.sh`).
+5. Install Tailscale (`curl -fsSL https://tailscale.com/install.sh | sh`).
+   Use `tailscale serve` for the main GUI (tailnet-only) and
+   `tailscale funnel --set-path=/m` for the friends page (public via a
+   `*.ts.net` URL).
 
-Full step-by-step, including the DSM USB gotchas and environment
-variables, lives in [DEPLOY.md](DEPLOY.md).
+Full step-by-step, including udev + systemd details and the Tailscale
+wiring, lives in [DEPLOY.md](DEPLOY.md).
 
 ## Project layout
 
@@ -82,16 +86,18 @@ static/
   friends.js / .css     friends page
 scripts/
   test_auth_flow.py     Flask-test-client smoke test
-Dockerfile              python:3.12-slim + libusb + DejaVu fonts
-docker-compose.yml      privileged + /dev/bus/usb + ./data volume
-DEPLOY.md               NAS run-book
-.env.example            what to fill into .env on the NAS
+deploy/
+  thermal-printer.service   systemd unit
+  99-thermal-printer.rules  udev rule (USB access for non-root)
+  setup.sh                  idempotent Pi bootstrapper
+DEPLOY.md               Raspberry Pi run-book
+.env.example            what to fill into .env on the Pi
 ```
 
 ## Configuration
 
 Everything lives in env vars with dev defaults. Copy
-[`.env.example`](.env.example) to `.env` on the NAS and fill in the
+[`.env.example`](.env.example) to `.env` on the Pi and fill in the
 required values (SECRET_KEY, ADMIN_TOKEN).
 
 The printer is assumed to be a USB device with VID `0x0483` / PID

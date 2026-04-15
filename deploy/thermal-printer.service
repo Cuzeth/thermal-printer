@@ -1,0 +1,18 @@
+[Unit]
+Description=Thermal Printer GUI (Flask)
+Documentation=https://github.com/Cuzeth/thermal-printer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/thermal-printer
+EnvironmentFile=/home/pi/thermal-printer/.env
+ExecStart=/home/pi/thermal-printer/.venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

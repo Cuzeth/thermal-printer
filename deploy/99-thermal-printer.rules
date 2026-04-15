@@ -1,0 +1,3 @@
+# Thermal printer USB access — lets the app reach the device without root.
+# VID 0x0483 / PID 0x5720 — change if your printer differs (see config.py).
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5720", MODE="0666"

@@ -541,7 +541,7 @@ def hw_cheatsheet():
 
 # ---------- friend message endpoint ----------
 
-# In-memory rate limit: {user_id: last_print_unix_ts}. Resets on container
+# In-memory rate limit: {user_id: last_print_unix_ts}. Resets on service
 # restart, which is fine — friends are a small trusted group post-approval.
 _LAST_PRINT: dict[int, float] = {}
 _RATE_LIMIT_SECONDS = 10
@@ -647,6 +647,6 @@ _print_banner()
 
 
 if __name__ == "__main__":
-    # Dev entrypoint. In production gunicorn imports `app` directly and the
-    # banner prints on the first import above.
+    # Single entrypoint for both dev (Mac) and prod (Pi/systemd).
+    # debug=True is fine here: only ever one user, no public exposure of /.
     app.run(host=config.HOST, port=config.PORT, debug=True)

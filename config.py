@@ -1,8 +1,7 @@
 """Printer configuration. Adjust these for your specific hardware.
 
-All values can be overridden via environment variables — useful when running
-in Docker on the NAS where the defaults below (loopback host, mac-only paths)
-don't apply.
+All values can be overridden via environment variables — the Pi deployment
+sets them from /home/pi/thermal-printer/.env via the systemd unit.
 """
 
 from __future__ import annotations
@@ -47,7 +46,7 @@ PRINTER_PIXEL_WIDTH = _env_int("PRINTER_PIXEL_WIDTH", 576)
 
 # ---------- runtime ----------
 
-# Bind 127.0.0.1 by default for local dev; container overrides to 0.0.0.0.
+# Bind 127.0.0.1 by default for local dev; the Pi .env sets HOST=0.0.0.0.
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _env_int("PORT", 5005)
 
@@ -62,11 +61,11 @@ DRY_RUN_PATH = os.getenv("DRY_RUN_PATH", str(DATA_DIR / "last_print.bin"))
 # ---------- auth (used in Phase 2+) ----------
 
 # In dev we mint a fresh key each boot so sessions invalidate on restart.
-# In prod (NAS), set SECRET_KEY in .env to keep sessions across restarts.
+# In prod (Pi), set SECRET_KEY in .env to keep sessions across restarts.
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
 # Long random string for admin endpoints (curl + Bearer header). Required
-# in prod; in dev a fresh one is minted per boot and printed on startup.
+# in prod (Pi); in dev a fresh one is minted per boot and printed on startup.
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or secrets.token_urlsafe(32)
 _ADMIN_TOKEN_FROM_ENV = os.getenv("ADMIN_TOKEN") is not None
 
