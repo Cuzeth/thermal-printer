@@ -616,8 +616,157 @@ $$(".tab").forEach((t) => {
   t.addEventListener("click", () => {
     if (t.dataset.tab === "hardware") { loadCodePages(); loadLedProtocols(); }
     if (t.dataset.tab === "console") loadCheatSheet();
+    if (t.dataset.tab === "admin") refreshAdmin();
   });
 });
+
+// ---------- admin tab ----------
+
+const ADMIN_TOKEN = document.body.dataset.adminToken || "";
+
+async function adminGET(url) {
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
+  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+async function adminPOST(url) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+  });
+  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+function fmtWhen(iso) {
+  if (!iso) return "";
+  // SQLite returns "YYYY-MM-DD HH:MM:SS" in UTC. Show local short form.
+  const d = new Date(iso.replace(" ", "T") + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+function adminButton(label, kind, onClick) {
+  const b = document.createElement("button");
+  b.className = "ghost tiny admin-btn admin-btn-" + kind;
+  b.textContent = label;
+  b.addEventListener("click", () => guard(onClick, label.toLowerCase() + " ok"));
+  return b;
+}
+
+function userRow(u, opts) {
+  const row = document.createElement("div");
+  row.className = "wid admin-row";
+
+  const name = document.createElement("div");
+  name.className = "admin-row-name";
+  name.textContent = u.username;
+
+  const meta = document.createElement("div");
+  meta.className = "admin-row-meta";
+  const since = u.status === "allowed" ? `approved ${fmtWhen(u.approved_at)}` : `joined ${fmtWhen(u.created_at)}`;
+  meta.textContent = since;
+
+  const actions = document.createElement("div");
+  actions.className = "row admin-row-actions";
+
+  if (opts.canApprove) {
+    actions.appendChild(adminButton("Approve", "approve", async () => {
+      await adminPOST(`/api/admin/users/${u.id}/approve`);
+      await refreshAdmin();
+    }));
+  }
+  if (opts.canBlock) {
+    actions.appendChild(adminButton("Block", "block", async () => {
+      await adminPOST(`/api/admin/users/${u.id}/revoke`);
+      await refreshAdmin();
+    }));
+  }
+  actions.appendChild(adminButton("Delete", "delete", async () => {
+    if (!confirm(`Delete ${u.username}? Their passkey will stop working.`)) return;
+    await adminPOST(`/api/admin/users/${u.id}/delete`);
+    await refreshAdmin();
+  }));
+
+  row.append(name, meta, actions);
+  return row;
+}
+
+function emptyState(msg) {
+  const el = document.createElement("div");
+  el.className = "admin-empty dim";
+  el.textContent = msg;
+  return el;
+}
+
+async function loadPending() {
+  const list = $("#admin-pending-list");
+  list.replaceChildren();
+  try {
+    const { users } = await adminGET("/api/admin/users?status=pending");
+    if (!users.length) return list.appendChild(emptyState("no pending requests"));
+    users.forEach((u) => list.appendChild(userRow(u, { canApprove: true })));
+  } catch (e) {
+    list.appendChild(emptyState("error: " + e.message));
+  }
+}
+
+async function loadAllowed() {
+  const list = $("#admin-allowed-list");
+  list.replaceChildren();
+  try {
+    const { users } = await adminGET("/api/admin/users?status=allowed");
+    if (!users.length) return list.appendChild(emptyState("no approved friends yet"));
+    users.forEach((u) => list.appendChild(userRow(u, { canBlock: true })));
+  } catch (e) {
+    list.appendChild(emptyState("error: " + e.message));
+  }
+}
+
+async function loadMessages() {
+  const list = $("#admin-msgs-list");
+  list.replaceChildren();
+  try {
+    const { messages } = await adminGET("/api/admin/messages?limit=20");
+    if (!messages.length) return list.appendChild(emptyState("no messages yet"));
+    messages.forEach((m) => {
+      const card = document.createElement("div");
+      card.className = "wid admin-msg";
+
+      const head = document.createElement("div");
+      head.className = "admin-msg-head";
+      const who = document.createElement("span");
+      who.className = "admin-msg-who";
+      who.textContent = m.username;
+      const when = document.createElement("span");
+      when.className = "admin-msg-when dim";
+      when.textContent = fmtWhen(m.printed_at);
+      head.append(who, when);
+
+      const body = document.createElement("pre");
+      body.className = "admin-msg-body";
+      body.textContent = m.body;
+
+      card.append(head, body);
+      list.appendChild(card);
+    });
+  } catch (e) {
+    list.appendChild(emptyState("error: " + e.message));
+  }
+}
+
+async function refreshAdmin() {
+  await Promise.all([loadPending(), loadAllowed(), loadMessages()]);
+}
+
+$("#admin-refresh-pending").addEventListener("click", () => guard(loadPending, "refreshed"));
+$("#admin-refresh-allowed").addEventListener("click", () => guard(loadAllowed, "refreshed"));
+$("#admin-refresh-msgs").addEventListener("click", () => guard(loadMessages, "refreshed"));
 
 // ---------- keyboard ----------
 

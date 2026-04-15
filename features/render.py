@@ -34,21 +34,25 @@ _FONT_CANDIDATES: dict[str, list[tuple[str, int]]] = {
         ("/System/Library/Fonts/Helvetica.ttc", 0),
         ("/System/Library/Fonts/HelveticaNeue.ttc", 0),
         ("/System/Library/Fonts/Supplemental/Arial.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
     ],
     "sans_bold": [
         ("/System/Library/Fonts/Helvetica.ttc", 1),
         ("/System/Library/Fonts/HelveticaNeue.ttc", 1),
         ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
     ],
     "mono_regular": [
         ("/System/Library/Fonts/Menlo.ttc", 0),
         ("/System/Library/Fonts/SFNSMono.ttf", 0),
         ("/System/Library/Fonts/Monaco.ttf", 0),
         ("/System/Library/Fonts/Supplemental/Courier New.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 0),
     ],
     "mono_bold": [
         ("/System/Library/Fonts/Menlo.ttc", 1),
         ("/System/Library/Fonts/Supplemental/Courier New Bold.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 0),
     ],
 }
 

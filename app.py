@@ -12,6 +12,9 @@ from typing import Any, Callable
 from flask import Flask, jsonify, render_template, request
 
 import config
+from auth import auth_bp
+from auth import db as auth_db
+from auth.session import current_user, require_admin, require_allowed
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
@@ -23,6 +26,9 @@ from printer import PrinterError, footer, open_printer
 
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = config.SECRET_KEY
+app.register_blueprint(auth_bp)
+auth_db.init()
 
 
 @app.route("/")
@@ -32,7 +38,14 @@ def index():
         width=config.RECEIPT_WIDTH,
         pixel_width=config.PRINTER_PIXEL_WIDTH,
         dry_run=config.DRY_RUN,
+        admin_token=config.ADMIN_TOKEN,
     )
+
+
+@app.route("/m/")
+@app.route("/m")
+def friends_index():
+    return render_template("friends.html")
 
 
 # ---------- generic body-printer helper ----------
@@ -526,6 +539,95 @@ def hw_cheatsheet():
     })
 
 
+# ---------- friend message endpoint ----------
+
+# In-memory rate limit: {user_id: last_print_unix_ts}. Resets on container
+# restart, which is fine — friends are a small trusted group post-approval.
+_LAST_PRINT: dict[int, float] = {}
+_RATE_LIMIT_SECONDS = 10
+_MAX_MSG_LEN = 800
+
+
+@app.post("/api/m/print")
+@require_allowed
+def friend_print():
+    import time
+
+    user = current_user()
+    body = ((request.get_json(silent=True) or {}).get("body") or "").strip()
+    if not body:
+        return jsonify({"ok": False, "error": "message is empty"}), 400
+    if len(body) > _MAX_MSG_LEN:
+        return jsonify({"ok": False, "error": f"message too long (max {_MAX_MSG_LEN} chars)"}), 400
+
+    now = time.time()
+    last = _LAST_PRINT.get(user["id"], 0)
+    wait = _RATE_LIMIT_SECONDS - (now - last)
+    if wait > 0:
+        return jsonify({
+            "ok": False,
+            "error": f"slow down — try again in {int(wait) + 1}s",
+            "kind": "rate_limit",
+        }), 429
+
+    formatted = widgets.friend_message(user["username"], body)
+    try:
+        _print_body(formatted)
+    except PrinterError as e:
+        return jsonify({"ok": False, "error": str(e), "kind": "printer"}), 503
+
+    _LAST_PRINT[user["id"]] = now
+    auth_db.log_message(user["id"], body)
+    return jsonify({"ok": True})
+
+
+# ---------- admin (Bearer-token gated) ----------
+
+@app.get("/api/admin/users")
+@require_admin
+def admin_list_users():
+    status = request.args.get("status")
+    try:
+        users = auth_db.list_users(status=status)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "users": users})
+
+
+@app.post("/api/admin/users/<int:user_id>/approve")
+@require_admin
+def admin_approve_user(user_id: int):
+    if not auth_db.get_user(user_id):
+        return jsonify({"ok": False, "error": "no such user"}), 404
+    auth_db.set_status(user_id, "allowed")
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/users/<int:user_id>/revoke")
+@require_admin
+def admin_revoke_user(user_id: int):
+    if not auth_db.get_user(user_id):
+        return jsonify({"ok": False, "error": "no such user"}), 404
+    auth_db.set_status(user_id, "blocked")
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/users/<int:user_id>/delete")
+@require_admin
+def admin_delete_user(user_id: int):
+    if not auth_db.get_user(user_id):
+        return jsonify({"ok": False, "error": "no such user"}), 404
+    auth_db.delete_user(user_id)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/admin/messages")
+@require_admin
+def admin_list_messages():
+    limit = max(1, min(200, int(request.args.get("limit", 20))))
+    return jsonify({"ok": True, "messages": auth_db.list_messages(limit=limit)})
+
+
 # ---------- health ----------
 
 @app.get("/api/ping")
@@ -533,8 +635,18 @@ def ping():
     return jsonify({"ok": True, "dry_run": config.DRY_RUN})
 
 
-if __name__ == "__main__":
+def _print_banner() -> None:
     print(f"Thermal Printer GUI -> http://{config.HOST}:{config.PORT}")
     if config.DRY_RUN:
         print(f"DRY RUN mode: bytes will be written to {config.DRY_RUN_PATH}")
+    if not config._ADMIN_TOKEN_FROM_ENV:
+        print(f"DEV ADMIN_TOKEN={config.ADMIN_TOKEN}  (set ADMIN_TOKEN in env to persist)")
+
+
+_print_banner()
+
+
+if __name__ == "__main__":
+    # Dev entrypoint. In production gunicorn imports `app` directly and the
+    # banner prints on the first import above.
     app.run(host=config.HOST, port=config.PORT, debug=True)

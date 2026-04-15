@@ -207,3 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 last_print.bin
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.tar
+.playwright-mcp/
+.env

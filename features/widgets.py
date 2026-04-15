@@ -400,3 +400,27 @@ def now_card() -> str:
             "---",
         ]
     )
+
+
+# ---------- friend message ----------
+
+def friend_message(username: str, body: str) -> str:
+    """Format an incoming message from an approved friend for printing.
+
+    Uses the same markup vocabulary as the rest of the widgets so the
+    rich renderer in features/render.py picks up the heading + dividers.
+    """
+    body = (body or "").strip()
+    timestamp = dt.datetime.now().strftime("%a %b %-d \u00b7 %I:%M %p").lower()
+    lines = [
+        "## from " + (username or "anon"),
+        "===",
+        "",
+    ]
+    for paragraph in body.split("\n"):
+        if paragraph.strip():
+            lines.append(textwrap.fill(paragraph, width=config.RECEIPT_WIDTH))
+        else:
+            lines.append("")
+    lines.extend(["", "---", f"> {timestamp}", "---"])
+    return "\n".join(lines)

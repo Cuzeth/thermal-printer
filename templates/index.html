@@ -6,7 +6,7 @@
   <title>Thermal Printer Console</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
-<body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}">
+<body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}" data-admin-token="{{ admin_token }}">
 
 <header class="top">
   <div class="brand">
@@ -22,6 +22,7 @@
     <button class="tab" data-tab="labs">Labs</button>
     <button class="tab" data-tab="hardware">Hardware</button>
     <button class="tab" data-tab="console">Console</button>
+    <button class="tab" data-tab="admin">Admin</button>
   </nav>
 </header>
 
@@ -440,6 +441,36 @@ ship the thing</textarea>
         <thead><tr><th>Name</th><th>Hex</th><th>Description</th><th></th></tr></thead>
         <tbody id="cheat-body"><!-- populated --></tbody>
       </table>
+    </div>
+
+    <!-- Admin tab -->
+    <div class="tabpane" data-pane="admin">
+      <h2>Friend approvals</h2>
+      <p class="help">Friends sign in at <code>/m/</code> with a passkey. They sit pending until you approve.</p>
+
+      <div class="admin-section">
+        <div class="admin-head">
+          <h3>Pending</h3>
+          <button class="ghost tiny" id="admin-refresh-pending">Refresh</button>
+        </div>
+        <div id="admin-pending-list" class="admin-list"></div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-head">
+          <h3>Approved</h3>
+          <button class="ghost tiny" id="admin-refresh-allowed">Refresh</button>
+        </div>
+        <div id="admin-allowed-list" class="admin-list"></div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-head">
+          <h3>Recent prints</h3>
+          <button class="ghost tiny" id="admin-refresh-msgs">Refresh</button>
+        </div>
+        <div id="admin-msgs-list" class="admin-list"></div>
+      </div>
     </div>
 
   </section>
