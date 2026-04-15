@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" role="img" aria-labelledby="title">
+  <title id="title">thermal-printer</title>
+  <defs>
+    <radialGradient id="bg" cx="18%" cy="0%" r="95%">
+      <stop offset="0%" stop-color="#1a1d2a"/>
+      <stop offset="72%" stop-color="#0b0c10"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f7f1dc"/>
+      <stop offset="100%" stop-color="#eae1c1"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f7b42c" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#f7b42c" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#f7b42c" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grain" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="transparent"/>
+      <circle cx="1" cy="1" r="0.3" fill="#000" opacity="0.05"/>
+    </pattern>
+  </defs>
+
+  <!-- dark backdrop -->
+  <rect width="1280" height="400" fill="url(#bg)"/>
+
+  <!-- warm halos to feel like thermal paper under lamp light -->
+  <circle cx="160" cy="100" r="300" fill="url(#halo)"/>
+  <circle cx="1120" cy="330" r="260" fill="url(#halo)" opacity="0.55"/>
+
+  <!-- receipt -->
+  <g transform="translate(200, 40)">
+    <!-- soft drop shadow -->
+    <rect x="3" y="6" width="880" height="320" fill="#000" opacity="0.4" rx="3"/>
+    <!-- paper -->
+    <rect width="880" height="320" fill="url(#paper)" rx="3"/>
+    <!-- paper grain -->
+    <rect width="880" height="320" fill="url(#grain)" rx="3"/>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" fill="#1a1915">
+      <!-- header row -->
+      <text x="40" y="58" font-size="26" font-weight="700" fill="#c78413" letter-spacing="-2">▚▚</text>
+      <text x="92" y="58" font-size="20" font-weight="700" letter-spacing="8">THERMAL // PRINTER</text>
+      <text x="840" y="58" font-size="12" text-anchor="end" fill="#5a5540" letter-spacing="3">576PX · 80MM · ESC/POS</text>
+
+      <!-- double rule -->
+      <line x1="40" y1="78" x2="840" y2="78" stroke="#1a1915" stroke-width="2"/>
+      <line x1="40" y1="86" x2="840" y2="86" stroke="#1a1915" stroke-width="2"/>
+
+      <!-- hero -->
+      <text x="40" y="152" font-size="42" font-weight="700" letter-spacing="-1">a web gui for an</text>
+      <text x="40" y="196" font-size="42" font-weight="700" letter-spacing="-1">80mm thermal printer.</text>
+
+      <!-- tagline -->
+      <text x="40" y="238" font-size="15" fill="#5a5540">plus a public &quot;send me a receipt&quot; page friends can use to</text>
+      <text x="40" y="258" font-size="15" fill="#5a5540">make things pop out of it. not a product. just fun.</text>
+
+      <!-- tear line -->
+      <line x1="40" y1="294" x2="420" y2="294" stroke="#1a1915" stroke-width="1" stroke-dasharray="6 6"/>
+      <text x="440" y="299" font-size="16">✂</text>
+      <line x1="460" y1="294" x2="840" y2="294" stroke="#1a1915" stroke-width="1" stroke-dasharray="6 6"/>
+    </g>
+  </g>
+</svg>
