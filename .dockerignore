@@ -1,0 +1,15 @@
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+venv
+.git
+.gitignore
+.DS_Store
+last_print.bin
+data/
+*.tar
+.env
+.env.*
+README.md
+DEPLOY.md

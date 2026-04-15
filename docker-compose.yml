@@ -1,0 +1,19 @@
+services:
+  printer:
+    build: .
+    image: thermal-printer:latest
+    container_name: thermal-printer
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5005"
+      DATA_DIR: "/app/data"
