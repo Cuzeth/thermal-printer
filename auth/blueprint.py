@@ -1,4 +1,4 @@
-"""Friend-facing auth endpoints. Mounted at /api/m/auth/* by app.py.
+"""Friend-facing auth endpoints. Mounted at /m/api/auth/* by app.py.
 
 Simple username + password. Passwords hashed with werkzeug's scrypt
 helper (ships with Flask, no new dep). Failed-login rate limit is an
@@ -17,7 +17,7 @@ from flask import Blueprint, jsonify, request
 from auth import db, session as sess
 
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/m")
+auth_bp = Blueprint("auth", __name__, url_prefix="/m/api")
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,20}$")
 MIN_PASSWORD_LEN = 8

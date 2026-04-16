@@ -73,7 +73,7 @@ def test_hw_raw_accepts_small_payload(client, auth):
 
 def test_friend_print_requires_session(client):
     # No session cookie → 401.
-    r = client.post("/api/m/print", json={"body": "hi"})
+    r = client.post("/m/api/print", json={"body": "hi"})
     assert r.status_code == 401
 
 
@@ -99,7 +99,7 @@ def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/print", json={"body": "hello"})
+    r = client.post("/m/api/print", json={"body": "hello"})
     assert r.status_code == 503
     body = r.get_json()
     assert body["ok"] is False

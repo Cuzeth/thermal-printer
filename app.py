@@ -10,7 +10,7 @@ import os
 import traceback
 from typing import Any, Callable
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import config
 from auth import auth_bp
@@ -57,6 +57,13 @@ def index():
 @app.route("/m")
 def friends_index():
     return render_template("friends.html")
+
+
+@app.route("/m/static/<path:filename>")
+def friends_static(filename):
+    """Serve static assets under /m/ so a single Funnel path covers the
+    friends page, its CSS/JS, and its API endpoints."""
+    return send_from_directory(app.static_folder, filename)
 
 
 # ---------- generic body-printer helper ----------
@@ -602,7 +609,7 @@ _RATE_LIMIT_SECONDS = 10
 _MAX_MSG_LEN = 800
 
 
-@app.post("/api/m/print")
+@app.post("/m/api/print")
 @require_allowed
 def friend_print():
     import time

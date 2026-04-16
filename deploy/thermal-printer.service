@@ -11,7 +11,7 @@ Group=pi
 WorkingDirectory=/home/pi/thermal-printer
 EnvironmentFile=/home/pi/thermal-printer/.env
 # --workers 1 is load-bearing: printer.py serializes USB via an in-process
-# threading.Lock, and /api/m/print rate limiting lives in a process-local dict.
+# threading.Lock, and /m/api/print rate limiting lives in a process-local dict.
 # Threads are fine (lock handles them); workers would race and double-print.
 # HOST/PORT come from the EnvironmentFile above.
 ExecStart=/home/pi/thermal-printer/.venv/bin/gunicorn --workers 1 --threads 2 --bind ${HOST}:${PORT} --access-logfile - --error-logfile - app:app

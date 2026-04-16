@@ -5,7 +5,7 @@ Exercises:
 - Admin Bearer-token guard
 - Register happy path + duplicate-username 409 + validation 400s
 - Login wrong password / unknown user / too-many-failures
-- /api/m/me when signed-out + signed-in
+- /m/api/me when signed-out + signed-in
 - Approve + revoke + delete
 
 Run from repo root (doesn't touch USB):
@@ -78,22 +78,22 @@ def main() -> None:
 
     print("\n[3] Register happy path")
     fresh = app_module.app.test_client()
-    r = fresh.post("/api/m/auth/register", json={"username": "bob", "password": "correct-horse"})
+    r = fresh.post("/m/api/auth/register", json={"username": "bob", "password": "correct-horse"})
     _ok("register/bob -> 200", r.status_code == 200)
     _ok("bob is pending + session set", r.get_json()["user"]["status"] == "pending")
 
     # After register, same client is logged in → /me should return bob
-    r = fresh.get("/api/m/me")
+    r = fresh.get("/m/api/me")
     _ok("me reflects session", r.get_json()["user"]["username"] == "bob")
 
     print("\n[4] Register validation")
-    r = client.post("/api/m/auth/register", json={"username": "bob", "password": "another-pass"})
+    r = client.post("/m/api/auth/register", json={"username": "bob", "password": "another-pass"})
     _ok("dup username -> 409", r.status_code == 409)
 
-    r = client.post("/api/m/auth/register", json={"username": "no spaces!", "password": "whatever-long"})
+    r = client.post("/m/api/auth/register", json={"username": "no spaces!", "password": "whatever-long"})
     _ok("bad chars -> 400", r.status_code == 400)
 
-    r = client.post("/api/m/auth/register", json={"username": "shortpw", "password": "nope"})
+    r = client.post("/m/api/auth/register", json={"username": "shortpw", "password": "nope"})
     _ok("short password -> 400", r.status_code == 400)
 
     print("\n[5] Login")
@@ -102,37 +102,37 @@ def main() -> None:
     auth_bp_mod._ip_failures.clear()
     auth_bp_mod._register_attempts.clear()
 
-    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    r = client.post("/m/api/auth/login", json={"username": "alice", "password": "hunter2hunter"})
     _ok("alice login -> 200", r.status_code == 200)
     _ok("alice now signed in", r.get_json()["user"]["status"] == "allowed")
 
-    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "wrongpass"})
+    r = client.post("/m/api/auth/login", json={"username": "alice", "password": "wrongpass"})
     _ok("wrong pw -> 401", r.status_code == 401)
 
-    r = client.post("/api/m/auth/login", json={"username": "ghost", "password": "whatever-long"})
+    r = client.post("/m/api/auth/login", json={"username": "ghost", "password": "whatever-long"})
     _ok("unknown user -> 401", r.status_code == 401)
 
     print("\n[6] Login rate limit")
     auth_bp_mod._failures.clear()
     auth_bp_mod._ip_failures.clear()
     for _ in range(auth_bp_mod._MAX_FAILURES):
-        client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
-    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "bad"})
+        client.post("/m/api/auth/login", json={"username": "alice", "password": "bad"})
+    r = client.post("/m/api/auth/login", json={"username": "alice", "password": "bad"})
     _ok("11th attempt -> 429", r.status_code == 429)
 
     # A successful auth shouldn't be reachable during lockout
-    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    r = client.post("/m/api/auth/login", json={"username": "alice", "password": "hunter2hunter"})
     _ok("correct pw during lockout -> 429", r.status_code == 429)
 
     auth_bp_mod._failures.clear()
     auth_bp_mod._ip_failures.clear()
-    r = client.post("/api/m/auth/login", json={"username": "alice", "password": "hunter2hunter"})
+    r = client.post("/m/api/auth/login", json={"username": "alice", "password": "hunter2hunter"})
     _ok("after clear, correct pw -> 200", r.status_code == 200)
 
     print("\n[7] Logout")
-    r = client.post("/api/m/auth/logout")
+    r = client.post("/m/api/auth/logout")
     _ok("logout -> 200", r.status_code == 200)
-    r = client.get("/api/m/me")
+    r = client.get("/m/api/me")
     _ok("me=null after logout", r.get_json()["user"] is None)
 
     print("\n[8] Approve/revoke/delete")
