@@ -13,7 +13,9 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_wait_for",
       "Bash(git rm:*)",
-      "Bash(.venv/bin/python -m pytest tests/ -q)"
+      "Bash(.venv/bin/python -m pytest tests/ -q)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
