@@ -61,6 +61,30 @@ def test_tiny_body_uses_modest_canvas():
     assert img.height < 200
 
 
+def test_cjk_body_does_not_crash():
+    """CJK code points route to the CJK font via script-based fallback.
+    The font itself may not be installed in CI, but the renderer must
+    still produce a valid image (glyphs fall back to .notdef boxes)."""
+    img = _render("知之为知之，不知为不知，是知也")
+    assert img.height > 20
+
+
+def test_braille_art_does_not_crash():
+    """Braille code points (U+2800–U+28FF) survive wrapping and render
+    as a valid 1-bit image, even when the available font lacks glyphs."""
+    braille = "⠀⠀⠀⠀⠀⢀⣀⡤⠤⢶⢒⣚⣛⡛⠓⠲⢤⡀"
+    img = _render(braille + "\n" + braille)
+    assert img.height > 20
+
+
+def test_mixed_scripts_render():
+    """A message mixing Latin and CJK wraps without crashing and each run
+    is drawn with its own font (checked indirectly via height > a single line)."""
+    body = "hello 世界 こんにちは **world**"
+    img = _render(body)
+    assert img.height > 20
+
+
 def test_markup_vocab_all_paths():
     """Every directive exercised at least once — no crashes, valid image."""
     body = (

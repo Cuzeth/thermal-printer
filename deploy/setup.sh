@@ -34,7 +34,7 @@ need_sudo apt-get update
 need_sudo apt-get install -y --no-install-recommends \
   python3 python3-venv python3-pip \
   libusb-1.0-0-dev libjpeg-dev zlib1g-dev \
-  fonts-dejavu-core git curl
+  fonts-dejavu fonts-noto-cjk git curl
 
 echo "==> creating virtualenv at $REPO_DIR/.venv"
 if [[ ! -d "$REPO_DIR/.venv" ]]; then

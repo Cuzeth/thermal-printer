@@ -57,12 +57,15 @@ sudo apt-get full-upgrade -y
 sudo apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
     libusb-1.0-0-dev libjpeg-dev zlib1g-dev \
-    fonts-dejavu-core git curl
+    fonts-dejavu fonts-noto-cjk git curl
 ```
 
 `libusb-1.0-0-dev` is what `pyusb` talks to. `libjpeg-dev` and
-`zlib1g-dev` are for Pillow. `fonts-dejavu-core` is what the rich-text
-renderer draws with — without it the output looks wrong.
+`zlib1g-dev` are for Pillow. `fonts-dejavu` (full package, not
+`-core`) is what the rich-text renderer draws Latin/symbols/braille
+with — `-core` ships a stripped subset and braille art prints as boxes.
+`fonts-noto-cjk` gives us Chinese / Japanese / Korean coverage; the
+renderer picks the right font per character automatically.
 
 ---
 
@@ -359,6 +362,7 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
 | Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or funnel isn't set up. Run `tailscale funnel status` and re-run step 9. |
 | Public URL: "couldn't establish a secure connection" / hangs then fails | Funnel cert hasn't provisioned (or went stale after an idle period). Force a refresh: `sudo tailscale cert thermal-printer.<tailnet>.ts.net`. If still failing, `sudo systemctl restart tailscaled && sudo tailscale funnel --bg 5005`. |
+| Friend messages print as rows of boxes / blank where CJK or braille art should be | Missing font glyphs on the Pi. Install the full set: `sudo apt-get install -y fonts-dejavu fonts-noto-cjk && sudo systemctl restart thermal-printer`. The renderer picks fonts per character; if `fonts-noto-cjk` is missing, CJK chars render as `.notdef` boxes; if only `fonts-dejavu-core` is installed, braille art does the same. |
 | `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale funnel status` to confirm the proxy is running. |
 | `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |

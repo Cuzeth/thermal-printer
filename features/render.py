@@ -12,6 +12,11 @@ Design decisions:
  - Horizontal rules are drawn as real pixels, not repeated dashes.
  - Everything is thresholded to 1-bit at 128 for crisp edges (dithering fuzzes
    type — we dither only photos, which live in features/image.py).
+ - Per-character font fallback: PIL has no built-in fallback, so we split
+   each text run by Unicode script (CJK / everything-else) and draw each
+   sub-run with whichever font actually has glyphs for it. Requires
+   `fonts-noto-cjk` on the Pi for Chinese/Japanese/Korean, and the full
+   `fonts-dejavu` package (not `-core`) for braille and other wide Unicode.
 """
 
 from __future__ import annotations
@@ -54,16 +59,38 @@ _FONT_CANDIDATES: dict[str, list[tuple[str, int]]] = {
         ("/System/Library/Fonts/Supplemental/Courier New Bold.ttf", 0),
         ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 0),
     ],
+    # CJK coverage (Chinese, Japanese, Korean). Used via script-based fallback
+    # when a message contains CJK code points. `fonts-noto-cjk` on Pi / Debian
+    # ships the .ttc at these paths. On macOS we use the system CJK fonts.
+    "cjk_regular": [
+        ("/System/Library/Fonts/PingFang.ttc", 0),
+        ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf", 0),
+    ],
+    "cjk_bold": [
+        ("/System/Library/Fonts/PingFang.ttc", 3),
+        ("/System/Library/Fonts/Hiragino Sans GB.ttc", 1),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.otf", 0),
+    ],
 }
 
-_font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+_font_cache: dict[tuple[str, int], Optional[ImageFont.FreeTypeFont]] = {}
+
+# Sentinel so a failed lookup isn't retried every call.
+_NO_FONT = object()
 
 
-def _font(kind: str, size: int) -> ImageFont.FreeTypeFont:
+def _font_try(kind: str, size: int) -> Optional[ImageFont.FreeTypeFont]:
+    """Try to load a font. Returns None if no candidate is available.
+
+    Cached — repeated lookups are O(1) after the first miss.
+    """
     key = (kind, size)
-    cached = _font_cache.get(key)
-    if cached is not None:
-        return cached
+    cached = _font_cache.get(key, _NO_FONT)
+    if cached is not _NO_FONT:
+        return cached  # type: ignore[return-value]
     for path, idx in _FONT_CANDIDATES.get(kind, []):
         if not os.path.exists(path):
             continue
@@ -73,10 +100,100 @@ def _font(kind: str, size: int) -> ImageFont.FreeTypeFont:
             return f
         except Exception:
             continue
+    _font_cache[key] = None
+    return None
+
+
+def _font(kind: str, size: int) -> ImageFont.FreeTypeFont:
+    f = _font_try(kind, size)
+    if f is not None:
+        return f
     # Last resort — bitmap default; looks bad but won't crash.
-    f = ImageFont.load_default()
-    _font_cache[key] = f
-    return f
+    return ImageFont.load_default()
+
+
+# ---------- script detection + font fallback ----------
+
+def _script(ch: str) -> str:
+    """Classify a character for font routing. Cheap and allocation-free."""
+    if not ch:
+        return "latin"
+    c = ord(ch)
+    # Hiragana / Katakana / Katakana-Phonetic
+    if 0x3040 <= c <= 0x30FF or 0x31F0 <= c <= 0x31FF:
+        return "cjk"
+    # CJK Symbols and Punctuation
+    if 0x3000 <= c <= 0x303F:
+        return "cjk"
+    # CJK Unified Ideographs + Extension A
+    if 0x3400 <= c <= 0x9FFF:
+        return "cjk"
+    # Hangul Syllables / Jamo
+    if 0xAC00 <= c <= 0xD7AF or 0x1100 <= c <= 0x11FF:
+        return "cjk"
+    # Halfwidth/Fullwidth forms (often mixed with CJK)
+    if 0xFF00 <= c <= 0xFFEF:
+        return "cjk"
+    # CJK Extensions B–F (supplementary plane)
+    if 0x20000 <= c <= 0x2FA1F:
+        return "cjk"
+    return "latin"
+
+
+def _font_for(base_kind: str, script: str, size: int) -> ImageFont.FreeTypeFont:
+    """Return a font that actually has glyphs for this script.
+
+    For CJK we route to the CJK candidates; if they're missing on this host
+    (e.g. local dev without `fonts-noto-cjk`), we fall back to the base font
+    so the char at least renders as .notdef instead of crashing.
+    """
+    if script == "cjk":
+        cjk_kind = "cjk_bold" if base_kind.endswith("_bold") else "cjk_regular"
+        f = _font_try(cjk_kind, size)
+        if f is not None:
+            return f
+    return _font(base_kind, size)
+
+
+def _wrap_tokens(text: str) -> list[str]:
+    """Split `text` into wrap-friendly tokens.
+
+    Latin runs are split on whitespace (keeps spaces as their own tokens so
+    word-wrap behaves). CJK runs are split one character per token — CJK
+    text has no word spaces, so breaking between any two chars is the
+    normal way to wrap it.
+    """
+    if not text:
+        return []
+    out: list[str] = []
+    for chunk in re.split(r"(\s+)", text):
+        if not chunk:
+            continue
+        # Is this a CJK-heavy chunk? If yes, emit one char per token.
+        if any(_script(ch) == "cjk" for ch in chunk):
+            out.extend(chunk)
+        else:
+            out.append(chunk)
+    return out
+
+
+def _split_by_script(text: str) -> list[tuple[str, str]]:
+    """Break `text` into consecutive runs of same-script characters."""
+    if not text:
+        return []
+    runs: list[tuple[str, str]] = []
+    cur = _script(text[0])
+    buf = [text[0]]
+    for ch in text[1:]:
+        s = _script(ch)
+        if s == cur:
+            buf.append(ch)
+        else:
+            runs.append(("".join(buf), cur))
+            buf = [ch]
+            cur = s
+    runs.append(("".join(buf), cur))
+    return runs
 
 
 # ---------- sizes (in pixels) ----------
@@ -151,6 +268,28 @@ class Renderer:
         self.canvas = bigger
         self.draw = ImageDraw.Draw(self.canvas)
 
+    # ----- font-fallback drawing primitives -----
+    #
+    # PIL's ImageFont has no automatic fallback chain, so we split each piece
+    # of text into script-homogeneous runs and pick a covering font per run.
+    # Widths are measured with the run's actual font so wrapping stays honest.
+
+    def _measure_text(self, text: str, base_kind: str, size: int) -> int:
+        total = 0
+        for run, script in _split_by_script(text):
+            font = _font_for(base_kind, script, size)
+            total += int(self.draw.textlength(run, font=font))
+        return total
+
+    def _draw_text(self, x: int, y: int, text: str, base_kind: str, size: int) -> int:
+        """Draw text with per-run font fallback. Returns total width drawn."""
+        dx = 0
+        for run, script in _split_by_script(text):
+            font = _font_for(base_kind, script, size)
+            self.draw.text((x + dx, y), run, font=font, fill=0)
+            dx += int(self.draw.textlength(run, font=font))
+        return dx
+
     def render(self, body: str) -> None:
         in_pre = False
         for raw in body.splitlines():
@@ -210,25 +349,30 @@ class Renderer:
 
     def _heading(self, text: str, size: int, upper: bool) -> None:
         if upper:
+            # .upper() is a no-op on CJK chars, which is what we want.
             text = text.upper()
-        font = _font("sans_bold", size)
+        base_kind = "sans_bold"
+
+        def measure(size_: int, tracking_: int):
+            fonts = [_font_for(base_kind, _script(ch), size_) for ch in text]
+            widths_ = [int(self.draw.textlength(ch, font=f)) for ch, f in zip(text, fonts)]
+            total_ = sum(widths_) + tracking_ * max(0, len(text) - 1)
+            return fonts, widths_, total_
+
         tracking = max(1, size // 14)
-        widths = [self.draw.textlength(ch, font=font) for ch in text]
-        total = sum(widths) + tracking * max(0, len(text) - 1)
+        fonts, widths, total = measure(size, tracking)
         if total > self.draw_w:
-            # Too wide — drop tracking and/or shrink proportionally.
+            # Too wide — drop tracking and shrink proportionally.
             scale = self.draw_w / total
             size = max(14, int(size * scale))
-            font = _font("sans_bold", size)
             tracking = 1
-            widths = [self.draw.textlength(ch, font=font) for ch in text]
-            total = sum(widths) + tracking * max(0, len(text) - 1)
+            fonts, widths, total = measure(size, tracking)
         self._ensure_room(size + BLOCK_GAP)
         x = self.pad + (self.draw_w - int(total)) // 2
         self.y += BLOCK_GAP // 2
         for i, ch in enumerate(text):
-            self.draw.text((x, self.y), ch, font=font, fill=0)
-            x += int(widths[i]) + tracking
+            self.draw.text((x, self.y), ch, font=fonts[i], fill=0)
+            x += widths[i] + tracking
         self.y += size + BLOCK_GAP
 
     def _bullet_line(self, text: str) -> None:
@@ -278,9 +422,8 @@ class Renderer:
         self.y += 10
 
     def _pre_line(self, line: str) -> None:
-        font = _font("mono_regular", BODY)
         self._ensure_room(BODY + LINE_GAP)
-        self.draw.text((self.pad, self.y), line, font=font, fill=0)
+        self._draw_text(self.pad, self.y, line, "mono_regular", BODY)
         self.y += BODY + LINE_GAP
 
     def _scissors(self) -> None:
@@ -300,31 +443,32 @@ class Renderer:
     def _spans(self, spans: list[Span], align: str, indent: int = 0) -> None:
         """Lay out inline spans with left/center alignment and word-wrap.
 
-        Wrapping only applies to the longest span that's plain text; bold/big
-        spans are drawn as given.
+        Wrapping applies to plain-text runs; bold/big spans stay as single
+        tokens. Each token carries a base font `kind` rather than a resolved
+        font so the drawing step can do per-character CJK fallback without
+        losing width accuracy.
         """
-        # Build a flat list of (token, span, font, size, width)
-        pieces: list[tuple[str, Span, ImageFont.FreeTypeFont, int, int]] = []
+        # (token, span, base_kind, size, width)
+        Piece = tuple[str, Span, str, int, int]
+        pieces: list[Piece] = []
         for sp in spans:
             size = BODY * 2 if sp.big else BODY
-            font_kind = "mono_bold" if sp.bold else "mono_regular"
-            font = _font(font_kind, size)
-            # Split plain text spans on spaces for wrapping; keep bold/big as
-            # single tokens.
+            base_kind = "mono_bold" if sp.bold else "mono_regular"
             if sp.big or sp.bold or sp.underline:
-                w = int(self.draw.textlength(sp.text, font=font))
-                pieces.append((sp.text, sp, font, size, w))
+                w = self._measure_text(sp.text, base_kind, size)
+                pieces.append((sp.text, sp, base_kind, size, w))
             else:
-                words = re.split(r"(\s+)", sp.text)
-                for w in words:
-                    if not w:
-                        continue
-                    pw = int(self.draw.textlength(w, font=font))
-                    pieces.append((w, sp, font, size, pw))
+                # Split on runs of ASCII whitespace so wrapping can break. CJK
+                # chars have no spaces between them, so we also split each CJK
+                # run into per-character tokens so wrapping happens mid-word
+                # (which is how CJK text is normally wrapped).
+                for tok in _wrap_tokens(sp.text):
+                    pw = self._measure_text(tok, base_kind, size)
+                    pieces.append((tok, sp, base_kind, size, pw))
 
         # Wrap into lines
         avail = self.draw_w - indent
-        lines: list[list[tuple[str, Span, ImageFont.FreeTypeFont, int, int]]] = [[]]
+        lines: list[list[Piece]] = [[]]
         cur_w = 0
         for tok in pieces:
             _, _, _, _, w = tok
@@ -351,9 +495,9 @@ class Renderer:
                 x = self.pad + self.draw_w - total
             else:
                 x = self.pad + indent
-            for tok, sp, font, size, w in line:
+            for tok, sp, base_kind, size, w in line:
                 y_off = max_size - size  # baseline-ish align to bottom
-                self.draw.text((x, self.y + y_off), tok, font=font, fill=0)
+                self._draw_text(x, self.y + y_off, tok, base_kind, size)
                 if sp.underline:
                     uy = self.y + y_off + size - 2
                     self.draw.line([(x, uy), (x + w, uy)], fill=0, width=1)
