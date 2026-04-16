@@ -70,6 +70,62 @@ async function refreshMe() {
   applyMe(j.user);
 }
 
+// ---------- live preview ----------
+//
+// Debounce so we don't POST on every keystroke. A sequence counter guards
+// against slow responses overwriting fresh ones when the user keeps typing.
+
+let previewTimer = null;
+let previewSeq = 0;
+const PREVIEW_DEBOUNCE_MS = 250;
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(updatePreview, PREVIEW_DEBOUNCE_MS);
+}
+
+function setPreviewPlaceholder(msg, kind = "placeholder") {
+  const p = document.createElement("p");
+  p.className = `preview-${kind}`;
+  p.textContent = msg;
+  $("#preview-paper").replaceChildren(p);
+}
+
+async function updatePreview() {
+  const body = $("#msg-body").value;
+  const seq = ++previewSeq;
+  if (!body.trim()) {
+    setPreviewPlaceholder("start typing to see how it'll print…");
+    return;
+  }
+  try {
+    const j = await postJSON("/api/m/preview", { body });
+    if (seq !== previewSeq) return; // stale — user kept typing
+    const segments = j.segments || [];
+    if (segments.length === 0) {
+      setPreviewPlaceholder("empty");
+      return;
+    }
+    const nodes = [];
+    segments.forEach((url, i) => {
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "preview";
+      img.className = "preview-img";
+      nodes.push(img);
+      if (i < segments.length - 1) {
+        const cut = document.createElement("div");
+        cut.className = "preview-cut";
+        nodes.push(cut);
+      }
+    });
+    $("#preview-paper").replaceChildren(...nodes);
+  } catch (err) {
+    if (seq !== previewSeq) return;
+    setPreviewPlaceholder("preview failed: " + err.message, "error");
+  }
+}
+
 // ---------- send message ----------
 
 const recents = [];
@@ -93,6 +149,7 @@ async function sendMessage() {
   pushRecent(body);
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
+  setPreviewPlaceholder("start typing to see how it'll print…");
   const flash = document.createElement("div");
   flash.className = "printed-flash";
   document.body.appendChild(flash);
@@ -161,6 +218,7 @@ $("#msg-form").addEventListener("submit", async (e) => {
 
 $("#msg-body").addEventListener("input", (e) => {
   $("#msg-count").textContent = `${e.target.value.length} / 800`;
+  schedulePreview();
 });
 
 $("#recheck").addEventListener("click", async () => {

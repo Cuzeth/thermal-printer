@@ -638,6 +638,33 @@ _RATE_LIMIT_SECONDS = 10
 _MAX_MSG_LEN = 800
 
 
+@app.post("/api/m/preview")
+@require_allowed
+def friend_preview():
+    """Render a WYSIWYG preview of what the message will print as.
+
+    Runs the full friend_message() → render_markup() pipeline, so the
+    preview includes the "from <username>" header and timestamp footer
+    that will actually come out of the printer. No USB, no rate limit
+    — pure in-process rendering.
+    """
+    def run():
+        user = current_user()
+        body = ((request.get_json(silent=True) or {}).get("body") or "").strip()
+        if not body:
+            return {"segments": []}
+        if len(body) > _MAX_MSG_LEN:
+            raise ValueError(f"message too long (max {_MAX_MSG_LEN} chars)")
+        formatted = widgets.friend_message(user["username"], body)
+        segments = render_feat.split_cuts(formatted) or [formatted]
+        data_urls = [
+            image_feat.to_png_data_url(render_feat.render_markup(seg))
+            for seg in segments
+        ]
+        return {"segments": data_urls}
+    return _safe(run)
+
+
 @app.post("/api/m/print")
 @require_allowed
 def friend_print():
