@@ -7,8 +7,10 @@ Funnel.
 
 End state:
 
-- Main GUI at `https://thermal-printer.<tailnet>.ts.net/` — tailnet-only.
-- Friends page at `https://thermal-printer.<tailnet>.ts.net/m/` — public.
+- Entire app funneled at `https://thermal-printer.<tailnet>.ts.net/`.
+- Main GUI (`/`) and private API — gated by a Flask decorator that
+  checks for the `Tailscale-User-Login` header (tailnet-only).
+- Friends page (`/m/`) and its API — public.
 - Runs as a `systemd` service. Survives reboots. Logs with `journalctl`.
 
 Work top-to-bottom. Nothing clever, just a lot of small steps.
@@ -82,7 +84,7 @@ tailscale ip -4
 # e.g. 100.x.y.z
 ```
 
-We'll wire up `serve` / `funnel` later, after the app is running.
+We'll wire up Funnel later, after the app is running.
 
 ---
 
@@ -206,7 +208,7 @@ journalctl -u thermal-printer -f
 You should see the startup banner:
 
 ```
-Thermal Printer GUI -> http://0.0.0.0:5005
+Thermal Printer GUI -> http://127.0.0.1:5005
 ```
 
 Smoke test from the Pi itself:
@@ -222,42 +224,21 @@ shows the traceback. Most common issue: `.env` has a typo or a missing
 
 ---
 
-## 9 · Tailscale serve + funnel
+## 9 · Tailscale Funnel
 
-Now we expose it. Two knobs:
-
-- **`tailscale serve`** — reverse-proxies the full app on your tailnet
-  only (private).
-- **`tailscale funnel`** — exposes a specific path to the public
-  internet with a real HTTPS cert.
-
-We want the whole GUI on the tailnet, and only `/m/` public.
+One command:
 
 ```sh
-# tailnet-only: whole app reachable at https://thermal-printer.<tailnet>.ts.net/
-sudo tailscale serve --bg 5005
-
-# public: expose only /m/ via Funnel
-sudo tailscale funnel --bg --set-path=/m 5005
+sudo tailscale funnel --bg 5005
 ```
 
-The first `serve` command makes the full app reachable within your
-tailnet at `https://thermal-printer.<tailnet>.ts.net/`. The `funnel`
-command adds a public override for `/m` pointing at the same local port.
-
-**Why one path is enough:** the friends page, its static assets, and
-its API all live under `/m/`:
-
-| URL | What |
-|---|---|
-| `/m/` | friends HTML |
-| `/m/static/*` | CSS + JS |
-| `/m/api/auth/*` | register, login, logout |
-| `/m/api/me` | session check |
-| `/m/api/print` | send a message |
-
-The main console (`/`), its assets (`/static/*`), and private API
-(`/api/*`) stay tailnet-only because they aren't funneled.
+This exposes the **entire** app publicly at
+`https://thermal-printer.<tailnet>.ts.net/` with a real HTTPS cert.
+Private routes are protected at the Flask layer, not the Tailscale
+layer — the app checks for the `Tailscale-User-Login` header that
+Tailscale's proxy injects on tailnet requests and strips from public
+Funnel traffic. Any route decorated with `@require_tailnet` returns
+403 to public visitors.
 
 > Funnel requires one-time setup in the Tailscale admin console: make
 > sure **MagicDNS** is on, **HTTPS Certificates** is enabled
@@ -269,9 +250,26 @@ The main console (`/`), its assets (`/static/*`), and private API
 Check what's wired up:
 
 ```sh
-tailscale serve status
 tailscale funnel status
 ```
+
+<details>
+<summary><strong>Why not path-based funnel?</strong></summary>
+
+You might expect `tailscale serve` on `/` + `tailscale funnel --set-path=/m`
+to keep the root private while only exposing `/m/` publicly. **It doesn't.**
+Tailscale's `AllowFunnel` flag is a per-port boolean (`map[HostPort]bool`),
+not per-path — whichever command touched the port last wins for the entire
+port. Running `funnel --set-path=/m` flips the port to public, making `/`,
+`/api/`, and everything else publicly reachable too.
+
+This is a documented limitation with open GitHub issues:
+[#10234](https://github.com/tailscale/tailscale/issues/10234),
+[#11009](https://github.com/tailscale/tailscale/issues/11009).
+
+That's why we funnel the whole app and gate private routes in Flask instead.
+
+</details>
 
 ---
 
@@ -283,13 +281,14 @@ tailscale funnel status
    # {"ok": true, "dry_run": false}
    ```
 
-2. **Tailnet** (laptop/phone on your tailnet, Tailscale app on):
-   Open `https://thermal-printer.<tailnet>.ts.net/` — full GUI, real TLS cert.
+2. **Tailnet** (laptop/phone with Tailscale **on**):
+   - `https://thermal-printer.<tailnet>.ts.net/` → full GUI loads, real TLS cert.
 
 3. **Public** (phone on cellular, Tailscale **off**):
-   - `https://thermal-printer.<tailnet>.ts.net/m/` → friends page loads.
-   - `https://thermal-printer.<tailnet>.ts.net/` → 502 / timeout.
-     That's correct. Private stays private.
+   - `https://thermal-printer.<tailnet>.ts.net/m/` → friends page loads with CSS/JS.
+   - `https://thermal-printer.<tailnet>.ts.net/api/ping` → `{"ok": true}` (health check stays public).
+   - `https://thermal-printer.<tailnet>.ts.net/` → **403** (tailnet-only route, properly gated).
+   - `https://thermal-printer.<tailnet>.ts.net/api/print/text` → **403** (private API, properly gated).
 
 Find your exact `<tailnet>` slug in the
 [admin console → Machines](https://login.tailscale.com/admin/machines).
@@ -335,13 +334,12 @@ curl http://localhost:5005/api/ping       # {"ok": true}
 `data/` is inside the repo but gitignored, so the SQLite DB (users +
 messages) and any DRY_RUN bytes survive `git pull`.
 
-**If you changed Tailscale paths** (unlikely after initial setup), tear
-down and rebuild:
+**If you need to reconfigure Tailscale Funnel** (unlikely after initial
+setup), tear down and rebuild:
 
 ```sh
 sudo tailscale funnel --https=443 off
-sudo tailscale serve --bg 5005
-sudo tailscale funnel --bg --set-path=/m 5005
+sudo tailscale funnel --bg 5005
 ```
 
 **One-liner** for quick pulls when nothing changed in `.env` or deps:
@@ -359,11 +357,12 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `Could not connect to printer` on every print | udev rule didn't apply. Unplug/replug the printer, or re-run `sudo udevadm trigger`. Check `ls -l /dev/bus/usb/...` — expect `crw-rw-rw-`. |
 | Service crashes on start with `USBError: Access denied` | Same as above — the app is running as `pi` but the device is still root-only. |
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
-| Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or `tailscale funnel status` doesn't list `/m`. Re-run step 9. |
+| Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or funnel isn't set up. Run `tailscale funnel status` and re-run step 9. |
+| `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale serve status` to confirm the proxy is running. |
+| `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
 | `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. The app auto-renames it to `app.db.bak-*` on first boot — just `sudo systemctl restart thermal-printer` once. |
 | Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and Funnel is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
-| Friends page loads but no CSS/JS (bare HTML) | Funnel path missing. Make sure `tailscale funnel --set-path=/m 5005` is set — everything the friends page needs (static assets, API) lives under `/m/`. |
 | Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some routers. Use the IP from `tailscale ip -4` (the tailnet IP always works once Tailscale is up). |
 
 ---
@@ -378,7 +377,6 @@ journalctl -u thermal-printer -f
 
 # tailscale
 tailscale status
-tailscale serve status
 tailscale funnel status
 
 # quick update (no dep changes)
@@ -391,8 +389,7 @@ cd ~/thermal-printer && git pull && \
 
 # rebuild funnel from scratch
 sudo tailscale funnel --https=443 off
-sudo tailscale serve --bg 5005
-sudo tailscale funnel --bg --set-path=/m 5005
+sudo tailscale funnel --bg 5005
 ```
 
 That's it. Deep breath. You're running a Flask app as a systemd

@@ -75,3 +75,8 @@ DB_PATH = DATA_DIR / "app.db"
 # COOKIE_SECURE=false in your shell — otherwise the browser won't send the
 # session cookie back and every /m/* request lands as "not signed in".
 COOKIE_SECURE = _env_bool("COOKIE_SECURE", True)
+
+# When true, is_tailnet_request() always returns True — so private routes
+# are accessible without the Tailscale-User-Login header.  For local dev
+# only; never set this on the Pi.
+DEV_BYPASS_TAILNET = _env_bool("DEV_BYPASS_TAILNET", False)

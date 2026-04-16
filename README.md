@@ -36,6 +36,8 @@
 
 Friends register with a username + password, sit pending until you approve them from the Admin tab, then send you messages that print immediately with their name attached. Supports the same markup vocabulary as the composer.
 
+**Security model:** the entire app is funneled (public HTTPS), but tailnet-only routes (`/`, `/api/*`) are gated by a Flask decorator that checks for the `Tailscale-User-Login` header — present on tailnet requests, absent on public Funnel traffic. Flask must bind to `127.0.0.1` so attackers can't bypass the proxy and forge the header.
+
 Rate limits (all in-memory, reset on restart):
 - 1 message per 10s per approved user
 - 10 failed logins / 15 min per username
@@ -75,7 +77,7 @@ Short version:
    python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
    python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
    ```
-4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Use `tailscale serve` for the main GUI (tailnet-only) and `tailscale funnel --set-path=/m` for the friends page (public via a `*.ts.net` URL).
+4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale funnel --bg 5005` to expose the app publicly — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
 5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
 The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and `/api/m/print` rate limit both live in process-local memory.
@@ -119,7 +121,7 @@ CI runs both on push + PR (see [.github/workflows/ci.yml](.github/workflows/ci.y
 - **Backend** · Python 3.12 · Flask · gunicorn · python-escpos · Pillow · SQLite (WAL)
 - **Frontend** · vanilla JS, no build step
 - **Auth** · werkzeug scrypt for passwords, signed-cookie sessions for friends, bearer token for owner
-- **Hosting** · Raspberry Pi + Tailscale (serve for `/`, funnel for `/m/`)
+- **Hosting** · Raspberry Pi + Tailscale Funnel (app-level tailnet gating via identity headers)
 
 ---
 

@@ -25,6 +25,7 @@ _TMP = tempfile.mkdtemp(prefix="tp-auth-test-")
 os.environ["DATA_DIR"] = _TMP
 os.environ.setdefault("ADMIN_TOKEN", "test-token-please-replace")
 os.environ.setdefault("DRY_RUN", "true")
+os.environ.setdefault("DEV_BYPASS_TAILNET", "true")
 
 # Ensure project root is importable when this script is invoked directly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

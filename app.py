@@ -16,6 +16,7 @@ import config
 from auth import auth_bp
 from auth import db as auth_db
 from auth.session import current_user, require_admin, require_allowed, require_owner
+from auth.tailnet import require_tailnet
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
@@ -43,6 +44,7 @@ auth_db.init()
 
 
 @app.route("/")
+@require_tailnet
 def index():
     return render_template(
         "index.html",
@@ -100,6 +102,7 @@ def _safe(handler: Callable[[], Any]):
 # ---------- text composer ----------
 
 @app.post("/api/preview")
+@require_tailnet
 @require_owner
 def preview():
     body = (request.get_json(silent=True) or {}).get("body", "")
@@ -107,6 +110,7 @@ def preview():
 
 
 @app.post("/api/preview/rich")
+@require_tailnet
 @require_owner
 def preview_rich():
     def run():
@@ -121,6 +125,7 @@ def preview_rich():
 
 
 @app.post("/api/print/text")
+@require_tailnet
 @require_owner
 def print_text():
     def run():
@@ -140,6 +145,7 @@ def print_text():
 # ---------- image ----------
 
 @app.post("/api/image/preview")
+@require_tailnet
 @require_owner
 def image_preview():
     def run():
@@ -161,6 +167,7 @@ def image_preview():
 
 
 @app.post("/api/print/image")
+@require_tailnet
 @require_owner
 def print_image():
     def run():
@@ -191,6 +198,7 @@ def print_image():
 # ---------- widget routes ----------
 
 @app.post("/api/print/quote")
+@require_tailnet
 @require_owner
 def print_quote():
     def run():
@@ -200,6 +208,7 @@ def print_quote():
 
 
 @app.post("/api/print/joke")
+@require_tailnet
 @require_owner
 def print_joke():
     def run():
@@ -209,6 +218,7 @@ def print_joke():
 
 
 @app.post("/api/print/weather")
+@require_tailnet
 @require_owner
 def print_weather():
     def run():
@@ -221,6 +231,7 @@ def print_weather():
 
 
 @app.post("/api/print/dice")
+@require_tailnet
 @require_owner
 def print_dice():
     def run():
@@ -234,6 +245,7 @@ def print_dice():
 
 
 @app.post("/api/print/todo")
+@require_tailnet
 @require_owner
 def print_todo():
     def run():
@@ -250,6 +262,7 @@ def print_todo():
 
 
 @app.post("/api/print/receipt")
+@require_tailnet
 @require_owner
 def print_receipt():
     def run():
@@ -268,6 +281,7 @@ def print_receipt():
 
 
 @app.post("/api/print/label")
+@require_tailnet
 @require_owner
 def print_label():
     def run():
@@ -281,6 +295,7 @@ def print_label():
 
 
 @app.post("/api/print/ascii")
+@require_tailnet
 @require_owner
 def print_ascii():
     def run():
@@ -291,6 +306,7 @@ def print_ascii():
 
 
 @app.post("/api/print/now")
+@require_tailnet
 @require_owner
 def print_now():
     def run():
@@ -302,6 +318,7 @@ def print_now():
 # ---------- codes (QR / barcodes) ----------
 
 @app.post("/api/code/qr/preview")
+@require_tailnet
 @require_owner
 def qr_preview():
     def run():
@@ -319,6 +336,7 @@ def qr_preview():
 
 
 @app.post("/api/print/qr")
+@require_tailnet
 @require_owner
 def print_qr():
     def run():
@@ -338,6 +356,7 @@ def print_qr():
 
 
 @app.post("/api/code/barcode/preview")
+@require_tailnet
 @require_owner
 def barcode_preview():
     def run():
@@ -357,6 +376,7 @@ def barcode_preview():
 
 
 @app.post("/api/print/barcode")
+@require_tailnet
 @require_owner
 def print_barcode():
     def run():
@@ -379,6 +399,7 @@ def print_barcode():
 
 
 @app.get("/api/code/barcode/types")
+@require_tailnet
 @require_owner
 def barcode_types():
     return jsonify({"ok": True,
@@ -389,6 +410,7 @@ def barcode_types():
 # ---------- hardware controls ----------
 
 @app.post("/api/hw/cash_drawer")
+@require_tailnet
 @require_owner
 def hw_cash_drawer():
     def run():
@@ -401,6 +423,7 @@ def hw_cash_drawer():
 
 
 @app.post("/api/hw/beep")
+@require_tailnet
 @require_owner
 def hw_beep():
     def run():
@@ -414,6 +437,7 @@ def hw_beep():
 
 
 @app.post("/api/hw/feed")
+@require_tailnet
 @require_owner
 def hw_feed():
     def run():
@@ -425,6 +449,7 @@ def hw_feed():
 
 
 @app.post("/api/hw/cut")
+@require_tailnet
 @require_owner
 def hw_cut():
     def run():
@@ -440,6 +465,7 @@ def hw_cut():
 
 
 @app.post("/api/hw/reset")
+@require_tailnet
 @require_owner
 def hw_reset():
     def run():
@@ -450,6 +476,7 @@ def hw_reset():
 
 
 @app.post("/api/hw/self_test")
+@require_tailnet
 @require_owner
 def hw_self_test():
     def run():
@@ -460,6 +487,7 @@ def hw_self_test():
 
 
 @app.post("/api/hw/density")
+@require_tailnet
 @require_owner
 def hw_density():
     def run():
@@ -471,6 +499,7 @@ def hw_density():
 
 
 @app.post("/api/hw/codepage")
+@require_tailnet
 @require_owner
 def hw_codepage():
     def run():
@@ -482,6 +511,7 @@ def hw_codepage():
 
 
 @app.get("/api/hw/codepages")
+@require_tailnet
 @require_owner
 def hw_codepages():
     return jsonify({
@@ -491,6 +521,7 @@ def hw_codepages():
 
 
 @app.post("/api/hw/status")
+@require_tailnet
 @require_owner
 def hw_status():
     def run():
@@ -510,6 +541,7 @@ _MAX_RAW_BYTES = 4096
 
 
 @app.post("/api/hw/raw")
+@require_tailnet
 @require_owner
 def hw_raw():
     def run():
@@ -527,6 +559,7 @@ def hw_raw():
 
 
 @app.get("/api/hw/led/protocols")
+@require_tailnet
 @require_owner
 def hw_led_protocols():
     return jsonify({
@@ -539,6 +572,7 @@ def hw_led_protocols():
 
 
 @app.post("/api/hw/led/preview")
+@require_tailnet
 @require_owner
 def hw_led_preview():
     def run():
@@ -554,6 +588,7 @@ def hw_led_preview():
 
 
 @app.post("/api/hw/led")
+@require_tailnet
 @require_owner
 def hw_led():
     def run():
@@ -582,6 +617,7 @@ def hw_led():
 
 
 @app.get("/api/hw/cheatsheet")
+@require_tailnet
 @require_owner
 def hw_cheatsheet():
     return jsonify({
@@ -641,6 +677,7 @@ def friend_print():
 # ---------- admin (Bearer-token gated) ----------
 
 @app.get("/api/admin/users")
+@require_tailnet
 @require_admin
 def admin_list_users():
     status = request.args.get("status")
@@ -652,6 +689,7 @@ def admin_list_users():
 
 
 @app.post("/api/admin/users/<int:user_id>/approve")
+@require_tailnet
 @require_admin
 def admin_approve_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -661,6 +699,7 @@ def admin_approve_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/revoke")
+@require_tailnet
 @require_admin
 def admin_revoke_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -670,6 +709,7 @@ def admin_revoke_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/delete")
+@require_tailnet
 @require_admin
 def admin_delete_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -679,6 +719,7 @@ def admin_delete_user(user_id: int):
 
 
 @app.get("/api/admin/messages")
+@require_tailnet
 @require_admin
 def admin_list_messages():
     limit = max(1, min(200, int(request.args.get("limit", 20))))
