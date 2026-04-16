@@ -77,6 +77,72 @@ def test_friend_print_requires_session(client):
     assert r.status_code == 401
 
 
+def test_friend_history_requires_session(client):
+    r = client.get("/api/m/history")
+    assert r.status_code == 401
+
+
+def test_friend_history_rejects_pending_user(client):
+    """A pending friend is signed-in but not allowed — the endpoint has to
+    return 403 (not 401, not the history itself)."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("hist_pending", "hunter2hunter")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.get("/api/m/history")
+    assert r.status_code == 403
+
+
+def test_friend_history_returns_own_messages_only(client):
+    """A friend's history only contains their own prints — never anyone
+    else's, regardless of timestamps."""
+    from auth import db as auth_db, session as sess
+
+    alice = auth_db.create_pending_user("hist_alice", "hunter2hunter")
+    bob = auth_db.create_pending_user("hist_bob", "hunter2hunter")
+    auth_db.set_status(alice["id"], "allowed")
+    auth_db.set_status(bob["id"], "allowed")
+    auth_db.log_message(alice["id"], "alice one")
+    auth_db.log_message(bob["id"], "bob one")
+    auth_db.log_message(alice["id"], "alice two")
+
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = alice["id"]
+
+    r = client.get("/api/m/history")
+    assert r.status_code == 200
+    msgs = r.get_json()["messages"]
+    bodies = [m["body"] for m in msgs]
+    assert "alice one" in bodies
+    assert "alice two" in bodies
+    assert "bob one" not in bodies
+    # Newest first: alice two was logged after alice one.
+    assert bodies.index("alice two") < bodies.index("alice one")
+    # Each row has the shape the UI expects.
+    for m in msgs:
+        assert set(m.keys()) == {"id", "body", "printed_at"}
+
+
+def test_friend_history_limit_is_clamped(client):
+    """Limit is sanitized — no way to ask for 10_000 rows or a negative
+    limit and no way to crash the handler with a non-numeric value."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("hist_clamp", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    # Non-numeric → handled gracefully.
+    r = client.get("/api/m/history?limit=banana")
+    assert r.status_code == 200
+    # Too big → capped at 200 (no crash, returns JSON).
+    r = client.get("/api/m/history?limit=999999")
+    assert r.status_code == 200
+
+
 def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
     """End-to-end: if the USB printer is unreachable mid-print, the friend
     gets a clean 503 with our friendly message — not a 500 traceback."""

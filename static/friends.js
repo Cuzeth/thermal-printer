@@ -61,7 +61,13 @@ function applyMe(user) {
     return show("pending");
   }
   if (user.status === "blocked") return show("blocked");
-  if (user.status === "allowed") return show("allowed");
+  if (user.status === "allowed") {
+    show("allowed");
+    // Pull the persistent history now that we know who you are. Best-effort —
+    // the form still works even if this fetch blows up.
+    loadHistory().catch((err) => console.warn("history load failed:", err));
+    return;
+  }
   show("guest");
 }
 
@@ -126,27 +132,68 @@ async function updatePreview() {
   }
 }
 
-// ---------- send message ----------
-
-const recents = [];
-function pushRecent(body) {
-  recents.unshift({ body, at: new Date() });
-  if (recents.length > 5) recents.pop();
-  const list = $("#recents-list");
-  const items = recents.map((r) => {
-    const li = document.createElement("li");
-    li.textContent = r.body;
-    return li;
+// ---------- history (server-backed, persists across sessions) ----------
+//
+// SQLite returns "YYYY-MM-DD HH:MM:SS" in UTC; show the local short form.
+function fmtWhen(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.replace(" ", "T") + "Z");
+  if (isNaN(d)) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
-  list.replaceChildren(...items);
-  $("#recents").hidden = recents.length === 0;
 }
+
+function historyItem(msg) {
+  const li = document.createElement("li");
+  li.className = "history-item";
+  li.dataset.id = msg.id;
+
+  const when = document.createElement("div");
+  when.className = "history-when dim";
+  when.textContent = fmtWhen(msg.printed_at);
+
+  const body = document.createElement("pre");
+  body.className = "history-body";
+  body.textContent = msg.body;
+
+  li.append(when, body);
+  // Click-to-restore: drops the body back into the composer so the friend
+  // can tweak + reprint without retyping. No auto-submit.
+  li.addEventListener("click", () => {
+    const ta = $("#msg-body");
+    ta.value = msg.body;
+    $("#msg-count").textContent = `${msg.body.length} / 800`;
+    ta.focus();
+    schedulePreview();
+    ta.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  return li;
+}
+
+async function loadHistory() {
+  const list = $("#history-list");
+  const empty = $("#history-empty");
+  try {
+    const j = await getJSON("/api/m/history?limit=50");
+    if (!j.ok) throw new Error(j.error || "couldn't load history");
+    const items = (j.messages || []).map(historyItem);
+    list.replaceChildren(...items);
+    empty.hidden = items.length > 0;
+  } catch (err) {
+    // Non-fatal: show a lightweight error row but leave the form usable.
+    list.replaceChildren();
+    empty.hidden = false;
+    empty.textContent = "couldn't load history: " + err.message;
+  }
+}
+
+// ---------- send message ----------
 
 async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
   await postJSON("/api/m/print", { body });
-  pushRecent(body);
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
   setPreviewPlaceholder("start typing to see how it'll print…");
@@ -155,6 +202,8 @@ async function sendMessage() {
   document.body.appendChild(flash);
   setTimeout(() => flash.remove(), 600);
   toast("printed", "ok");
+  // Pull the fresh row (+ its canonical server timestamp) into the list.
+  loadHistory().catch((err) => console.warn("history refresh failed:", err));
 }
 
 // ---------- wiring ----------
@@ -219,6 +268,15 @@ $("#msg-form").addEventListener("submit", async (e) => {
 $("#msg-body").addEventListener("input", (e) => {
   $("#msg-count").textContent = `${e.target.value.length} / 800`;
   schedulePreview();
+});
+
+$("#history-refresh").addEventListener("click", async () => {
+  try {
+    await loadHistory();
+    toast("history refreshed", "ok");
+  } catch (err) {
+    toast(err.message, "err");
+  }
 });
 
 $("#recheck").addEventListener("click", async () => {

@@ -172,9 +172,14 @@
       </div>
     </form>
 
-    <div class="recents" id="recents" hidden>
-      <h2>just sent</h2>
-      <ul id="recents-list"></ul>
+    <div class="history" id="history">
+      <div class="history-head">
+        <h2>your history</h2>
+        <button type="button" class="ghost tiny" id="history-refresh" title="reload from server">refresh</button>
+      </div>
+      <p class="history-hint dim">everything you've ever printed from this account. tap one to load it back into the box above.</p>
+      <ul id="history-list" class="history-list"></ul>
+      <p class="history-empty dim" id="history-empty" hidden>nothing yet — send your first receipt above.</p>
     </div>
   </section>
 

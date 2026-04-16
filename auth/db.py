@@ -162,10 +162,28 @@ def log_message(user_id: int, body: str) -> int:
 
 def list_messages(limit: int = 20) -> list[dict]:
     with db() as conn:
+        # Tie-break on id so same-second prints sort newest-first too.
         rows = conn.execute(
             "SELECT m.id, m.body, m.printed_at, u.username "
             "FROM messages m JOIN users u ON u.id = m.user_id "
-            "ORDER BY m.printed_at DESC LIMIT ?",
+            "ORDER BY m.printed_at DESC, m.id DESC LIMIT ?",
             (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
+    """Every print this user has made, newest first. Powers the personal
+    history panel on /m/ — no JOIN to users (it's always the caller's own
+    row), no username field in the result.
+
+    `printed_at` is second-precision in SQLite, so two rapid prints can tie.
+    We break the tie with `id DESC` to keep the newest-first ordering stable
+    — otherwise a bursty double-print would show in the wrong order."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id, body, printed_at FROM messages "
+            "WHERE user_id = ? ORDER BY printed_at DESC, id DESC LIMIT ?",
+            (user_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]

@@ -223,19 +223,54 @@ textarea { resize: vertical; min-height: 120px; }
   text-align: center;
 }
 
-/* RECENTS */
-.recents { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
-.recents ul { list-style: none; margin: 0; padding: 0; }
-.recents li {
+/* HISTORY — server-backed list of everything this friend has printed. */
+.history { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.history-head h2 { margin: 0; }
+.history-hint { font-size: 12px; margin: 0 0 12px; }
+.history-list { list-style: none; margin: 0; padding: 0; }
+.history-item {
   background: var(--bg-2);
+  border: 1px solid var(--line);
   border-left: 2px solid var(--accent);
   padding: 8px 12px;
   margin-bottom: 6px;
   border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  transition: border-color .15s ease, transform .08s ease;
+}
+.history-item:hover {
+  border-color: var(--accent);
+}
+.history-item:active {
+  transform: translateY(1px);
+}
+.history-when {
+  font-size: 11px;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.history-body {
+  margin: 0;
+  font-family: inherit;
   font-size: 13px;
+  line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+  /* Keep long ASCII-art prints from blowing up the card. */
+  max-height: 9em;
+  overflow: hidden;
+  mask-image: linear-gradient(180deg, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent);
 }
+.history-empty { font-size: 12px; margin: 8px 0 0; }
 
 /* PRINTED flash effect after a successful send */
 .printed-flash {

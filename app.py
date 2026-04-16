@@ -701,6 +701,26 @@ def friend_print():
     return jsonify({"ok": True})
 
 
+@app.get("/api/m/history")
+@require_allowed
+def friend_history():
+    """Return the signed-in friend's own print history, newest first.
+
+    Scoped to `current_user()["id"]` — a friend can't peek at anyone else's
+    messages by passing a user id in the query string. Limit mirrors the
+    admin endpoint: clamped 1..200, default 50.
+    """
+    user = current_user()
+    try:
+        limit = max(1, min(200, int(request.args.get("limit", 50))))
+    except (TypeError, ValueError):
+        limit = 50
+    return jsonify({
+        "ok": True,
+        "messages": auth_db.list_messages_for_user(user["id"], limit=limit),
+    })
+
+
 # ---------- admin (Bearer-token gated) ----------
 
 @app.get("/api/admin/users")
