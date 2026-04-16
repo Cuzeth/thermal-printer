@@ -66,7 +66,7 @@ function applyMe(user) {
 }
 
 async function refreshMe() {
-  const j = await getJSON("/m/api/me");
+  const j = await getJSON("/api/m/me");
   applyMe(j.user);
 }
 
@@ -89,7 +89,7 @@ function pushRecent(body) {
 async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
-  await postJSON("/m/api/print", { body });
+  await postJSON("/api/m/print", { body });
   pushRecent(body);
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
@@ -119,7 +119,7 @@ $("#register-form").addEventListener("submit", async (e) => {
   const btn = e.submitter || e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   try {
-    const j = await postJSON("/m/api/auth/register", { username, password });
+    const j = await postJSON("/api/m/auth/register", { username, password });
     applyMe(j.user);
     toast("account created — waiting for approval", "ok");
   } catch (err) {
@@ -136,7 +136,7 @@ $("#login-form").addEventListener("submit", async (e) => {
   const btn = e.submitter || e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   try {
-    const j = await postJSON("/m/api/auth/login", { username, password });
+    const j = await postJSON("/api/m/auth/login", { username, password });
     applyMe(j.user);
     toast("signed in", "ok");
   } catch (err) {
@@ -173,7 +173,7 @@ $("#recheck").addEventListener("click", async () => {
 
 $("#logout").addEventListener("click", async () => {
   try {
-    await postJSON("/m/api/auth/logout", {});
+    await postJSON("/api/m/auth/logout", {});
     me = null;
     applyMe(null);
   } catch (e) {

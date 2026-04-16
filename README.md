@@ -78,7 +78,7 @@ Short version:
 4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Use `tailscale serve` for the main GUI (tailnet-only) and `tailscale funnel --set-path=/m` for the friends page (public via a `*.ts.net` URL).
 5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
-The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and `/m/api/print` rate limit both live in process-local memory.
+The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and `/api/m/print` rate limit both live in process-local memory.
 
 Full step-by-step (udev, Tailscale wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
 
@@ -144,7 +144,7 @@ features/
 auth/
   db.py                 SQLite schema + CRUD (users, messages)
   session.py            require_allowed / require_admin / require_owner
-  blueprint.py          /m/api/auth/{register,login,logout} + /me
+  blueprint.py          /api/m/auth/{register,login,logout} + /me
 templates/
   index.html            main GUI (tabs)
   friends.html          public friends page
