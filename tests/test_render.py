@@ -85,6 +85,39 @@ def test_mixed_scripts_render():
     assert img.height > 20
 
 
+def test_arabic_is_reordered_visually():
+    """Arabic prints right-to-left. `_shape_bidi` converts the logical-order
+    input into visual order *before* measurement, so the string that hits
+    the font is already reversed."""
+    logical = "مساء الخير"
+    visual = render._shape_bidi(logical)
+    # When arabic-reshaper + python-bidi are available, reshape maps letters
+    # into the presentation-form blocks (U+FB50–U+FDFF / U+FE70–U+FEFF) and
+    # bidi reverses the run. In CI without the libs installed we degrade to
+    # a no-op; either way the renderer must not crash.
+    img = _render(logical)
+    assert img.height > 20
+    try:
+        import arabic_reshaper  # noqa: F401
+        import bidi  # noqa: F401
+    except ImportError:
+        return
+    # Libraries present — visual output should differ from logical and
+    # contain at least one presentation-form codepoint.
+    assert visual != logical
+    assert any(0xFB50 <= ord(c) <= 0xFDFF or 0xFE70 <= ord(c) <= 0xFEFF
+               for c in visual)
+
+
+def test_symbols_and_hieroglyph_route_without_crashing():
+    """Astral-plane symbols (music, Egyptian) get their own font route
+    via `_script`. We don't assert which font wins — candidates vary by
+    OS — only that the pipeline survives them."""
+    body = "𓆏\n𝄐\n₍𝄐 ̫͡ 𝄐₎"
+    img = _render(body)
+    assert img.height > 20
+
+
 def test_markup_vocab_all_paths():
     """Every directive exercised at least once — no crashes, valid image."""
     body = (

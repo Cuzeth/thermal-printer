@@ -6,6 +6,12 @@ pyusb>=1.2.1
 qrcode>=7.4.2
 python-barcode>=0.15.1
 gunicorn>=21.0
+# Arabic shaping + bidirectional reordering. PIL/FreeType draws
+# characters in the order they appear in the string, so without these
+# libraries Arabic prints letter-reversed. arabic-reshaper picks the
+# joining forms, python-bidi applies UAX #9 to produce visual order.
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
 
 # dev-only (CI runs pytest; real install is fine too — few MB):
 # pytest

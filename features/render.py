@@ -13,10 +13,19 @@ Design decisions:
  - Everything is thresholded to 1-bit at 128 for crisp edges (dithering fuzzes
    type — we dither only photos, which live in features/image.py).
  - Per-character font fallback: PIL has no built-in fallback, so we split
-   each text run by Unicode script (CJK / everything-else) and draw each
-   sub-run with whichever font actually has glyphs for it. Requires
-   `fonts-noto-cjk` on the Pi for Chinese/Japanese/Korean, and the full
-   `fonts-dejavu` package (not `-core`) for braille and other wide Unicode.
+   each text run by Unicode script (latin / CJK / arabic / braille / symbols
+   / hieroglyph) and draw each sub-run with whichever font actually has
+   glyphs for it. Requires `fonts-noto-cjk` on the Pi for CJK, and
+   `fonts-noto-core` for Arabic + broad symbol coverage; the full
+   `fonts-dejavu` (not `-core`) carries the braille patterns.
+ - RTL scripts (Arabic): PIL/FreeType draws characters in the order
+   they appear in the string, left-to-right. Without shaping that means an
+   Arabic sentence prints with its letters mirrored across the word — the
+   text reads backwards. We pre-process RTL runs with `arabic-reshaper`
+   (to pick the initial/medial/final glyph forms) and `python-bidi` (UAX #9
+   reorder to visual order) before any measurement or drawing. If those
+   packages aren't installed the renderer still works — Arabic just prints
+   in logical order, same as before.
 """
 
 from __future__ import annotations
@@ -74,6 +83,47 @@ _FONT_CANDIDATES: dict[str, list[tuple[str, int]]] = {
         ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0),
         ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.otf", 0),
     ],
+    # Arabic (as the best Mac coverage is Arial Unicode which
+    # is listed among the Arabic candidates). Used together with BiDi +
+    # reshaping in `_shape_bidi` so letters join and words read right-to-left.
+    "arabic_regular": [
+        ("/System/Library/Fonts/SFArabic.ttf", 0),
+        ("/System/Library/Fonts/GeezaPro.ttc", 0),
+        ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+    ],
+    "arabic_bold": [
+        ("/System/Library/Fonts/SFArabic.ttf", 0),
+        ("/System/Library/Fonts/GeezaPro.ttc", 1),
+        ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+    ],
+    # Braille Patterns (U+2800–U+28FF). Most UI fonts skip this block, so
+    # without an explicit route braille art prints as rows of .notdef boxes.
+    # Apple Symbols renders the dots as crisp filled circles; DejaVu Sans
+    # does solid rectangles, both legible on a thermal printer.
+    "braille": [
+        ("/System/Library/Fonts/Apple Symbols.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+        ("/System/Library/Fonts/Apple Braille.ttf", 0),
+    ],
+    # Catch-all for "miscellaneous Unicode": music symbols, math alphanumerics,
+    # dingbats, misc technical, emoji-ish glyphs. Apple Symbols on macOS has
+    # surprisingly broad coverage including the astral-plane symbol blocks.
+    "symbols": [
+        ("/System/Library/Fonts/Apple Symbols.ttf", 0),
+        ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+    ],
+    # Egyptian Hieroglyphs (U+13000–U+1342F). Separate font on every platform.
+    "hieroglyph": [
+        ("/System/Library/Fonts/Supplemental/NotoSansEgyptianHieroglyphs-Regular.ttf", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansEgyptianHieroglyphs-Regular.ttf", 0),
+    ],
 }
 
 _font_cache: dict[tuple[str, int], Optional[ImageFont.FreeTypeFont]] = {}
@@ -119,6 +169,16 @@ def _script(ch: str) -> str:
     if not ch:
         return "latin"
     c = ord(ch)
+    # Hebrew (routed with Arabic — Arial Unicode covers both on Mac, Noto on Pi).
+    if 0x0590 <= c <= 0x05FF:
+        return "arabic"
+    # Arabic: main block, supplement, extended-A, presentation forms A/B.
+    # After reshaping, characters land in the presentation-form ranges, so
+    # those must route the same way.
+    if (0x0600 <= c <= 0x06FF or 0x0750 <= c <= 0x077F or
+            0x08A0 <= c <= 0x08FF or 0xFB50 <= c <= 0xFDFF or
+            0xFE70 <= c <= 0xFEFF):
+        return "arabic"
     # Hiragana / Katakana / Katakana-Phonetic
     if 0x3040 <= c <= 0x30FF or 0x31F0 <= c <= 0x31FF:
         return "cjk"
@@ -137,22 +197,101 @@ def _script(ch: str) -> str:
     # CJK Extensions B–F (supplementary plane)
     if 0x20000 <= c <= 0x2FA1F:
         return "cjk"
+    # Braille Patterns — dedicated block, very few fonts cover it.
+    if 0x2800 <= c <= 0x28FF:
+        return "braille"
+    # Egyptian Hieroglyphs (SMP)
+    if 0x13000 <= c <= 0x1342F:
+        return "hieroglyph"
+    # Miscellaneous SMP symbol blocks: Byzantine/Western Musical Symbols,
+    # Math Alphanumeric Symbols, Misc Symbols and Pictographs, etc.
+    # Menlo/Helvetica don't reach into the astral plane, so anything up
+    # there that isn't CJK/hieroglyph goes to the "symbols" font.
+    if 0x10000 <= c <= 0x1FFFF:
+        return "symbols"
     return "latin"
 
 
 def _font_for(base_kind: str, script: str, size: int) -> ImageFont.FreeTypeFont:
     """Return a font that actually has glyphs for this script.
 
-    For CJK we route to the CJK candidates; if they're missing on this host
-    (e.g. local dev without `fonts-noto-cjk`), we fall back to the base font
-    so the char at least renders as .notdef instead of crashing.
+    Scripts that have dedicated font candidates (CJK, Arabic, braille,
+    symbols, hieroglyph) try those first; if the host doesn't have any
+    of them (e.g. CI without `fonts-noto-cjk`), we fall back to the base
+    font so the char at least renders as .notdef instead of crashing.
     """
+    route: Optional[str] = None
     if script == "cjk":
-        cjk_kind = "cjk_bold" if base_kind.endswith("_bold") else "cjk_regular"
-        f = _font_try(cjk_kind, size)
+        route = "cjk_bold" if base_kind.endswith("_bold") else "cjk_regular"
+    elif script == "arabic":
+        route = "arabic_bold" if base_kind.endswith("_bold") else "arabic_regular"
+    elif script == "braille":
+        route = "braille"
+    elif script == "symbols":
+        route = "symbols"
+    elif script == "hieroglyph":
+        route = "hieroglyph"
+    if route:
+        f = _font_try(route, size)
         if f is not None:
             return f
     return _font(base_kind, size)
+
+
+# ---------- RTL shaping + bidi reorder ----------
+
+_bidi_loaded = False
+_reshape_fn = None
+_bidi_fn = None
+
+
+def _load_bidi() -> None:
+    """Lazy-load arabic-reshaper and python-bidi. Both optional — if
+    either import fails we silently degrade (letters stay in logical order,
+    which is how the renderer behaved before these libraries arrived)."""
+    global _bidi_loaded, _reshape_fn, _bidi_fn
+    if _bidi_loaded:
+        return
+    _bidi_loaded = True
+    try:
+        import arabic_reshaper  # type: ignore
+        _reshape_fn = arabic_reshaper.reshape
+    except Exception:
+        _reshape_fn = None
+    try:
+        try:
+            from bidi import get_display  # python-bidi ≥ 0.5
+        except ImportError:
+            from bidi.algorithm import get_display  # older python-bidi
+        _bidi_fn = get_display
+    except Exception:
+        _bidi_fn = None
+
+
+def _has_rtl(text: str) -> bool:
+    for ch in text:
+        c = ord(ch)
+        if (0x0590 <= c <= 0x05FF or 0x0600 <= c <= 0x06FF or
+                0x0750 <= c <= 0x077F or 0x08A0 <= c <= 0x08FF or
+                0xFB50 <= c <= 0xFDFF or 0xFE70 <= c <= 0xFEFF):
+            return True
+    return False
+
+
+def _shape_bidi(text: str) -> str:
+    """Shape + reorder any Arabic text into visual order.
+
+    Returns `text` unchanged when there are no RTL characters, so the fast
+    path for normal Latin/CJK content pays nothing.
+    """
+    if not text or not _has_rtl(text):
+        return text
+    _load_bidi()
+    if _reshape_fn is not None:
+        text = _reshape_fn(text)
+    if _bidi_fn is not None:
+        text = _bidi_fn(text)
+    return text
 
 
 def _wrap_tokens(text: str) -> list[str]:
@@ -325,25 +464,28 @@ class Renderer:
             # layer which splits the body on this line.
             self._scissors()
             return
+        # For text-bearing branches we BiDi-shape the *content* (without the
+        # markup prefix) so shape_bidi doesn't have to reason about `# `, `- `
+        # and friends when deciding the paragraph's base direction.
         if line.startswith("# "):
-            self._heading(line[2:].strip(), HEADING, upper=True)
+            self._heading(_shape_bidi(line[2:].strip()), HEADING, upper=True)
             return
         if line.startswith("## "):
-            self._heading(line[3:].strip(), SUBHEADING, upper=False)
+            self._heading(_shape_bidi(line[3:].strip()), SUBHEADING, upper=False)
             return
         if line.startswith("> "):
-            self._spans(_parse_inline(line[2:]), align="center")
+            self._spans(_parse_inline(_shape_bidi(line[2:])), align="center")
             return
         if line.startswith("- "):
-            self._bullet_line(line[2:])
+            self._bullet_line(_shape_bidi(line[2:]))
             return
         if line.startswith("[ ] "):
-            self._checkbox_line(line[4:], checked=False)
+            self._checkbox_line(_shape_bidi(line[4:]), checked=False)
             return
         if line.lower().startswith("[x] "):
-            self._checkbox_line(line[4:], checked=True)
+            self._checkbox_line(_shape_bidi(line[4:]), checked=True)
             return
-        self._spans(_parse_inline(line), align="left")
+        self._spans(_parse_inline(_shape_bidi(line)), align="left")
 
     # ----- blocks -----
 

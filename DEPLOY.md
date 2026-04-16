@@ -57,15 +57,19 @@ sudo apt-get full-upgrade -y
 sudo apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
     libusb-1.0-0-dev libjpeg-dev zlib1g-dev \
-    fonts-dejavu fonts-noto-cjk git curl
+    fonts-dejavu fonts-noto-cjk fonts-noto-core git curl
 ```
 
 `libusb-1.0-0-dev` is what `pyusb` talks to. `libjpeg-dev` and
 `zlib1g-dev` are for Pillow. `fonts-dejavu` (full package, not
 `-core`) is what the rich-text renderer draws Latin/symbols/braille
 with — `-core` ships a stripped subset and braille art prints as boxes.
-`fonts-noto-cjk` gives us Chinese / Japanese / Korean coverage; the
-renderer picks the right font per character automatically.
+`fonts-noto-cjk` gives us Chinese / Japanese / Korean coverage.
+`fonts-noto-core` adds Arabic plus the NotoSansSymbols /
+NotoSansSymbols2 faces, which cover music symbols, math alphanumerics,
+and the miscellaneous astral-plane glyphs friends love to paste
+(fermatas, kaomoji parens, etc.). The renderer picks the right font
+per character automatically.
 
 ---
 
@@ -362,7 +366,8 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
 | Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or funnel isn't set up. Run `tailscale funnel status` and re-run step 9. |
 | Public URL: "couldn't establish a secure connection" / hangs then fails | Funnel cert hasn't provisioned (or went stale after an idle period). Force a refresh: `sudo tailscale cert thermal-printer.<tailnet>.ts.net`. If still failing, `sudo systemctl restart tailscaled && sudo tailscale funnel --bg 5005`. |
-| Friend messages print as rows of boxes / blank where CJK or braille art should be | Missing font glyphs on the Pi. Install the full set: `sudo apt-get install -y fonts-dejavu fonts-noto-cjk && sudo systemctl restart thermal-printer`. The renderer picks fonts per character; if `fonts-noto-cjk` is missing, CJK chars render as `.notdef` boxes; if only `fonts-dejavu-core` is installed, braille art does the same. |
+| Friend messages print as rows of boxes / blank where CJK, Arabic, braille, or music symbols should be | Missing font glyphs on the Pi. Install the full set: `sudo apt-get install -y fonts-dejavu fonts-noto-cjk fonts-noto-core && sudo systemctl restart thermal-printer`. The renderer picks fonts per character; `fonts-noto-cjk` covers CJK, `fonts-noto-core` covers Arabic + Noto Sans Symbols(2) for music/math/misc, and the full `fonts-dejavu` (not `-core`) covers braille. |
+| Arabic prints but reads left-to-right | `arabic-reshaper` / `python-bidi` weren't installed. `.venv/bin/pip install -r requirements.txt && sudo systemctl restart thermal-printer`. The renderer detects RTL runs and applies UAX #9 before drawing; without those libs it falls back to logical-order output. |
 | `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale funnel status` to confirm the proxy is running. |
 | `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
