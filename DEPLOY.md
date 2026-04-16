@@ -181,7 +181,11 @@ unless you know you need to override something.
 
 > You don't need to memorize `ADMIN_TOKEN`. The main GUI reads it from
 > the env and inlines it in the page automatically. Keep it secret —
-> anyone with it can approve/block friends.
+> anyone with it has full console access.
+
+You **don't** need to set `COOKIE_SECURE` — it defaults to `true`,
+which is correct for the Pi (Funnel is HTTPS). Only set it to `false`
+for local HTTP dev on your Mac.
 
 ---
 
@@ -237,9 +241,23 @@ sudo tailscale serve --bg 5005
 sudo tailscale funnel --bg --set-path=/m 5005
 ```
 
-The first `serve` command sets the root path `/` → `http://127.0.0.1:5005`.
-The `funnel` command adds a public override for `/m` pointing at the
-same local port.
+The first `serve` command makes the full app reachable within your
+tailnet at `https://thermal-printer.<tailnet>.ts.net/`. The `funnel`
+command adds a public override for `/m` pointing at the same local port.
+
+**Why one path is enough:** the friends page, its static assets, and
+its API all live under `/m/`:
+
+| URL | What |
+|---|---|
+| `/m/` | friends HTML |
+| `/m/static/*` | CSS + JS |
+| `/m/api/auth/*` | register, login, logout |
+| `/m/api/me` | session check |
+| `/m/api/print` | send a message |
+
+The main console (`/`), its assets (`/static/*`), and private API
+(`/api/*`) stay tailnet-only because they aren't funneled.
 
 > Funnel requires one-time setup in the Tailscale admin console: make
 > sure **MagicDNS** is on, **HTTPS Certificates** is enabled
@@ -291,20 +309,46 @@ Share the `/m/` URL with whoever you want to let in.
 
 ---
 
-## Updating later
+## Updating the app
 
 ```sh
 ssh pi@thermal-printer.local
 cd ~/thermal-printer
+
+# pull latest code
 git pull
+
+# install any new/changed deps
 source .venv/bin/activate
 pip install -r requirements.txt
 deactivate
+
+# restart
 sudo systemctl restart thermal-printer
+
+# verify
+sudo systemctl status thermal-printer    # "active (running)"
+journalctl -u thermal-printer -n 10      # no tracebacks
+curl http://localhost:5005/api/ping       # {"ok": true}
 ```
 
 `data/` is inside the repo but gitignored, so the SQLite DB (users +
 messages) and any DRY_RUN bytes survive `git pull`.
+
+**If you changed Tailscale paths** (unlikely after initial setup), tear
+down and rebuild:
+
+```sh
+sudo tailscale funnel --https=443 off
+sudo tailscale serve --bg 5005
+sudo tailscale funnel --bg --set-path=/m 5005
+```
+
+**One-liner** for quick pulls when nothing changed in `.env` or deps:
+
+```sh
+cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
+```
 
 ---
 
@@ -318,6 +362,8 @@ messages) and any DRY_RUN bytes survive `git pull`.
 | Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or `tailscale funnel status` doesn't list `/m`. Re-run step 9. |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
 | `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. The app auto-renames it to `app.db.bak-*` on first boot — just `sudo systemctl restart thermal-printer` once. |
+| Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and Funnel is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
+| Friends page loads but no CSS/JS (bare HTML) | Funnel path missing. Make sure `tailscale funnel --set-path=/m 5005` is set — everything the friends page needs (static assets, API) lives under `/m/`. |
 | Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some routers. Use the IP from `tailscale ip -4` (the tailnet IP always works once Tailscale is up). |
 
 ---
@@ -335,10 +381,18 @@ tailscale status
 tailscale serve status
 tailscale funnel status
 
-# pull a code change
+# quick update (no dep changes)
+cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
+
+# full update (safe default)
 cd ~/thermal-printer && git pull && \
   .venv/bin/pip install -r requirements.txt && \
   sudo systemctl restart thermal-printer
+
+# rebuild funnel from scratch
+sudo tailscale funnel --https=443 off
+sudo tailscale serve --bg 5005
+sudo tailscale funnel --bg --set-path=/m 5005
 ```
 
 That's it. Deep breath. You're running a Flask app as a systemd
