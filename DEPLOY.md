@@ -367,6 +367,33 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 
 ---
 
+## Shutting down and starting up
+
+**Shut down cleanly:**
+
+```sh
+sudo systemctl stop thermal-printer
+sudo shutdown now
+```
+
+**Start up:** just plug in power. Both the service and Funnel survive
+reboots automatically — `thermal-printer.service` is `enabled` in
+systemd, and Funnel's `--bg` flag persists the config. Verify:
+
+```sh
+sudo systemctl status thermal-printer    # "active (running)"
+tailscale funnel status                  # shows "Funnel on"
+```
+
+If the service didn't come up (e.g. after a power cut), start it
+manually:
+
+```sh
+sudo systemctl start thermal-printer
+```
+
+---
+
 ## Cheat sheet
 
 ```sh
@@ -374,6 +401,10 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 sudo systemctl status thermal-printer
 sudo systemctl restart thermal-printer
 journalctl -u thermal-printer -f
+
+# shutdown / startup
+sudo systemctl stop thermal-printer && sudo shutdown now   # off
+sudo systemctl status thermal-printer                      # verify after boot
 
 # tailscale
 tailscale status
