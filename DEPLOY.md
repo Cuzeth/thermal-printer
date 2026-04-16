@@ -236,8 +236,8 @@ This exposes the **entire** app publicly at
 `https://thermal-printer.<tailnet>.ts.net/` with a real HTTPS cert.
 Private routes are protected at the Flask layer, not the Tailscale
 layer — the app checks for the `Tailscale-User-Login` header that
-Tailscale's proxy injects on tailnet requests and strips from public
-Funnel traffic. Any route decorated with `@require_tailnet` returns
+Tailscale's proxy injects on tailnet requests (the header is absent
+on public Funnel traffic). Any route decorated with `@require_tailnet` returns
 403 to public visitors.
 
 > Funnel requires one-time setup in the Tailscale admin console: make
@@ -358,7 +358,7 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | Service crashes on start with `USBError: Access denied` | Same as above — the app is running as `pi` but the device is still root-only. |
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
 | Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or funnel isn't set up. Run `tailscale funnel status` and re-run step 9. |
-| `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale serve status` to confirm the proxy is running. |
+| `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale funnel status` to confirm the proxy is running. |
 | `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
 | `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. The app auto-renames it to `app.db.bak-*` on first boot — just `sudo systemctl restart thermal-printer` once. |

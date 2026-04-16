@@ -46,7 +46,8 @@ PRINTER_PIXEL_WIDTH = _env_int("PRINTER_PIXEL_WIDTH", 576)
 
 # ---------- runtime ----------
 
-# Bind 127.0.0.1 by default for local dev; the Pi .env sets HOST=0.0.0.0.
+# Must be 127.0.0.1 — the app trusts Tailscale's identity headers, so it
+# must only be reachable via the local proxy. Never bind to 0.0.0.0.
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _env_int("PORT", 5005)
 
