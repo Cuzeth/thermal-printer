@@ -222,10 +222,12 @@ def print_joke():
 @require_owner
 def print_weather():
     def run():
-        loc = (request.get_json(silent=True) or {}).get("location", "").strip()
+        data = request.get_json(silent=True) or {}
+        loc = (data.get("location") or "").strip()
         if not loc:
             raise ValueError("location is required")
-        _print_body(widgets.weather(loc))
+        days = int(data.get("days", 1))
+        _print_body(widgets.weather(loc, days=days))
         return {}
     return _safe(run)
 
@@ -239,7 +241,99 @@ def print_dice():
         _print_body(widgets.roll_dice(
             count=int(data.get("count", 2)),
             sides=int(data.get("sides", 6)),
+            mode=str(data.get("mode", "standard")),
         ))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/hn")
+@require_tailnet
+@require_owner
+def print_hn():
+    def run():
+        data = request.get_json(silent=True) or {}
+        _print_body(widgets.hacker_news(count=int(data.get("count", 5))))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/onthisday")
+@require_tailnet
+@require_owner
+def print_on_this_day():
+    def run():
+        data = request.get_json(silent=True) or {}
+        _print_body(widgets.on_this_day(count=int(data.get("count", 4))))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/calendar")
+@require_tailnet
+@require_owner
+def print_calendar():
+    def run():
+        data = request.get_json(silent=True) or {}
+        year = data.get("year")
+        month = data.get("month")
+        _print_body(widgets.calendar_month(
+            year=int(year) if year else None,
+            month=int(month) if month else None,
+        ))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/countdown")
+@require_tailnet
+@require_owner
+def print_countdown():
+    def run():
+        data = request.get_json(silent=True) or {}
+        _print_body(widgets.countdown(
+            label=str(data.get("label", "")),
+            target_iso=str(data.get("date", "")),
+        ))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/habits")
+@require_tailnet
+@require_owner
+def print_habits():
+    def run():
+        data = request.get_json(silent=True) or {}
+        items = data.get("habits") or []
+        if not isinstance(items, list):
+            raise ValueError("habits must be a list")
+        _print_body(widgets.habit_tracker(
+            habits=[str(h) for h in items],
+            days=int(data.get("days", 7)),
+        ))
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/advice")
+@require_tailnet
+@require_owner
+def print_advice():
+    def run():
+        _print_body(widgets.advice())
+        return {}
+    return _safe(run)
+
+
+@app.post("/api/print/briefing")
+@require_tailnet
+@require_owner
+def print_briefing():
+    def run():
+        data = request.get_json(silent=True) or {}
+        loc = (data.get("location") or "Cupertino").strip() or "Cupertino"
+        _print_body(widgets.morning_briefing(location=loc))
         return {}
     return _safe(run)
 

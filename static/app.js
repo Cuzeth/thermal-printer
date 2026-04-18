@@ -248,23 +248,70 @@ $("#image-print").addEventListener("click", () => {
 
 // ---------- widgets ----------
 
+// Default countdown to 30 days out so the date field isn't empty on load.
+(() => {
+  const d = $("#w-cd-date");
+  if (d && !d.value) {
+    const t = new Date();
+    t.setDate(t.getDate() + 30);
+    d.value = t.toISOString().slice(0, 10);
+  }
+})();
+
+// Live number-of-items sliders.
+["hn", "otd"].forEach((k) => {
+  const s = $(`#w-${k}-count`);
+  const v = $(`#w-${k}-v`);
+  if (s && v) s.addEventListener("input", () => (v.textContent = s.value));
+});
+
 $$("button[data-widget]").forEach((b) => {
   b.addEventListener("click", () => {
     const kind = b.dataset.widget;
     guard(async () => {
       if (kind === "weather") {
-        await postJSON("/api/print/weather", { location: $("#w-loc").value });
+        await postJSON("/api/print/weather", {
+          location: $("#w-loc").value,
+          days: Number(b.dataset.days || 1),
+        });
       } else if (kind === "dice") {
         await postJSON("/api/print/dice", {
           count: Number($("#w-dice-count").value),
           sides: Number($("#w-dice-sides").value),
+          mode: b.dataset.mode || "standard",
         });
       } else if (kind === "ascii") {
         await postJSON("/api/print/ascii", { name: $("#w-ascii").value });
+      } else if (kind === "briefing") {
+        await postJSON("/api/print/briefing", {
+          location: $("#w-brief-loc").value,
+        });
+      } else if (kind === "hn") {
+        await postJSON("/api/print/hn", {
+          count: Number($("#w-hn-count").value),
+        });
+      } else if (kind === "onthisday") {
+        await postJSON("/api/print/onthisday", {
+          count: Number($("#w-otd-count").value),
+        });
+      } else if (kind === "calendar") {
+        await postJSON("/api/print/calendar", {
+          year: Number($("#w-cal-year").value) || null,
+          month: Number($("#w-cal-month").value) || null,
+        });
+      } else if (kind === "countdown") {
+        await postJSON("/api/print/countdown", {
+          label: $("#w-cd-label").value,
+          date: $("#w-cd-date").value,
+        });
+      } else if (kind === "habits") {
+        const habits = $("#w-habits").value.split("\n")
+          .map((s) => s.trim()).filter(Boolean);
+        await postJSON("/api/print/habits", { habits });
       } else {
         await postJSON(`/api/print/${kind}`, {});
       }
-    }, "printing…");
+    }, kind === "briefing" ? "printing briefing…" : "printing…");
   });
 });
 

@@ -254,7 +254,7 @@ button.ghost {
 
 .widgets {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   margin-top: 10px;
 }
@@ -266,11 +266,103 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: border-color .12s ease, transform .12s ease, box-shadow .15s ease;
 }
-.wid h3 { margin: 0; font-size: 14px; }
+.wid:hover {
+  border-color: rgba(247,180,44,.35);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(247,180,44,.08);
+}
+.wid h3 {
+  margin: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .wid p { margin: 0; color: var(--dim); font-size: 12px; }
-.wid input, .wid select { margin-top: 4px; }
+.wid input, .wid select, .wid textarea { margin-top: 4px; }
 .wid button { margin-top: auto; }
+.wid label { margin-top: 6px; }
+.wid .tiny { padding: 5px 10px; font-size: 10px; }
+.wid .muted.tiny { margin-top: -2px; font-size: 10px; opacity: .8; }
+
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* Category section titles break the grid into scannable groups. */
+.wid-section {
+  margin: 22px 0 6px 0;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+/* Little origin-of-data chip next to each widget title. */
+.chip {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: rgba(255,255,255,.02);
+  font-weight: 600;
+}
+.chip-live {
+  color: var(--accent);
+  border-color: rgba(247,180,44,.4);
+  background: rgba(247,180,44,.08);
+}
+.chip-offline {
+  color: var(--dim);
+}
+.chip-hero {
+  color: #1a1205;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+  border-color: transparent;
+}
+
+/* Hero card: sets morning briefing apart from the small-tile grid. */
+.wid-hero {
+  background:
+    radial-gradient(600px 240px at 10% -20%, rgba(247,180,44,.14), transparent 60%),
+    var(--bg-2);
+  border-color: rgba(247,180,44,.28);
+  padding: 18px 20px;
+  margin-top: 6px;
+}
+.wid-hero:hover {
+  border-color: rgba(247,180,44,.5);
+}
+.wid-hero .wid-head h3 { font-size: 15px; }
+.wid-hero .wid-head p {
+  margin-top: 4px;
+  color: var(--ink);
+  opacity: .75;
+  max-width: 640px;
+}
+.wid-hero .grid2 {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 12px;
+}
+.hero-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.hero-actions button { padding: 11px 22px; }
 
 /* ---------- labs (details) ---------- */
 

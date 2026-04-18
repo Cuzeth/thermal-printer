@@ -120,46 +120,135 @@ thanks for reading</textarea>
     <!-- Widgets tab -->
     <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
       <h2>Widgets</h2>
-      <p class="help">One-click prints. Some pull live data from the internet.</p>
+      <p class="help">One-click prints. Some pull live data; the rest work offline.</p>
 
+      <!-- Hero: morning briefing combines several live widgets into one scroll. -->
+      <article class="wid wid-wide wid-hero">
+        <div class="wid-head">
+          <h3>Morning briefing <span class="chip chip-hero">combo</span></h3>
+          <p>Weather + top Hacker News + on-this-day history + a quote, printed as one long tear-off scroll. Perfect with coffee.</p>
+        </div>
+        <div class="grid2">
+          <label>Location
+            <input type="text" id="w-brief-loc" placeholder="city, airport, or zip" value="San Francisco" />
+          </label>
+          <div class="hero-actions">
+            <button data-widget="briefing" class="primary">Print briefing</button>
+          </div>
+        </div>
+      </article>
+
+      <h3 class="wid-section">Daily</h3>
       <div class="widgets">
         <article class="wid">
-          <h3>Weather</h3>
-          <p>Current conditions via wttr.in.</p>
+          <h3>Weather <span class="chip chip-live">live</span></h3>
+          <p>Current conditions or a 3-day forecast via wttr.in.</p>
           <input type="text" id="w-loc" placeholder="city, airport, or zip" value="San Francisco" />
-          <button data-widget="weather" class="primary">Print weather</button>
+          <div class="row mini">
+            <button data-widget="weather" data-days="1" class="primary">Now</button>
+            <button data-widget="weather" data-days="3" class="ghost">3-day forecast</button>
+          </div>
         </article>
 
         <article class="wid">
-          <h3>Quote</h3>
-          <p>A handpicked bit of wisdom.</p>
+          <h3>Calendar <span class="chip chip-offline">offline</span></h3>
+          <p>A printable month grid with today bracketed.</p>
+          <div class="grid2">
+            <label>Year <input type="number" id="w-cal-year" min="1900" max="2100" /></label>
+            <label>Month <input type="number" id="w-cal-month" min="1" max="12" placeholder="1-12" /></label>
+          </div>
+          <p class="muted tiny">leave blank for this month</p>
+          <button data-widget="calendar" class="primary">Print calendar</button>
+        </article>
+
+        <article class="wid">
+          <h3>Countdown <span class="chip chip-offline">offline</span></h3>
+          <p>Days until (or since) any date.</p>
+          <label>Label <input type="text" id="w-cd-label" placeholder="e.g. birthday" value="the big day" /></label>
+          <label>Date <input type="date" id="w-cd-date" /></label>
+          <button data-widget="countdown" class="primary">Print countdown</button>
+        </article>
+
+        <article class="wid">
+          <h3>Habit tracker <span class="chip chip-offline">offline</span></h3>
+          <p>Weekly grid — one row per habit, one dot per day.</p>
+          <label>Habits (one per line)
+            <textarea id="w-habits" rows="4">drink water
+move 20 min
+read
+sleep by 11</textarea>
+          </label>
+          <button data-widget="habits" class="primary">Print tracker</button>
+        </article>
+      </div>
+
+      <h3 class="wid-section">News &amp; learning</h3>
+      <div class="widgets">
+        <article class="wid">
+          <h3>Hacker News <span class="chip chip-live">live</span></h3>
+          <p>Top stories from news.ycombinator.com — titles, score, domain.</p>
+          <label>How many <span class="v" id="w-hn-v">5</span>
+            <input type="range" id="w-hn-count" min="1" max="10" step="1" value="5" />
+          </label>
+          <button data-widget="hn" class="primary">Print top stories</button>
+        </article>
+
+        <article class="wid">
+          <h3>On this day <span class="chip chip-live">live</span></h3>
+          <p>Wikipedia's historical events for today's date.</p>
+          <label>How many <span class="v" id="w-otd-v">4</span>
+            <input type="range" id="w-otd-count" min="1" max="8" step="1" value="4" />
+          </label>
+          <button data-widget="onthisday" class="primary">Print events</button>
+        </article>
+
+        <article class="wid">
+          <h3>Advice <span class="chip chip-live">live</span></h3>
+          <p>A small piece of advice from adviceslip.com.</p>
+          <button data-widget="advice" class="primary">Print advice</button>
+        </article>
+
+        <article class="wid">
+          <h3>Quote <span class="chip chip-offline">offline</span></h3>
+          <p>A handpicked bit of wisdom from the local bank.</p>
           <button data-widget="quote" class="primary">Print quote</button>
         </article>
 
         <article class="wid">
-          <h3>Dad joke</h3>
+          <h3>Dad joke <span class="chip chip-live">live</span></h3>
           <p>Fresh joke from icanhazdadjoke.com.</p>
           <button data-widget="joke" class="primary">Print joke</button>
         </article>
+      </div>
 
+      <h3 class="wid-section">Fun &amp; tools</h3>
+      <div class="widgets">
         <article class="wid">
-          <h3>Dice roller</h3>
+          <h3>Dice <span class="chip chip-offline">offline</span></h3>
+          <p>Standard rolls or common presets.</p>
           <div class="row mini">
             <input type="number" id="w-dice-count" value="2" min="1" max="20" />
             <span>d</span>
             <input type="number" id="w-dice-sides" value="6" min="2" max="100" />
+            <button data-widget="dice" data-mode="standard" class="primary">Roll</button>
           </div>
-          <button data-widget="dice" class="primary">Roll</button>
+          <div class="chip-row">
+            <button data-widget="dice" data-mode="coin" class="ghost tiny">Coin flip</button>
+            <button data-widget="dice" data-mode="d20" class="ghost tiny">d20</button>
+            <button data-widget="dice" data-mode="advantage" class="ghost tiny">Advantage</button>
+            <button data-widget="dice" data-mode="disadvantage" class="ghost tiny">Disadv.</button>
+          </div>
         </article>
 
         <article class="wid">
-          <h3>Now</h3>
-          <p>A tiny time-stamp card.</p>
+          <h3>Now <span class="chip chip-offline">offline</span></h3>
+          <p>A timestamp card with week number, day-of-year, and year-progress bar.</p>
           <button data-widget="now" class="primary">Print now</button>
         </article>
 
         <article class="wid">
-          <h3>ASCII art</h3>
+          <h3>ASCII art <span class="chip chip-offline">offline</span></h3>
+          <p>Retro printable art for the fridge door.</p>
           <select id="w-ascii">
             <option value="cat">cat</option>
             <option value="dog">dog</option>
@@ -167,6 +256,12 @@ thanks for reading</textarea>
             <option value="skull">skull</option>
             <option value="coffee">coffee</option>
             <option value="ghost">ghost</option>
+            <option value="rocket">rocket</option>
+            <option value="fish">fish</option>
+            <option value="sun">sun</option>
+            <option value="star">star</option>
+            <option value="flower">flower</option>
+            <option value="snail">snail</option>
           </select>
           <button data-widget="ascii" class="primary">Print art</button>
         </article>
