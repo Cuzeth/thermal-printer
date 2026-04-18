@@ -17,7 +17,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(python3 -m pytest tests/test_widgets.py -q)",
-      "Bash(./.venv/bin/pytest tests/test_widgets.py -q)"
+      "Bash(./.venv/bin/pytest tests/test_widgets.py -q)",
+      "Bash(./.venv/bin/pytest tests/ -q)"
     ]
   }
 }

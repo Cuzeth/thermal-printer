@@ -83,6 +83,25 @@ def _print_body(body: str, cut: bool = True, rich: bool = True) -> None:
             footer(p)
 
 
+def _print_sections(sections: list[str]) -> None:
+    """Print several markup bodies as back-to-back images on one scroll.
+
+    Each section is rasterized and sent as its own GS v 0 transfer. This
+    is the safe shape for long composite prints (e.g. morning briefing):
+    one giant image can overrun the printer's raster buffer and come out
+    as noise after the first chunk. Splitting keeps each USB transfer
+    small while still feeling like a single continuous tear-off — no cut
+    is issued between sections.
+    """
+    with open_printer() as p:
+        for seg in sections:
+            if not (seg or "").strip():
+                continue
+            img = render_feat.render_markup(seg)
+            p.image(img)
+        footer(p)
+
+
 def _safe(handler: Callable[[], Any]):
     """Common error-handling wrapper for POST routes."""
     try:
@@ -196,26 +215,6 @@ def print_image():
 
 
 # ---------- widget routes ----------
-
-@app.post("/api/print/quote")
-@require_tailnet
-@require_owner
-def print_quote():
-    def run():
-        _print_body(widgets.random_quote())
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/print/joke")
-@require_tailnet
-@require_owner
-def print_joke():
-    def run():
-        _print_body(widgets.dad_joke())
-        return {}
-    return _safe(run)
-
 
 @app.post("/api/print/weather")
 @require_tailnet
@@ -333,7 +332,10 @@ def print_briefing():
     def run():
         data = request.get_json(silent=True) or {}
         loc = (data.get("location") or "Cupertino").strip() or "Cupertino"
-        _print_body(widgets.morning_briefing(location=loc))
+        # Section-by-section path: one image per subsection avoids the
+        # "garbled after the weather" issue that a single huge raster
+        # caused on the real printer.
+        _print_sections(widgets.morning_briefing_sections(location=loc))
         return {}
     return _safe(run)
 

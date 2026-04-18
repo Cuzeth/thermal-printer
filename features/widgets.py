@@ -21,45 +21,6 @@ import config
 
 # ---------- offline banks ----------
 
-QUOTES = [
-    ("The only way to do great work is to love what you do.", "Steve Jobs"),
-    ("In the middle of every difficulty lies opportunity.", "Albert Einstein"),
-    ("Simplicity is the ultimate sophistication.", "Leonardo da Vinci"),
-    ("Make it work, make it right, make it fast.", "Kent Beck"),
-    ("The best way out is always through.", "Robert Frost"),
-    ("You miss 100% of the shots you don't take.", "Wayne Gretzky"),
-    ("Perfection is achieved when there is nothing left to take away.",
-     "Antoine de Saint-Exupery"),
-    ("What we think, we become.", "Buddha"),
-    ("Stay hungry, stay foolish.", "Stewart Brand"),
-    ("First, solve the problem. Then, write the code.", "John Johnson"),
-    ("The obstacle is the way.", "Marcus Aurelius"),
-    ("Action is the antidote to despair.", "Joan Baez"),
-    ("Do the thing and you shall have the power.", "Ralph Waldo Emerson"),
-    ("Everything you want is on the other side of fear.", "Jack Canfield"),
-    ("You do not rise to the level of your goals. You fall to the level of your systems.",
-     "James Clear"),
-    ("Discipline equals freedom.", "Jocko Willink"),
-    ("Amateurs sit and wait for inspiration, the rest of us just get up and go to work.",
-     "Stephen King"),
-    ("The cave you fear to enter holds the treasure you seek.", "Joseph Campbell"),
-    ("Comparison is the thief of joy.", "Theodore Roosevelt"),
-    ("Talk is cheap. Show me the code.", "Linus Torvalds"),
-]
-
-JOKES = [
-    "Why do programmers prefer dark mode? Because light attracts bugs.",
-    "I told my computer I needed a break. It said 'No problem, I'll go to sleep.'",
-    "Why do Java developers wear glasses? Because they don't C#.",
-    "There are 10 kinds of people: those who know binary and those who don't.",
-    "A SQL query walks into a bar, walks up to two tables and asks: 'Can I join you?'",
-    "Why did the developer go broke? Because he used up all his cache.",
-    "How many programmers does it take to change a light bulb? None. It's a hardware problem.",
-    "Debugging: being the detective in a crime movie where you are also the murderer.",
-    "I would tell you a UDP joke but you might not get it.",
-    "Real programmers count from 0.",
-]
-
 FALLBACK_ADVICE = [
     "Do the hard thing first.",
     "Sleep on it.",
@@ -166,54 +127,7 @@ def roll_dice(count: int = 2, sides: int = 6, mode: str = "standard") -> str:
     return "\n".join(lines)
 
 
-# ---------- quotes / jokes / advice ----------
-
-def random_quote() -> str:
-    quote, author = random.choice(QUOTES)
-    wrapped = textwrap.fill(f'"{quote}"', width=config.RECEIPT_WIDTH)
-    return "\n".join(
-        [
-            "# QUOTE",
-            "===",
-            "",
-            wrapped,
-            "",
-            f"> - {author}",
-            "",
-            "---",
-        ]
-    )
-
-
-def dad_joke() -> str:
-    """Try icanhazdadjoke.com first, fall back to offline bank."""
-    text = None
-    try:
-        r = requests.get(
-            "https://icanhazdadjoke.com/",
-            headers={"Accept": "text/plain", "User-Agent": "thermal-printer-gui"},
-            timeout=3,
-        )
-        if r.ok and r.text.strip():
-            text = r.text.strip()
-    except Exception:
-        pass
-    if not text:
-        text = random.choice(JOKES)
-
-    wrapped = textwrap.fill(text, width=config.RECEIPT_WIDTH)
-    return "\n".join(
-        [
-            "# DAD JOKE",
-            "===",
-            "",
-            wrapped,
-            "",
-            "> (groan)",
-            "---",
-        ]
-    )
-
+# ---------- advice ----------
 
 def advice() -> str:
     """Pull an advice slip from adviceslip.com, fall back to offline bank."""
@@ -614,39 +528,46 @@ def habit_tracker(habits: list[str], days: int = 7) -> str:
 
 # ---------- morning briefing ----------
 
-def morning_briefing(location: str = "Cupertino") -> str:
-    """Combo widget: weather + HN + on-this-day + a quote, one long scroll.
+def morning_briefing_sections(location: str = "Cupertino") -> list[str]:
+    """Combo widget split into rendering-friendly sections.
 
-    Each subsection handles its own API errors, so a single flaky service
-    just prints a small "couldn't fetch" note instead of blowing up the
+    Returned as a list, not a single joined string, so the print path can
+    rasterize each section as its own image. A single giant image for the
+    whole briefing overruns the printer's raster buffer on some units —
+    paper comes out legible for the first chunk and then turns into noise.
+    Chunking gives each section its own USB transfer and keeps output
+    clean.
+
+    Each subsection handles its own API errors internally — a flaky
+    service just prints a "couldn't fetch" stub instead of aborting the
     whole briefing.
     """
     today = dt.date.today()
     now = dt.datetime.now()
-
     weekday = today.strftime("%A").upper()
     when = f"{today.strftime('%B %-d, %Y')} \u00b7 {now.strftime('%-I:%M %p').lower()}"
 
-    intro = [
+    intro = "\n".join([
         f"# {weekday}",
         "===",
         "> good morning",
         f"> {when}",
-        "",
         "---",
-        "",
+    ])
+
+    return [
+        intro,
+        weather(location, days=1),
+        hacker_news(count=3),
+        on_this_day(count=2),
     ]
 
-    sections = [
-        weather(location, days=1),
-        "",
-        hacker_news(count=3),
-        "",
-        on_this_day(count=2),
-        "",
-        random_quote(),
-    ]
-    return "\n".join(intro + sections)
+
+def morning_briefing(location: str = "Cupertino") -> str:
+    """Joined-string version of the briefing. Useful for previews and
+    tests; the live print path should prefer morning_briefing_sections()
+    so each block goes over USB as its own image."""
+    return "\n\n".join(morning_briefing_sections(location))
 
 
 # ---------- todo / receipt / label ----------

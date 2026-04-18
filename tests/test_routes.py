@@ -26,18 +26,18 @@ def test_ping_is_public(client):
 
 
 def test_private_route_requires_bearer(client):
-    r = client.post("/api/print/quote", json={})
+    r = client.post("/api/print/now", json={})
     assert r.status_code == 401
     assert r.get_json()["error"] == "auth required"
 
 
 def test_private_route_rejects_wrong_bearer(client):
-    r = client.post("/api/print/quote", json={}, headers={"Authorization": "Bearer nope"})
+    r = client.post("/api/print/now", json={}, headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401
 
 
 def test_private_route_accepts_owner_bearer(client, auth):
-    r = client.post("/api/print/quote", json={}, headers=auth)
+    r = client.post("/api/print/now", json={}, headers=auth)
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
 

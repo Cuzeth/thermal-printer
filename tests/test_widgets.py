@@ -8,14 +8,6 @@ import random
 from features import widgets
 
 
-def test_quote_contains_attribution():
-    random.seed(0)
-    out = widgets.random_quote()
-    assert out.startswith("# QUOTE")
-    # All quotes include a "> - Author" byline.
-    assert "\n> - " in out
-
-
 def test_dice_rolls_in_range():
     random.seed(0)
     out = widgets.roll_dice(count=5, sides=6)

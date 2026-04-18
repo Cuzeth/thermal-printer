@@ -16,9 +16,6 @@ print("POST /api/preview      ->", r.status_code, "preview lines:",
 r = client.post("/api/print/text", headers=AUTH, json={"body": "# TEST\n> smoke test"})
 print("POST /api/print/text   ->", r.status_code, r.get_json())
 
-r = client.post("/api/print/quote", headers=AUTH, json={})
-print("POST /api/print/quote  ->", r.status_code, r.get_json())
-
 r = client.post("/api/print/dice", headers=AUTH, json={"count": 3, "sides": 20})
 print("POST /api/print/dice   ->", r.status_code, r.get_json())
 
