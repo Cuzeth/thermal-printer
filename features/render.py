@@ -124,20 +124,6 @@ _FONT_CANDIDATES: dict[str, list[tuple[str, int]]] = {
         ("/System/Library/Fonts/Supplemental/NotoSansEgyptianHieroglyphs-Regular.ttf", 0),
         ("/usr/share/fonts/truetype/noto/NotoSansEgyptianHieroglyphs-Regular.ttf", 0),
     ],
-    # Emoji. Apple Color Emoji (sbix) is color-only — we render it into an
-    # RGBA tile, composite onto white, then convert+threshold with the rest
-    # of the canvas. Noto Emoji (mono) is a plain TTF and renders straight.
-    # Order matters: try mono first so emoji look crisp on a 1-bit printer,
-    # then fall back to the system's color emoji font.
-    "emoji_mono": [
-        ("/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf", 0),
-        ("/Library/Fonts/NotoEmoji-Regular.ttf", 0),
-    ],
-    "emoji_color": [
-        ("/System/Library/Fonts/Apple Color Emoji.ttc", 0),
-        ("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 0),
-        ("/System/Library/Fonts/AppleColorEmoji.ttf", 0),
-    ],
     # Friends can pick a display font for their name header. macOS ships
     # several display faces out of the box; Linux candidates fall back to
     # DejaVu + Liberation, which are present on most distros.
@@ -203,43 +189,11 @@ def _font(kind: str, size: int) -> ImageFont.FreeTypeFont:
 
 # ---------- script detection + font fallback ----------
 
-def _is_emoji_codepoint(c: int) -> bool:
-    """Codepoints where the emoji font should win over symbols/latin.
-
-    Keeps the list conservative — we only grab ranges that are predominantly
-    emoji (SMP pictographs, transport, regional indicators, emoticons, misc
-    symbols + dingbats that have an emoji presentation). ASCII and the
-    purely-technical symbol blocks are deliberately left to latin/symbols.
-    """
-    return (
-        0x1F300 <= c <= 0x1F5FF or   # Misc Symbols and Pictographs
-        0x1F600 <= c <= 0x1F64F or   # Emoticons
-        0x1F680 <= c <= 0x1F6FF or   # Transport and Map
-        0x1F700 <= c <= 0x1F77F or   # Alchemical
-        0x1F780 <= c <= 0x1F7FF or   # Geometric Shapes Ext
-        0x1F800 <= c <= 0x1F8FF or   # Supplemental Arrows-C
-        0x1F900 <= c <= 0x1F9FF or   # Supplemental Symbols and Pictographs
-        0x1FA00 <= c <= 0x1FA6F or   # Chess Symbols
-        0x1FA70 <= c <= 0x1FAFF or   # Symbols and Pictographs Ext-A
-        0x1F000 <= c <= 0x1F02F or   # Mahjong
-        0x1F0A0 <= c <= 0x1F0FF or   # Playing Cards
-        0x1F100 <= c <= 0x1F1FF or   # Enclosed Alphanumeric Supplement (regional indicators)
-        0x1F200 <= c <= 0x1F2FF or   # Enclosed Ideographic Supplement
-        0x2600  <= c <= 0x26FF  or   # Misc Symbols (weather, zodiac, ✂, ☕, ☮ …)
-        0x2700  <= c <= 0x27BF  or   # Dingbats (✂ ✨ ❤ ✅ …)
-        c == 0x200D or                # ZWJ — part of emoji sequences
-        c == 0xFE0F or                # Variation Selector-16 (emoji presentation)
-        c == 0x20E3                   # Combining Enclosing Keycap
-    )
-
-
 def _script(ch: str) -> str:
     """Classify a character for font routing. Cheap and allocation-free."""
     if not ch:
         return "latin"
     c = ord(ch)
-    if _is_emoji_codepoint(c):
-        return "emoji"
     # Hebrew (routed with Arabic — Arial Unicode covers both on Mac, Noto on Pi).
     if 0x0590 <= c <= 0x05FF:
         return "arabic"
@@ -290,9 +244,6 @@ def _font_for(base_kind: str, script: str, size: int) -> ImageFont.FreeTypeFont:
     symbols, hieroglyph) try those first; if the host doesn't have any
     of them (e.g. CI without `fonts-noto-cjk`), we fall back to the base
     font so the char at least renders as .notdef instead of crashing.
-
-    Emoji routing is handled separately (see _emoji_font) because color
-    emoji fonts need a specific size + off-canvas rendering.
     """
     route: Optional[str] = None
     if script == "cjk":
@@ -305,81 +256,11 @@ def _font_for(base_kind: str, script: str, size: int) -> ImageFont.FreeTypeFont:
         route = "symbols"
     elif script == "hieroglyph":
         route = "hieroglyph"
-    elif script == "emoji":
-        # Try monochrome emoji at the requested size first. Color emoji
-        # goes through _emoji_color_font() because it needs a fixed native
-        # size plus off-canvas compositing.
-        f = _font_try("emoji_mono", size)
-        if f is not None:
-            return f
-        # symbol-font fallback covers things like ✂ ☕ that live in the
-        # BMP — still more legible than a .notdef box.
-        f = _font_try("symbols", size)
-        if f is not None:
-            return f
     if route:
         f = _font_try(route, size)
         if f is not None:
             return f
     return _font(base_kind, size)
-
-
-# ---------- color-emoji rendering ----------
-#
-# Apple Color Emoji (sbix) is a color font — PIL can draw it but only with
-# `embedded_color=True` onto an RGBA image, at one of its native bitmap
-# strike sizes. We pick the closest strike, render into an RGBA tile, then
-# composite onto white and paste onto the main "L" canvas. The final
-# threshold in Renderer.finish() turns it into crisp 1-bit monochrome.
-
-# Apple Color Emoji ships these strikes (values from the font's sbix table).
-# PIL needs one of them or it errors on draw — picking the closest keeps
-# the scaling work minimal and the edges clean.
-_EMOJI_STRIKES = (20, 32, 40, 48, 64, 96, 160)
-
-
-def _emoji_color_font(size: int) -> Optional[ImageFont.FreeTypeFont]:
-    """Load the color-emoji font at a native strike close to `size`."""
-    strike = min(_EMOJI_STRIKES, key=lambda s: abs(s - size))
-    return _font_try("emoji_color", strike)
-
-
-def _render_color_emoji(text: str, size: int) -> Optional[Image.Image]:
-    """Render a short emoji run to an "L" image at roughly `size` pixels tall.
-
-    Returns None if no color emoji font is available on this system — the
-    caller should fall back to the mono/symbols route.
-    """
-    font = _emoji_color_font(size)
-    if font is None:
-        return None
-    # Make a scratch RGBA canvas large enough for the widest reasonable run.
-    # textbbox with a color font returns coords in *native strike pixels*,
-    # which we then scale down to `size`.
-    try:
-        tmp = Image.new("RGBA", (8, 8))
-        tmp_draw = ImageDraw.Draw(tmp)
-        bbox = tmp_draw.textbbox((0, 0), text, font=font, embedded_color=True)
-        nat_w = max(1, bbox[2] - bbox[0])
-        nat_h = max(1, bbox[3] - bbox[1])
-    except Exception:
-        return None
-    canvas = Image.new("RGBA", (nat_w + 4, nat_h + 4), (255, 255, 255, 0))
-    d = ImageDraw.Draw(canvas)
-    try:
-        d.text((-bbox[0] + 2, -bbox[1] + 2), text, font=font,
-               fill=(0, 0, 0, 255), embedded_color=True)
-    except Exception:
-        return None
-    # Scale to target size, preserving aspect ratio.
-    scale = size / nat_h
-    target_w = max(1, int(round(nat_w * scale)))
-    target_h = max(1, int(round(nat_h * scale)))
-    scaled = canvas.resize((target_w, target_h), Image.LANCZOS)
-    # Flatten alpha onto white, convert to grayscale.
-    white = Image.new("RGBA", scaled.size, (255, 255, 255, 255))
-    white.alpha_composite(scaled)
-    return white.convert("L")
 
 
 # ---------- RTL shaping + bidi reorder ----------
@@ -576,31 +457,14 @@ class Renderer:
     def _measure_text(self, text: str, base_kind: str, size: int) -> int:
         total = 0
         for run, script in _split_by_script(text):
-            if script == "emoji" and _font_try("emoji_mono", size) is None:
-                # Color-emoji path: measure at the scaled target height.
-                img = _render_color_emoji(run, size)
-                total += img.width if img is not None else size * len(run)
-                continue
             font = _font_for(base_kind, script, size)
             total += int(self.draw.textlength(run, font=font))
         return total
 
     def _draw_text(self, x: int, y: int, text: str, base_kind: str, size: int) -> int:
-        """Draw text with per-run font fallback. Returns total width drawn.
-
-        Emoji runs hit a separate path: if a mono emoji font is present we
-        draw it inline with everything else; otherwise we rasterize each
-        emoji run as a color bitmap and paste it onto the grayscale canvas.
-        """
+        """Draw text with per-run font fallback. Returns total width drawn."""
         dx = 0
         for run, script in _split_by_script(text):
-            if script == "emoji" and _font_try("emoji_mono", size) is None:
-                img = _render_color_emoji(run, size)
-                if img is not None:
-                    self.canvas.paste(img, (x + dx, y))
-                    dx += img.width
-                    continue
-                # No emoji font available — fall through to symbol/.notdef.
             font = _font_for(base_kind, script, size)
             self.draw.text((x + dx, y), run, font=font, fill=0)
             dx += int(self.draw.textlength(run, font=font))
