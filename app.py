@@ -746,12 +746,18 @@ def friend_preview():
     """
     def run():
         user = current_user()
-        body = ((request.get_json(silent=True) or {}).get("body") or "").strip()
+        data = request.get_json(silent=True) or {}
+        body = (data.get("body") or "").strip()
         if not body:
             return {"segments": []}
         if len(body) > _MAX_MSG_LEN:
             raise ValueError(f"message too long (max {_MAX_MSG_LEN} chars)")
-        formatted = widgets.friend_message(user["username"], body)
+        formatted = widgets.friend_message(
+            user["username"],
+            body,
+            style=user.get("name_style") or "plain",
+            anonymous=bool(data.get("anonymous", False)),
+        )
         segments = render_feat.split_cuts(formatted) or [formatted]
         data_urls = [
             image_feat.to_png_data_url(render_feat.render_markup(seg))
@@ -767,7 +773,8 @@ def friend_print():
     import time
 
     user = current_user()
-    body = ((request.get_json(silent=True) or {}).get("body") or "").strip()
+    data = request.get_json(silent=True) or {}
+    body = (data.get("body") or "").strip()
     if not body:
         return jsonify({"ok": False, "error": "message is empty"}), 400
     if len(body) > _MAX_MSG_LEN:
@@ -784,7 +791,12 @@ def friend_print():
         }), 429
 
     try:
-        formatted = widgets.friend_message(user["username"], body)
+        formatted = widgets.friend_message(
+            user["username"],
+            body,
+            style=user.get("name_style") or "plain",
+            anonymous=bool(data.get("anonymous", False)),
+        )
         _print_body(formatted)
         _LAST_PRINT[user["id"]] = now
         auth_db.log_message(user["id"], body)

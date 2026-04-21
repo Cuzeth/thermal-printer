@@ -118,6 +118,41 @@ def test_symbols_and_hieroglyph_route_without_crashing():
     assert img.height > 20
 
 
+def test_emoji_codepoints_route_to_emoji_script():
+    """Emoji codepoints must land on the emoji script so the color-emoji
+    rasterization path kicks in — otherwise they'd render as .notdef."""
+    assert render._script("\U0001F600") == "emoji"  # 😀
+    assert render._script("\U0001F389") == "emoji"  # 🎉
+    assert render._script("\u2728") == "emoji"      # ✨
+    # ASCII stays latin so plain text isn't routed through the emoji font.
+    assert render._script("a") == "latin"
+
+
+def test_emoji_body_renders_without_crash():
+    """Mixing emoji + text goes through _render_color_emoji (when no mono
+    emoji font is installed) or the mono path — either way the renderer
+    must not crash and the final image is still crisp 1-bit."""
+    img = _render("hello 🎉 world 😀")
+    assert img.mode == "1"
+    assert img.height > 20
+
+
+def test_styled_heading_markup_renders():
+    """`:script: text` is the name-style directive used by /m/. Each style
+    should produce output at least as tall as a plain subheading."""
+    base = _render("hi")
+    for style in ("script", "serif", "gothic", "mono", "caps"):
+        img = _render(f":{style}: from alice")
+        assert img.height > base.height, f"style {style} didn't grow image"
+
+
+def test_unknown_styled_heading_falls_through():
+    """An unknown `:word:` prefix should NOT match the styled-heading regex
+    — it should render as plain body text instead of throwing KeyError."""
+    img = _render(":bogus: hello there")
+    assert img.height > 20
+
+
 def test_markup_vocab_all_paths():
     """Every directive exercised at least once — no crashes, valid image."""
     body = (

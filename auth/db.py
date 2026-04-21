@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT    NOT NULL,
   status        TEXT    NOT NULL DEFAULT 'pending',
+  name_style    TEXT    NOT NULL DEFAULT 'plain',
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   approved_at   TEXT
 );
@@ -41,6 +42,11 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_msgs_printed ON messages(printed_at DESC);
 """
+
+# Styles a friend can pick for how their name prints on the header line.
+# Must stay in sync with render.NAME_STYLES + 'plain' (the no-style default
+# that renders as a normal `## from <name>` subheading).
+VALID_NAME_STYLES = ("plain", "big", "caps", "serif", "script", "gothic", "mono")
 
 
 def _connect() -> sqlite3.Connection:
@@ -64,9 +70,20 @@ def db() -> Iterator[sqlite3.Connection]:
 
 
 def init() -> None:
-    """Create tables on first run. Idempotent."""
+    """Create tables on first run. Idempotent.
+
+    Also runs tiny forward migrations for columns added after launch, so a
+    Pi with an existing app.db doesn't need a manual schema dump. Each
+    migration is a single ALTER wrapped in a pragma-check — SQLite lacks
+    `ADD COLUMN IF NOT EXISTS`.
+    """
     with db() as conn:
         conn.executescript(SCHEMA)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+        if "name_style" not in cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN name_style TEXT NOT NULL DEFAULT 'plain'"
+            )
 
 
 # ---------- users ----------
@@ -148,6 +165,15 @@ def set_status(user_id: int, status: str) -> None:
 def delete_user(user_id: int) -> None:
     with db() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+def set_name_style(user_id: int, style: str) -> None:
+    if style not in VALID_NAME_STYLES:
+        raise ValueError(f"invalid name_style: {style}")
+    with db() as conn:
+        conn.execute(
+            "UPDATE users SET name_style = ? WHERE id = ?", (style, user_id)
+        )
 
 
 # ---------- messages ----------

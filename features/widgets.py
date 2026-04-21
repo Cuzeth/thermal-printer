@@ -794,19 +794,40 @@ def now_card() -> str:
 
 # ---------- friend message ----------
 
-def friend_message(username: str, body: str) -> str:
+def _name_header(username: str, style: str) -> str:
+    """Build the `from <name>` markup line for the chosen style.
+
+    Styles mirrored in auth.db.VALID_NAME_STYLES and render.NAME_STYLES.
+    Styles that need custom display fonts emit the `:style: ...` markup
+    that render.py dispatches to Renderer._styled_heading.
+    """
+    name = (username or "anon").strip() or "anon"
+    if style == "big":
+        return "# from " + name
+    if style == "caps":
+        return f":caps: from {name}"
+    if style in ("serif", "script", "gothic", "mono"):
+        return f":{style}: from {name}"
+    return "## from " + name
+
+
+def friend_message(username: str, body: str, *,
+                   style: str = "plain",
+                   anonymous: bool = False) -> str:
     """Format an incoming message from an approved friend for printing.
 
     Uses the same markup vocabulary as the rest of the widgets so the
     rich renderer in features/render.py picks up the heading + dividers.
+    `style` picks the display font for the name line. `anonymous=True`
+    replaces the username with "anonymous" and ignores `style`.
     """
     body = (body or "").strip()
     timestamp = dt.datetime.now().strftime("%a %b %-d \u00b7 %I:%M %p").lower()
-    lines = [
-        "## from " + (username or "anon"),
-        "===",
-        "",
-    ]
+    if anonymous:
+        header = "## from anonymous"
+    else:
+        header = _name_header(username, style)
+    lines = [header, "===", ""]
     for paragraph in body.split("\n"):
         if paragraph.strip():
             lines.append(textwrap.fill(paragraph, width=config.RECEIPT_WIDTH))

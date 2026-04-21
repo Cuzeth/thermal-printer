@@ -66,3 +66,27 @@ def test_friend_message_quotes_username():
 def test_friend_message_handles_empty_username():
     out = widgets.friend_message("", "hi")
     assert "## from anon" in out
+
+
+def test_friend_message_big_style_uses_heading():
+    out = widgets.friend_message("alice", "hi", style="big")
+    assert "# from alice" in out
+    # `# ` heading not `## ` subheading — must be a real first-level heading.
+    assert "## from alice" not in out
+
+
+def test_friend_message_script_style_uses_directive():
+    out = widgets.friend_message("alice", "hi", style="script")
+    assert ":script: from alice" in out
+
+
+def test_friend_message_anonymous_drops_username_and_style():
+    out = widgets.friend_message("alice", "hi", style="script", anonymous=True)
+    assert "alice" not in out
+    assert ":script:" not in out
+    assert "## from anonymous" in out
+
+
+def test_friend_message_unknown_style_falls_back_to_plain():
+    out = widgets.friend_message("alice", "hi", style="bogus")
+    assert "## from alice" in out

@@ -46,6 +46,19 @@ function show(state) {
 
 let me = null;
 
+// Name-style options mirrored from auth.db.VALID_NAME_STYLES. The `preview`
+// field is CSS-side flavor text — it's not the thermal-printer rendering,
+// just a visual hint so the friend knows what they're picking.
+const NAME_STYLES = [
+  { key: "plain",  label: "plain",      preview: "from you" },
+  { key: "big",    label: "big",        preview: "FROM YOU" },
+  { key: "caps",   label: "caps",       preview: "FROM YOU" },
+  { key: "serif",  label: "serif",      preview: "from you" },
+  { key: "script", label: "script",     preview: "from you" },
+  { key: "gothic", label: "papyrus",    preview: "from you" },
+  { key: "mono",   label: "typewriter", preview: "from you" },
+];
+
 function applyMe(user) {
   me = user;
   const who = $("#who");
@@ -63,12 +76,46 @@ function applyMe(user) {
   if (user.status === "blocked") return show("blocked");
   if (user.status === "allowed") {
     show("allowed");
+    renderStylePicker(user.name_style || "plain");
     // Pull the persistent history now that we know who you are. Best-effort —
     // the form still works even if this fetch blows up.
     loadHistory().catch((err) => console.warn("history load failed:", err));
     return;
   }
   show("guest");
+}
+
+function renderStylePicker(current) {
+  const grid = $("#name-style-grid");
+  if (!grid) return;
+  $("#settings-current").textContent = current;
+  grid.replaceChildren(...NAME_STYLES.map((s) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "style-chip style-" + s.key + (s.key === current ? " active" : "");
+    btn.dataset.style = s.key;
+    const label = document.createElement("span");
+    label.className = "style-chip-label";
+    label.textContent = s.label;
+    const preview = document.createElement("span");
+    preview.className = "style-chip-preview";
+    preview.textContent = s.preview;
+    btn.append(label, preview);
+    btn.addEventListener("click", () => saveNameStyle(s.key));
+    return btn;
+  }));
+}
+
+async function saveNameStyle(style) {
+  try {
+    const j = await postJSON("/api/m/settings", { name_style: style });
+    applyMe(j.user);
+    toast("style: " + style, "ok");
+    // Refresh the preview so they see the new header font immediately.
+    schedulePreview();
+  } catch (err) {
+    toast(err.message, "err");
+  }
 }
 
 async function refreshMe() {
@@ -99,13 +146,14 @@ function setPreviewPlaceholder(msg, kind = "placeholder") {
 
 async function updatePreview() {
   const body = $("#msg-body").value;
+  const anonymous = !!$("#msg-anon")?.checked;
   const seq = ++previewSeq;
   if (!body.trim()) {
     setPreviewPlaceholder("start typing to see how it'll print…");
     return;
   }
   try {
-    const j = await postJSON("/api/m/preview", { body });
+    const j = await postJSON("/api/m/preview", { body, anonymous });
     if (seq !== previewSeq) return; // stale — user kept typing
     const segments = j.segments || [];
     if (segments.length === 0) {
@@ -193,9 +241,12 @@ async function loadHistory() {
 async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
-  await postJSON("/api/m/print", { body });
+  const anonymous = !!$("#msg-anon")?.checked;
+  await postJSON("/api/m/print", { body, anonymous });
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
+  // Reset anon back to the default so it doesn't silently stick.
+  if ($("#msg-anon")) $("#msg-anon").checked = false;
   setPreviewPlaceholder("start typing to see how it'll print…");
   const flash = document.createElement("div");
   flash.className = "printed-flash";
@@ -269,6 +320,8 @@ $("#msg-body").addEventListener("input", (e) => {
   $("#msg-count").textContent = `${e.target.value.length} / 800`;
   schedulePreview();
 });
+
+$("#msg-anon")?.addEventListener("change", schedulePreview);
 
 $("#history-refresh").addEventListener("click", async () => {
   try {

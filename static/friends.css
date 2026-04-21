@@ -156,6 +156,101 @@ textarea { resize: vertical; min-height: 120px; }
   background: linear-gradient(180deg, #1d1318 0%, var(--panel) 100%);
 }
 
+/* SETTINGS — name-style picker */
+.settings {
+  margin: 0 0 18px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, .015);
+}
+.settings summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  list-style: none;
+  outline: none;
+}
+.settings summary::-webkit-details-marker { display: none; }
+.settings summary::before {
+  content: "▸ ";
+  color: var(--accent);
+  transition: transform .15s ease;
+  display: inline-block;
+}
+.settings[open] summary::before { content: "▾ "; }
+.settings-current {
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.settings p.hint { margin: 10px 0 12px; }
+
+.name-style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.style-chip {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 8px;
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  transition: border-color .12s ease, transform .08s ease;
+}
+.style-chip:hover { border-color: var(--accent); }
+.style-chip.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(247,180,44,.25);
+}
+.style-chip-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.style-chip-preview {
+  font-size: 15px;
+  color: var(--ink);
+  min-height: 20px;
+}
+/* Flavor the preview string in the same spirit as the thermal-render font
+   the style selects. Not pixel-perfect matches (the printer uses TTFs we
+   don't bundle), but enough of a hint to pick. */
+.style-plain  .style-chip-preview { font-family: -apple-system, system-ui, sans-serif; }
+.style-big    .style-chip-preview { font-family: -apple-system, system-ui, sans-serif; font-size: 18px; font-weight: 700; }
+.style-caps   .style-chip-preview { font-family: -apple-system, system-ui, sans-serif; font-weight: 700; letter-spacing: 1.5px; }
+.style-serif  .style-chip-preview { font-family: "New York", "Times New Roman", Georgia, serif; font-weight: 700; }
+.style-script .style-chip-preview { font-family: "Snell Roundhand", "Brush Script MT", "Apple Chancery", cursive; font-size: 17px; }
+.style-gothic .style-chip-preview { font-family: Papyrus, "Herculanum", fantasy; letter-spacing: .5px; }
+.style-mono   .style-chip-preview { font-family: var(--mono), "Courier New", monospace; }
+
+/* ANONYMOUS toggle */
+.anon-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.anon-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.anon-toggle em { color: var(--dim); font-style: normal; opacity: .7; }
+
 /* PREVIEW */
 .preview-block {
   margin-top: 18px;

@@ -88,7 +88,13 @@ def _validate_password(password: str) -> str:
 
 
 def _public_user(user: dict) -> dict:
-    return {"id": user["id"], "username": user["username"], "status": user["status"]}
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "status": user["status"],
+        # Default shields old rows where the migration hasn't populated yet.
+        "name_style": user.get("name_style") or "plain",
+    }
 
 
 # ---------- login rate limit ----------
@@ -189,3 +195,25 @@ def me():
     if not user:
         return jsonify({"ok": True, "user": None})
     return jsonify({"ok": True, "user": _public_user(user)})
+
+
+@auth_bp.post("/settings")
+def settings():
+    """Update the signed-in friend's personal display settings.
+
+    Currently only handles `name_style`. Rejects unknown styles server-side
+    instead of trusting the client — the set is small and curated.
+    """
+    user = sess.current_user()
+    if not user:
+        return _bad("not signed in", 401)
+    if user["status"] != "allowed":
+        return _bad("not approved", 403)
+    data = request.get_json(silent=True) or {}
+    style = (data.get("name_style") or "").strip()
+    if style:
+        if style not in db.VALID_NAME_STYLES:
+            return _bad(f"unknown name_style: {style}")
+        db.set_name_style(user["id"], style)
+    fresh = db.get_user(user["id"])
+    return jsonify({"ok": True, "user": _public_user(fresh)})

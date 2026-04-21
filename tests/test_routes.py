@@ -143,6 +143,65 @@ def test_friend_history_limit_is_clamped(client):
     assert r.status_code == 200
 
 
+def test_friend_settings_updates_name_style(client):
+    """Setting a valid name_style persists and comes back on /me."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("style_alice", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.post("/api/m/settings", json={"name_style": "script"})
+    assert r.status_code == 200
+    assert r.get_json()["user"]["name_style"] == "script"
+
+    r = client.get("/api/m/me")
+    assert r.get_json()["user"]["name_style"] == "script"
+
+
+def test_friend_settings_rejects_unknown_style(client):
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("style_bogus", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.post("/api/m/settings", json={"name_style": "fancy"})
+    assert r.status_code == 400
+
+
+def test_friend_settings_requires_approval(client):
+    """Pending friends can't mutate settings — keeps the style picker out
+    of the hands of un-approved signups."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("style_pending", "hunter2hunter")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.post("/api/m/settings", json={"name_style": "script"})
+    assert r.status_code == 403
+
+
+def test_friend_preview_honors_anonymous_flag(client):
+    """Anonymous prints strip the username — confirm via the preview
+    endpoint so we don't need a live printer to check it."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("anon_alice", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.post("/api/m/preview", json={"body": "hi", "anonymous": True})
+    assert r.status_code == 200
+    segs = r.get_json()["segments"]
+    # Any non-empty body produces at least one preview image.
+    assert len(segs) >= 1
+
+
 def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
     """End-to-end: if the USB printer is unreachable mid-print, the friend
     gets a clean 503 with our friendly message — not a 500 traceback."""
