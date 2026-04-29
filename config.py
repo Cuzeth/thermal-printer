@@ -43,6 +43,15 @@ RECEIPT_WIDTH = _env_int("RECEIPT_WIDTH", 42)
 # Printer raster image width in pixels (typical 58mm = 384px, 80mm = 576px).
 PRINTER_PIXEL_WIDTH = _env_int("PRINTER_PIXEL_WIDTH", 576)
 
+# Max raster rows per GS v 0 transfer. python-escpos' default of 960 ships
+# ~69KB chunks at 576px wide, which overruns cheap thermal printers' raster
+# buffers — they fall out of bit-image mode mid-fragment and start spewing
+# the bitmap bytes as text/control codes ("infinite weird symbols"). 256
+# rows ≈ 18KB per chunk, comfortably under typical buffer limits. Lower
+# this further if you still see garbled output; raise it for throughput
+# if your printer has a generous buffer.
+IMAGE_FRAGMENT_HEIGHT = _env_int("IMAGE_FRAGMENT_HEIGHT", 256)
+
 
 # ---------- runtime ----------
 

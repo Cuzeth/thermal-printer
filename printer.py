@@ -106,6 +106,18 @@ def open_printer() -> Iterator[object]:
                 pass
 
 
+def print_image(p, img) -> None:
+    """Send a PIL image to the printer with a buffer-safe fragment height.
+
+    python-escpos' default fragment_height=960 produces single GS v 0
+    transfers large enough to overrun the raster buffer on cheap printers,
+    which then dumps the remaining bitmap bytes as text — visible as
+    pages of garbled symbols. Routing every print through this helper
+    keeps each fragment under the buffer limit.
+    """
+    p.image(img, fragment_height=config.IMAGE_FRAGMENT_HEIGHT)
+
+
 def hr(p, char: str = "-") -> None:
     """Print a horizontal rule the full width of the receipt."""
     p.text(char * config.RECEIPT_WIDTH + "\n")

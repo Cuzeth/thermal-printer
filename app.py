@@ -24,7 +24,7 @@ from features import led as led_feat
 from features import render as render_feat
 from features import text as text_feat
 from features import widgets
-from printer import PrinterError, footer, open_printer
+from printer import PrinterError, footer, open_printer, print_image as _print_image
 
 
 app = Flask(__name__)
@@ -68,7 +68,7 @@ def _print_rich(p, body: str) -> None:
     segments = render_feat.split_cuts(body) or [body]
     for i, seg in enumerate(segments):
         img = render_feat.render_markup(seg)
-        p.image(img)
+        _print_image(p, img)
         if i < len(segments) - 1:
             p.cut()
 
@@ -98,7 +98,7 @@ def _print_sections(sections: list[str]) -> None:
             if not (seg or "").strip():
                 continue
             img = render_feat.render_markup(seg)
-            p.image(img)
+            _print_image(p, img)
         footer(p)
 
 
@@ -205,7 +205,7 @@ def print_image():
         img = image_feat.process(f.read(), opts)
         img = image_feat.pad_to_printer_width(img)
         with open_printer() as p:
-            p.image(img)
+            _print_image(p, img)
             if caption:
                 p.text("\n")
                 _print_rich(p, f"> {caption}")
