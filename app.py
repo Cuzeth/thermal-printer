@@ -24,7 +24,7 @@ from features import led as led_feat
 from features import render as render_feat
 from features import text as text_feat
 from features import widgets
-from printer import PrinterError, footer, open_printer, print_image as _print_image
+from printer import PrinterError, footer, open_printer, print_image as _print_image, reset_device
 
 
 app = Flask(__name__)
@@ -879,6 +879,19 @@ def admin_delete_user(user_id: int):
 def admin_list_messages():
     limit = max(1, min(200, int(request.args.get("limit", 20))))
     return jsonify({"ok": True, "messages": auth_db.list_messages(limit=limit)})
+
+
+@app.post("/api/admin/printer/reset")
+@require_tailnet
+@require_admin
+def admin_reset_printer():
+    """Issue a USB port reset to the printer — software unplug-replug."""
+    if config.DRY_RUN:
+        return jsonify({"ok": True, "reset": False, "dry_run": True})
+    found = reset_device()
+    if not found:
+        return jsonify({"ok": False, "error": "printer not on USB bus"}), 503
+    return jsonify({"ok": True, "reset": True})
 
 
 # ---------- health ----------
