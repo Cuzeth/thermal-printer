@@ -1,3 +1,10 @@
 # Thermal printer USB access — lets the app reach the device without root.
 # VID 0x0483 / PID 0x5720 — change if your printer differs (see config.py).
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5720", MODE="0666"
+
+# Disable USB autosuspend for the printer. The POS80 firmware doesn't always
+# wake from low-power state — after a few idle days the kernel times out and
+# drops the device as `USB disconnect`, with no way back short of physical
+# replug. ATTR (not ATTRS) so the rule only matches the usb_device level
+# where power/control actually exists.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5720", ATTR{power/control}="on"
