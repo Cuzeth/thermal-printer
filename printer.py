@@ -8,6 +8,7 @@ layouts without wasting a roll of paper.
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -21,6 +22,11 @@ import config
 
 
 _lock = threading.Lock()
+
+
+def _log(msg: str) -> None:
+    """Stderr so it lands in the gunicorn error log / journalctl."""
+    print(f"[printer] {msg}", file=sys.stderr, flush=True)
 
 
 class PrinterError(RuntimeError):
@@ -68,17 +74,19 @@ def reset_device() -> bool:
         idProduct=config.USB_PRODUCT_ID,
     )
     if dev is None:
+        _log("reset_device: device not on USB bus")
         return False
     try:
         usb.util.dispose_resources(dev)
-    except Exception:
-        pass
+    except Exception as e:
+        _log(f"reset_device: dispose_resources raised {type(e).__name__}: {e}")
     try:
         dev.reset()
-    except Exception:
+        _log("reset_device: dev.reset() ok")
+    except Exception as e:
         # Reset itself can raise USBError as the device drops off the bus
         # mid-call. That's fine — re-enumeration still happens.
-        pass
+        _log(f"reset_device: dev.reset() raised {type(e).__name__}: {e}")
     # Give the kernel time to re-enumerate before the next open() races it.
     time.sleep(0.6)
     return True
@@ -128,13 +136,17 @@ def open_printer() -> Iterator[object]:
         except Exception as e:
             # Recover from a wedged endpoint or stale handle — issuing a
             # port reset is the software equivalent of unplug-replug.
-            if _looks_offline(e) and reset_device():
-                try:
-                    p = _try_open()
-                except Exception as e2:
-                    raise PrinterError(_offline_msg(e2)) from e2
-            elif _looks_offline(e):
-                raise PrinterError(_offline_msg(e)) from e
+            if _looks_offline(e):
+                _log(f"open failed ({type(e).__name__}: {e}) — attempting USB reset")
+                if reset_device():
+                    try:
+                        p = _try_open()
+                        _log("recovery succeeded after USB reset")
+                    except Exception as e2:
+                        _log(f"recovery FAILED after reset: {type(e2).__name__}: {e2}")
+                        raise PrinterError(_offline_msg(e2)) from e2
+                else:
+                    raise PrinterError(_offline_msg(e)) from e
             else:
                 raise PrinterError(
                     f"Could not connect to printer ({config.USB_VENDOR_ID:#06x}:"
