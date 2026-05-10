@@ -7,6 +7,9 @@ Open:      http://127.0.0.1:5005
 from __future__ import annotations
 
 import os
+import queue
+import sys
+import threading
 import traceback
 from typing import Any, Callable
 
@@ -727,11 +730,41 @@ def hw_cheatsheet():
 
 # ---------- friend message endpoint ----------
 
-# In-memory rate limit: {user_id: last_print_unix_ts}. Resets on service
-# restart, which is fine — friends are a small trusted group post-approval.
-_LAST_PRINT: dict[int, float] = {}
-_RATE_LIMIT_SECONDS = 10
 _MAX_MSG_LEN = 800
+
+# Friend-message print queue. POST /api/m/print enqueues and returns
+# immediately; a single daemon worker drains in FIFO order so two friends
+# hitting send at the same time both get an instant "queued" instead of
+# one of them blocking on the USB lock for the duration of the other's
+# print. Replaces the per-user 10s rate limit that used to reject bursts.
+#
+# Cap exists so a runaway client can't pin unbounded memory; on overflow
+# we return 503 and the friend can retry once the printer catches up.
+# Single-process only — load-bearing alongside `gunicorn --workers 1`.
+_PRINT_QUEUE_MAX = 50
+_PRINT_QUEUE: "queue.Queue[tuple[int, str]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
+
+
+def _print_worker() -> None:
+    while True:
+        user_id, formatted = _PRINT_QUEUE.get()
+        try:
+            _print_body(formatted)
+        except Exception as e:
+            # Async failure — no HTTP response to attach this to. Log and
+            # move on so one bad job doesn't wedge the queue for everyone.
+            traceback.print_exc()
+            print(
+                f"[queue] print failed for user_id={user_id}: "
+                f"{type(e).__name__}: {e}",
+                file=sys.stderr,
+                flush=True,
+            )
+        finally:
+            _PRINT_QUEUE.task_done()
+
+
+threading.Thread(target=_print_worker, name="friend-print-worker", daemon=True).start()
 
 
 @app.post("/api/m/preview")
@@ -741,8 +774,8 @@ def friend_preview():
 
     Runs the full friend_message() → render_markup() pipeline, so the
     preview includes the "from <username>" header and timestamp footer
-    that will actually come out of the printer. No USB, no rate limit
-    — pure in-process rendering.
+    that will actually come out of the printer. No USB, no queue —
+    pure in-process rendering.
     """
     def run():
         user = current_user()
@@ -770,8 +803,6 @@ def friend_preview():
 @app.post("/api/m/print")
 @require_allowed
 def friend_print():
-    import time
-
     user = current_user()
     data = request.get_json(silent=True) or {}
     body = (data.get("body") or "").strip()
@@ -780,33 +811,33 @@ def friend_print():
     if len(body) > _MAX_MSG_LEN:
         return jsonify({"ok": False, "error": f"message too long (max {_MAX_MSG_LEN} chars)"}), 400
 
-    now = time.time()
-    last = _LAST_PRINT.get(user["id"], 0)
-    wait = _RATE_LIMIT_SECONDS - (now - last)
-    if wait > 0:
+    formatted = widgets.friend_message(
+        user["username"],
+        body,
+        style=user.get("name_style") or "plain",
+        anonymous=bool(data.get("anonymous", False)),
+    )
+
+    # qsize() before put = jobs the printer must finish first. Approximate
+    # (the worker may have started one but not yet decremented), but close
+    # enough for a UI hint.
+    ahead = _PRINT_QUEUE.qsize()
+    try:
+        _PRINT_QUEUE.put_nowait((user["id"], formatted))
+    except queue.Full:
         return jsonify({
             "ok": False,
-            "error": f"slow down — try again in {int(wait) + 1}s",
-            "kind": "rate_limit",
-        }), 429
+            "error": "the print queue is full — try again in a minute",
+            "kind": "queue_full",
+        }), 503
 
-    try:
-        formatted = widgets.friend_message(
-            user["username"],
-            body,
-            style=user.get("name_style") or "plain",
-            anonymous=bool(data.get("anonymous", False)),
-        )
-        _print_body(formatted)
-        _LAST_PRINT[user["id"]] = now
-        auth_db.log_message(user["id"], body)
-    except PrinterError as e:
-        return jsonify({"ok": False, "error": str(e), "kind": "printer"}), 503
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"ok": False, "error": "print failed", "kind": "server"}), 500
+    # Log to history at enqueue time so the friend sees their message
+    # immediately, even before the worker actually pulls it. The history
+    # row reflects intent, not on-paper success — async failures are
+    # logged server-side.
+    auth_db.log_message(user["id"], body)
 
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "queued": True, "ahead": ahead})
 
 
 @app.get("/api/m/history")

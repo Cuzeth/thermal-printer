@@ -242,7 +242,7 @@ async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
   const anonymous = !!$("#msg-anon")?.checked;
-  await postJSON("/api/m/print", { body, anonymous });
+  const j = await postJSON("/api/m/print", { body, anonymous });
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
   // Reset anon back to the default so it doesn't silently stick.
@@ -252,7 +252,9 @@ async function sendMessage() {
   flash.className = "printed-flash";
   document.body.appendChild(flash);
   setTimeout(() => flash.remove(), 600);
-  toast("printed", "ok");
+  // Server prints async via a queue; toast reflects that honestly.
+  const ahead = Number(j.ahead) || 0;
+  toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
   // Pull the fresh row (+ its canonical server timestamp) into the list.
   loadHistory().catch((err) => console.warn("history refresh failed:", err));
 }

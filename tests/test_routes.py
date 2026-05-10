@@ -202,9 +202,11 @@ def test_friend_preview_honors_anonymous_flag(client):
     assert len(segs) >= 1
 
 
-def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
-    """End-to-end: if the USB printer is unreachable mid-print, the friend
-    gets a clean 503 with our friendly message — not a 500 traceback."""
+def test_friend_print_queues_even_when_printer_offline(client, monkeypatch):
+    """Queue contract: a valid message is accepted (200 + queued) even
+    when the printer is offline. The failure is async — surfaced in the
+    worker's stderr, not in the HTTP response — so the next message still
+    gets a chance and the queue doesn't wedge."""
     import config as cfg
     import printer
     from auth import db as auth_db, session as sess
@@ -215,7 +217,6 @@ def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
             raise type("DeviceNotFoundError", (Exception,), {})("unplugged")
         def close(self): pass
 
-    # Provision an approved friend and force the live-USB branch.
     user = auth_db.create_pending_user("offline_test", "hunter2hunter")
     auth_db.set_status(user["id"], "allowed")
     monkeypatch.setattr(cfg, "DRY_RUN", False)
@@ -225,8 +226,15 @@ def test_friend_print_returns_503_when_printer_offline(client, monkeypatch):
         s[sess.SESSION_USER_KEY] = user["id"]
 
     r = client.post("/api/m/print", json={"body": "hello"})
-    assert r.status_code == 503
+    assert r.status_code == 200
     body = r.get_json()
-    assert body["ok"] is False
-    assert body["kind"] == "printer"
-    assert "Printer not responding" in body["error"]
+    assert body["ok"] is True
+    assert body["queued"] is True
+
+    # Wait for the worker to consume the job before tearing down monkeypatch,
+    # otherwise the patched USB stub leaks into other tests.
+    app_module._PRINT_QUEUE.join()
+
+    # History was written at enqueue time — intent, not on-paper success.
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    assert any(m["body"] == "hello" for m in msgs)

@@ -82,7 +82,7 @@ Short version:
 4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale funnel --bg 5005` to expose the app publicly — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
 5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
-The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and `/api/m/print` rate limit both live in process-local memory.
+The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
 
 Full step-by-step (udev, Tailscale wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
 
