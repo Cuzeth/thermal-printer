@@ -38,9 +38,20 @@ _register_attempts: dict[str, list[float]] = {}
 
 
 def _client_ip() -> str:
-    """First hop in X-Forwarded-For (Funnel sets this), else remote_addr."""
+    """Last hop in X-Forwarded-For (the one the local proxy appended), else
+    remote_addr.
+
+    The app only ever hears from the local Tailscale proxy (bound to
+    127.0.0.1), so the *last* XFF entry is trustworthy. The first entry is
+    client-controlled — proxies append, so a `curl -H "X-Forwarded-For: x"`
+    would land first and let an attacker rotate fake addresses to bypass
+    the per-IP buckets."""
     xff = request.headers.get("X-Forwarded-For", "")
-    return xff.split(",")[0].strip() or (request.remote_addr or "?")
+    if xff:
+        last = xff.split(",")[-1].strip()
+        if last:
+            return last
+    return request.remote_addr or "?"
 
 
 def _sliding_check(bucket: dict[str, list[float]], key: str,
@@ -114,8 +125,10 @@ def _record_login_failure(username: str) -> None:
 
 
 def _clear_login_failures(username: str) -> None:
+    # Only the per-username bucket. Clearing the IP bucket on success would
+    # let an attacker reset the shared counter by logging into their own
+    # account between guesses at someone else's password.
     _failures.pop(username.lower(), None)
-    _ip_failures.pop(_client_ip(), None)
 
 
 def _register_locked() -> bool:

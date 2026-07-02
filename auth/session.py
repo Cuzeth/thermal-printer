@@ -53,11 +53,18 @@ def require_allowed(fn):
     return wrapper
 
 
+def _token_ok(token: str) -> bool:
+    # Compare as bytes — compare_digest on str raises TypeError for
+    # non-ASCII input, which would turn a garbage Authorization header
+    # into a 500 instead of a 401.
+    return hmac.compare_digest(token.encode("utf-8"), config.ADMIN_TOKEN.encode("utf-8"))
+
+
 def require_admin(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         token = _bearer_token()
-        if not token or not hmac.compare_digest(token, config.ADMIN_TOKEN):
+        if not token or not _token_ok(token):
             return jsonify({"ok": False, "error": "admin token required"}), 401
         return fn(*args, **kwargs)
     return wrapper
@@ -74,7 +81,7 @@ def require_owner(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         token = _bearer_token()
-        if not token or not hmac.compare_digest(token, config.ADMIN_TOKEN):
+        if not token or not _token_ok(token):
             return jsonify({"ok": False, "error": "auth required"}), 401
         return fn(*args, **kwargs)
     return wrapper

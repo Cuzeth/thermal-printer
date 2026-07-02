@@ -46,6 +46,17 @@ app.register_blueprint(auth_bp)
 auth_db.init()
 
 
+@app.after_request
+def _security_headers(resp):
+    # Cheap hardening — /m/* is on the public internet via Funnel. DENY
+    # framing (nothing here is meant to be embedded), stop MIME sniffing,
+    # and keep referrers on-site.
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    return resp
+
+
 @app.route("/")
 @require_tailnet
 def index():
@@ -908,7 +919,10 @@ def admin_delete_user(user_id: int):
 @require_tailnet
 @require_admin
 def admin_list_messages():
-    limit = max(1, min(200, int(request.args.get("limit", 20))))
+    try:
+        limit = max(1, min(200, int(request.args.get("limit", 20))))
+    except (TypeError, ValueError):
+        limit = 20
     return jsonify({"ok": True, "messages": auth_db.list_messages(limit=limit)})
 
 
