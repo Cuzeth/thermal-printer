@@ -829,6 +829,11 @@ def friend_message(username: str, body: str, *,
         header = _name_header(username, style)
     lines = [header, "===", ""]
     for paragraph in body.split("\n"):
+        if paragraph.strip() == "!!!":
+            # Friends don't get the cut directive — 800 chars of "!!!" lines
+            # would fire the cutter ~160 times in one message. The composer
+            # keeps it; here it's dropped (it's not in the /m/ markup hint).
+            continue
         if paragraph.strip():
             lines.append(textwrap.fill(paragraph, width=config.RECEIPT_WIDTH))
         else:

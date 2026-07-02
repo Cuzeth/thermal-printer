@@ -755,6 +755,22 @@ _MAX_MSG_LEN = 800
 _PRINT_QUEUE_MAX = 50
 _PRINT_QUEUE: "queue.Queue[tuple[int, str]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
 
+# Per-user in-flight cap so one friend can't fill all 50 slots (paper DoS,
+# and anonymous mode makes it socially cheap). Incremented at enqueue,
+# decremented by the worker when the job finishes either way.
+_PER_USER_QUEUE_CAP = 3
+_inflight: dict[int, int] = {}
+_inflight_lock = threading.Lock()
+
+
+def _dec_inflight(user_id: int) -> None:
+    with _inflight_lock:
+        n = _inflight.get(user_id, 0) - 1
+        if n > 0:
+            _inflight[user_id] = n
+        else:
+            _inflight.pop(user_id, None)
+
 
 def _print_worker() -> None:
     while True:
@@ -772,6 +788,7 @@ def _print_worker() -> None:
                 flush=True,
             )
         finally:
+            _dec_inflight(user_id)
             _PRINT_QUEUE.task_done()
 
 
@@ -829,6 +846,16 @@ def friend_print():
         anonymous=bool(data.get("anonymous", False)),
     )
 
+    with _inflight_lock:
+        if _inflight.get(user["id"], 0) >= _PER_USER_QUEUE_CAP:
+            return jsonify({
+                "ok": False,
+                "error": f"you already have {_PER_USER_QUEUE_CAP} prints queued — "
+                         "let them finish first",
+                "kind": "user_cap",
+            }), 429
+        _inflight[user["id"]] = _inflight.get(user["id"], 0) + 1
+
     # qsize() before put = jobs the printer must finish first. Approximate
     # (the worker may have started one but not yet decremented), but close
     # enough for a UI hint.
@@ -836,6 +863,7 @@ def friend_print():
     try:
         _PRINT_QUEUE.put_nowait((user["id"], formatted))
     except queue.Full:
+        _dec_inflight(user["id"])
         return jsonify({
             "ok": False,
             "error": "the print queue is full — try again in a minute",
