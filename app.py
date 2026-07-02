@@ -76,25 +76,38 @@ def friends_index():
 
 
 # ---------- generic body-printer helper ----------
+#
+# Rasterization is CPU work (PIL on a Pi Zero); the USB lock serializes
+# every print in the process. All helpers below render FIRST and only then
+# open the printer, so a slow render never extends the critical section
+# and delays queued friend prints.
 
-def _print_rich(p, body: str) -> None:
-    """Render markup as an image and print each `!!!`-separated segment."""
+def _render_rich_segments(body: str) -> list:
+    """Rasterize each `!!!`-separated segment of a markup body."""
     segments = render_feat.split_cuts(body) or [body]
-    for i, seg in enumerate(segments):
-        img = render_feat.render_markup(seg)
+    return [render_feat.render_markup(seg) for seg in segments]
+
+
+def _send_rich(p, images: list) -> None:
+    """Send pre-rendered segment images, cutting between (not after) them."""
+    for i, img in enumerate(images):
         _print_image(p, img)
-        if i < len(segments) - 1:
+        if i < len(images) - 1:
             p.cut()
 
 
 def _print_body(body: str, cut: bool = True, rich: bool = True) -> None:
-    with open_printer() as p:
-        if rich:
-            _print_rich(p, body)
-        else:
+    if rich:
+        images = _render_rich_segments(body)
+        with open_printer() as p:
+            _send_rich(p, images)
+            if cut:
+                footer(p)
+    else:
+        with open_printer() as p:
             text_feat.render(p, body)
-        if cut:
-            footer(p)
+            if cut:
+                footer(p)
 
 
 def _print_sections(sections: list[str]) -> None:
@@ -107,11 +120,13 @@ def _print_sections(sections: list[str]) -> None:
     small while still feeling like a single continuous tear-off — no cut
     is issued between sections.
     """
+    images = [
+        render_feat.render_markup(seg)
+        for seg in sections
+        if (seg or "").strip()
+    ]
     with open_printer() as p:
-        for seg in sections:
-            if not (seg or "").strip():
-                continue
-            img = render_feat.render_markup(seg)
+        for img in images:
             _print_image(p, img)
         footer(p)
 
@@ -218,11 +233,12 @@ def print_image():
         caption = request.form.get("caption", "").strip()
         img = image_feat.process(f.read(), opts)
         img = image_feat.pad_to_printer_width(img)
+        caption_imgs = _render_rich_segments(f"> {caption}") if caption else []
         with open_printer() as p:
             _print_image(p, img)
-            if caption:
+            if caption_imgs:
                 p.text("\n")
-                _print_rich(p, f"> {caption}")
+                _send_rich(p, caption_imgs)
             footer(p)
         return {}
     return _safe(run)

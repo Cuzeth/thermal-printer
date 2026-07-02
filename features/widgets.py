@@ -12,6 +12,7 @@ import calendar
 import datetime as dt
 import random
 import textwrap
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote, urlparse
 
 import requests
@@ -305,8 +306,7 @@ def hacker_news(count: int = 5) -> str:
             "---",
         ])
 
-    stories: list[dict] = []
-    for sid in ids:
+    def _fetch_item(sid) -> dict | None:
         try:
             sr = requests.get(
                 f"https://hacker-news.firebaseio.com/v0/item/{sid}.json",
@@ -314,9 +314,16 @@ def hacker_news(count: int = 5) -> str:
                 headers={"User-Agent": "thermal-printer-gui"},
             )
             if sr.ok:
-                stories.append(sr.json() or {})
+                return sr.json() or {}
         except Exception:
-            continue
+            pass
+        return None
+
+    # Fetch items concurrently — serially this was up to count×4s of a
+    # gunicorn thread blocked on the network, enough to starve the whole
+    # app (only 2-4 threads serve everything, including the public /m/).
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(ids)))) as ex:
+        stories = [s for s in ex.map(_fetch_item, ids) if s]
 
     now = dt.datetime.now().strftime("%b %-d, %-I:%M %p").lower()
     parts = [
