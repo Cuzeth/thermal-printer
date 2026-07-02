@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request
 import config
 from auth import auth_bp
 from auth import db as auth_db
+from auth.blueprint import validate_password
 from auth.session import current_user, require_admin, require_allowed, require_owner
 from auth.tailnet import require_tailnet
 from features import codes as codes_feat
@@ -965,6 +966,24 @@ def admin_delete_user(user_id: int):
     if not auth_db.get_user(user_id):
         return jsonify({"ok": False, "error": "no such user"}), 404
     auth_db.delete_user(user_id)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/admin/users/<int:user_id>/password")
+@require_tailnet
+@require_admin
+def admin_set_password(user_id: int):
+    """Reset a friend's password. There's no self-service reset on /m/ —
+    without this, a friend who forgot their password could only be deleted
+    (losing their history and burning the username)."""
+    if not auth_db.get_user(user_id):
+        return jsonify({"ok": False, "error": "no such user"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        password = validate_password(data.get("password", ""))
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    auth_db.set_password(user_id, password)
     return jsonify({"ok": True})
 
 

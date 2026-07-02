@@ -741,6 +741,31 @@ function userRow(u, opts) {
       await refreshAdmin();
     }));
   }
+  if (opts.canUnblock) {
+    actions.appendChild(adminButton("Unblock", "approve", async () => {
+      await adminPOST(`/api/admin/users/${u.id}/approve`);
+      await refreshAdmin();
+    }));
+  }
+
+  // No self-service reset on /m/ — this is the only recovery path for a
+  // friend who forgot their password. Custom handler (not adminButton) so
+  // a cancelled prompt doesn't toast a bogus success.
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "ghost tiny admin-btn admin-btn-reset";
+  resetBtn.textContent = "Reset PW";
+  resetBtn.addEventListener("click", async () => {
+    const pw = prompt(`New password for ${u.username} (8-200 chars):`);
+    if (pw === null) return;
+    try {
+      await postJSON(`/api/admin/users/${u.id}/password`, { password: pw });
+      toast(`password reset for ${u.username}`, "ok");
+    } catch (e) {
+      toast(e.message, "err");
+    }
+  });
+  actions.appendChild(resetBtn);
+
   actions.appendChild(adminButton("Delete", "delete", async () => {
     if (!confirm(`Delete ${u.username}? Their account and messages will be removed.`)) return;
     await adminPOST(`/api/admin/users/${u.id}/delete`);
@@ -782,6 +807,18 @@ async function loadAllowed() {
   }
 }
 
+async function loadBlocked() {
+  const list = $("#admin-blocked-list");
+  list.replaceChildren();
+  try {
+    const { users } = await adminGET("/api/admin/users?status=blocked");
+    if (!users.length) return list.appendChild(emptyState("no blocked users"));
+    users.forEach((u) => list.appendChild(userRow(u, { canUnblock: true })));
+  } catch (e) {
+    list.appendChild(emptyState("error: " + e.message));
+  }
+}
+
 async function loadMessages() {
   const list = $("#admin-msgs-list");
   list.replaceChildren();
@@ -818,11 +855,12 @@ async function loadMessages() {
 }
 
 async function refreshAdmin() {
-  await Promise.all([loadPending(), loadAllowed(), loadMessages()]);
+  await Promise.all([loadPending(), loadAllowed(), loadBlocked(), loadMessages()]);
 }
 
 $("#admin-refresh-pending").addEventListener("click", () => guard(loadPending, "refreshed"));
 $("#admin-refresh-allowed").addEventListener("click", () => guard(loadAllowed, "refreshed"));
+$("#admin-refresh-blocked").addEventListener("click", () => guard(loadBlocked, "refreshed"));
 $("#admin-refresh-msgs").addEventListener("click", () => guard(loadMessages, "refreshed"));
 
 // ---------- keyboard ----------

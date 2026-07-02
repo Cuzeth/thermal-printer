@@ -88,7 +88,8 @@ def _validate_username(username: str) -> str:
     return username
 
 
-def _validate_password(password: str) -> str:
+def validate_password(password: str) -> str:
+    """Shared with the admin reset endpoint in app.py — same rules apply."""
     if not password or not isinstance(password, str):
         raise ValueError("password required")
     if len(password) < MIN_PASSWORD_LEN:
@@ -150,7 +151,7 @@ def register():
     data = request.get_json(silent=True) or {}
     try:
         username = _validate_username(data.get("username", ""))
-        password = _validate_password(data.get("password", ""))
+        password = validate_password(data.get("password", ""))
     except ValueError as e:
         _record_register(_client_ip())
         return _bad(str(e))

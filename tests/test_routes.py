@@ -202,6 +202,45 @@ def test_friend_preview_honors_anonymous_flag(client):
     assert len(segs) >= 1
 
 
+def test_admin_password_reset_flow(client, auth):
+    """Admin reset → old password stops working, new one signs in."""
+    from auth import blueprint as auth_bp_mod, db as auth_db
+
+    user = auth_db.create_pending_user("pwreset_alice", "oldpassword1")
+    auth_db.set_status(user["id"], "allowed")
+
+    r = client.post(f"/api/admin/users/{user['id']}/password",
+                    json={"password": "newpassword1"}, headers=auth)
+    assert r.status_code == 200
+
+    auth_bp_mod._failures.clear()
+    auth_bp_mod._ip_failures.clear()
+    r = client.post("/api/m/auth/login",
+                    json={"username": "pwreset_alice", "password": "oldpassword1"})
+    assert r.status_code == 401
+    r = client.post("/api/m/auth/login",
+                    json={"username": "pwreset_alice", "password": "newpassword1"})
+    assert r.status_code == 200
+
+
+def test_admin_password_reset_validates(client, auth):
+    from auth import db as auth_db
+
+    user = auth_db.create_pending_user("pwreset_bob", "oldpassword1")
+    r = client.post(f"/api/admin/users/{user['id']}/password",
+                    json={"password": "short"}, headers=auth)
+    assert r.status_code == 400
+
+    r = client.post("/api/admin/users/999999/password",
+                    json={"password": "longenough1"}, headers=auth)
+    assert r.status_code == 404
+
+
+def test_admin_password_reset_requires_bearer(client):
+    r = client.post("/api/admin/users/1/password", json={"password": "longenough1"})
+    assert r.status_code == 401
+
+
 def test_friend_print_queues_even_when_printer_offline(client, monkeypatch):
     """Queue contract: a valid message is accepted (200 + queued) even
     when the printer is offline. The failure is async — surfaced in the
