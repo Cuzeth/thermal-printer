@@ -18,43 +18,12 @@ Everything else prints as left-aligned body text.
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
-
 import config
+from features.markup import Span, parse_inline as _parse_inline, strip_inline as _strip_inline
 from printer import hr, heading
 
 
-@dataclass
-class Segment:
-    text: str
-    bold: bool = False
-    underline: bool = False
-    big: bool = False
-
-
-_INLINE_PATTERN = re.compile(
-    r"(\*\*.+?\*\*|__.+?__|~.+?~)",
-)
-
-
-def _parse_inline(line: str) -> list[Segment]:
-    segments: list[Segment] = []
-    for chunk in _INLINE_PATTERN.split(line):
-        if not chunk:
-            continue
-        if chunk.startswith("**") and chunk.endswith("**"):
-            segments.append(Segment(chunk[2:-2], bold=True))
-        elif chunk.startswith("__") and chunk.endswith("__"):
-            segments.append(Segment(chunk[2:-2], underline=True))
-        elif chunk.startswith("~") and chunk.endswith("~") and len(chunk) > 2:
-            segments.append(Segment(chunk[1:-1], big=True))
-        else:
-            segments.append(Segment(chunk))
-    return segments
-
-
-def _emit(p, segments: list[Segment]) -> None:
+def _emit(p, segments: list[Span]) -> None:
     for seg in segments:
         p.set(
             align="left",
@@ -163,10 +132,3 @@ def preview(body: str) -> str:
             continue
         lines.append(_strip_inline(line))
     return "\n".join(lines)
-
-
-def _strip_inline(line: str) -> str:
-    line = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
-    line = re.sub(r"__(.+?)__", r"\1", line)
-    line = re.sub(r"~(.+?)~", r"\1", line)
-    return line

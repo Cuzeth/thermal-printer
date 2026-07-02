@@ -194,6 +194,18 @@ def print_text():
 
 # ---------- image ----------
 
+def _image_opts_from_form() -> image_feat.ProcessOptions:
+    """Preview and print must process identically — build opts in one place."""
+    return image_feat.ProcessOptions(
+        width=int(request.form.get("width", config.PRINTER_PIXEL_WIDTH)),
+        contrast=float(request.form.get("contrast", 1.0)),
+        brightness=float(request.form.get("brightness", 1.0)),
+        invert=request.form.get("invert", "false").lower() == "true",
+        mode=request.form.get("mode", "dither"),
+        threshold=int(request.form.get("threshold", 128)),
+    )
+
+
 @app.post("/api/image/preview")
 @require_tailnet
 @require_owner
@@ -202,15 +214,7 @@ def image_preview():
         if "file" not in request.files:
             raise ValueError("No file uploaded.")
         f = request.files["file"]
-        opts = image_feat.ProcessOptions(
-            width=int(request.form.get("width", config.PRINTER_PIXEL_WIDTH)),
-            contrast=float(request.form.get("contrast", 1.0)),
-            brightness=float(request.form.get("brightness", 1.0)),
-            invert=request.form.get("invert", "false").lower() == "true",
-            mode=request.form.get("mode", "dither"),
-            threshold=int(request.form.get("threshold", 128)),
-        )
-        img = image_feat.process(f.read(), opts)
+        img = image_feat.process(f.read(), _image_opts_from_form())
         return {"data_url": image_feat.to_png_data_url(img),
                 "width": img.width, "height": img.height}
     return _safe(run)
@@ -224,14 +228,7 @@ def print_image():
         if "file" not in request.files:
             raise ValueError("No file uploaded.")
         f = request.files["file"]
-        opts = image_feat.ProcessOptions(
-            width=int(request.form.get("width", config.PRINTER_PIXEL_WIDTH)),
-            contrast=float(request.form.get("contrast", 1.0)),
-            brightness=float(request.form.get("brightness", 1.0)),
-            invert=request.form.get("invert", "false").lower() == "true",
-            mode=request.form.get("mode", "dither"),
-            threshold=int(request.form.get("threshold", 128)),
-        )
+        opts = _image_opts_from_form()
         caption = request.form.get("caption", "").strip()
         img = image_feat.process(f.read(), opts)
         img = image_feat.pad_to_printer_width(img)
@@ -446,18 +443,32 @@ def print_now():
 
 # ---------- codes (QR / barcodes) ----------
 
+def _qr_opts(data: dict) -> codes_feat.QROptions:
+    return codes_feat.QROptions(
+        data=data.get("data", ""),
+        ec=data.get("ec", "M"),
+        size=int(data.get("size", 8)),
+        box_size=int(data.get("box_size", 10)),
+    )
+
+
+def _barcode_opts(data: dict) -> codes_feat.BarcodeOptions:
+    return codes_feat.BarcodeOptions(
+        kind=data.get("kind", "CODE128"),
+        data=data.get("data", ""),
+        width=int(data.get("width", 3)),
+        height=int(data.get("height", 80)),
+        hri=data.get("hri", "BELOW"),
+        font=data.get("font", "A"),
+    )
+
+
 @app.post("/api/code/qr/preview")
 @require_tailnet
 @require_owner
 def qr_preview():
     def run():
-        data = request.get_json(silent=True) or {}
-        opts = codes_feat.QROptions(
-            data=data.get("data", ""),
-            ec=data.get("ec", "M"),
-            size=int(data.get("size", 8)),
-            box_size=int(data.get("box_size", 10)),
-        )
+        opts = _qr_opts(request.get_json(silent=True) or {})
         img = codes_feat.make_qr_image(opts)
         return {"data_url": image_feat.to_png_data_url(img),
                 "width": img.width, "height": img.height}
@@ -469,12 +480,7 @@ def qr_preview():
 @require_owner
 def print_qr():
     def run():
-        data = request.get_json(silent=True) or {}
-        opts = codes_feat.QROptions(
-            data=data.get("data", ""),
-            ec=data.get("ec", "M"),
-            size=int(data.get("size", 8)),
-        )
+        opts = _qr_opts(request.get_json(silent=True) or {})
         if not opts.data:
             raise ValueError("QR payload is empty.")
         with open_printer() as p:
@@ -489,15 +495,7 @@ def print_qr():
 @require_owner
 def barcode_preview():
     def run():
-        data = request.get_json(silent=True) or {}
-        opts = codes_feat.BarcodeOptions(
-            kind=data.get("kind", "CODE128"),
-            data=data.get("data", ""),
-            width=int(data.get("width", 3)),
-            height=int(data.get("height", 80)),
-            hri=data.get("hri", "BELOW"),
-            font=data.get("font", "A"),
-        )
+        opts = _barcode_opts(request.get_json(silent=True) or {})
         img = codes_feat.make_barcode_image(opts)
         return {"data_url": image_feat.to_png_data_url(img),
                 "width": img.width, "height": img.height}
@@ -509,15 +507,7 @@ def barcode_preview():
 @require_owner
 def print_barcode():
     def run():
-        data = request.get_json(silent=True) or {}
-        opts = codes_feat.BarcodeOptions(
-            kind=data.get("kind", "CODE128"),
-            data=data.get("data", ""),
-            width=int(data.get("width", 3)),
-            height=int(data.get("height", 80)),
-            hri=data.get("hri", "BELOW"),
-            font=data.get("font", "A"),
-        )
+        opts = _barcode_opts(request.get_json(silent=True) or {})
         if not opts.data:
             raise ValueError("Barcode payload is empty.")
         with open_printer() as p:
@@ -682,7 +672,7 @@ def hw_raw():
         if len(parsed) > _MAX_RAW_BYTES:
             raise ValueError(f"parsed {len(parsed)} bytes; max is {_MAX_RAW_BYTES}")
         with open_printer() as p:
-            hw_feat._send(p, parsed)
+            hw_feat.send_bytes(p, parsed)
         return {"sent": len(parsed)}
     return _safe(run)
 
@@ -1024,7 +1014,7 @@ def _print_banner() -> None:
     print(f"Thermal Printer GUI -> http://{config.HOST}:{config.PORT}")
     if config.DRY_RUN:
         print(f"DRY RUN mode: bytes will be written to {config.DRY_RUN_PATH}")
-    if not config._ADMIN_TOKEN_FROM_ENV:
+    if not config.ADMIN_TOKEN_FROM_ENV:
         print(f"DEV ADMIN_TOKEN={config.ADMIN_TOKEN}  (set ADMIN_TOKEN in env to persist)")
 
 

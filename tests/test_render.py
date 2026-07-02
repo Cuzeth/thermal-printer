@@ -134,6 +134,15 @@ def test_unknown_styled_heading_falls_through():
     assert img.height > 20
 
 
+def test_long_styled_span_wraps_instead_of_clipping():
+    """Styled spans used to stay single tokens — a long ~big~ run rendered
+    wider than the canvas and was silently clipped off the right edge. It
+    must wrap onto extra lines instead."""
+    short = _render("~WORD~")
+    long = _render("~" + "WORD " * 15 + "WORD~")
+    assert long.height > short.height * 2
+
+
 def test_markup_vocab_all_paths():
     """Every directive exercised at least once — no crashes, valid image."""
     body = (

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from features.hardware import _send
+from features.hardware import send_bytes
 
 
 @dataclass
@@ -111,7 +111,7 @@ def build_bytes(protocol: str, r: int, g: int, b: int) -> bytes:
 
 def send_color(p, protocol: str, r: int, g: int, b: int) -> bytes:
     data = build_bytes(protocol, r, g, b)
-    _send(p, data)
+    send_bytes(p, data)
     return data
 
 

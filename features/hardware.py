@@ -17,9 +17,12 @@ from typing import Optional
 
 # ---------- low-level helper ----------
 
-def _send(p, data: bytes) -> None:
+def send_bytes(p, data: bytes) -> None:
     """Write raw bytes to the printer, using whatever low-level escape hatch
-    the python-escpos backend gives us. Dummy() uses `_raw`, Usb() too."""
+    the python-escpos backend gives us. Dummy() uses `_raw`, Usb() too.
+
+    Public on purpose — the raw-console route and led.py send pre-parsed
+    byte strings through here."""
     if hasattr(p, "_raw"):
         p._raw(data)
     else:
@@ -35,7 +38,7 @@ def cash_drawer(p, pin: int = 2, on_time: int = 50, off_time: int = 200) -> None
     m = 0 if pin == 2 else 1
     on_time = max(1, min(255, int(on_time)))
     off_time = max(1, min(255, int(off_time)))
-    _send(p, bytes([0x1B, 0x70, m, on_time, off_time]))
+    send_bytes(p, bytes([0x1B, 0x70, m, on_time, off_time]))
 
 
 # ---------- buzzer ----------
@@ -45,7 +48,7 @@ def beep(p, count: int = 1, duration_units: int = 3) -> None:
     Requires a printer with a buzzer. Common command: ESC B n t."""
     n = max(1, min(9, int(count)))
     t = max(1, min(9, int(duration_units)))
-    _send(p, bytes([0x1B, 0x42, n, t]))
+    send_bytes(p, bytes([0x1B, 0x42, n, t]))
 
 
 # ---------- feed ----------
@@ -53,20 +56,20 @@ def beep(p, count: int = 1, duration_units: int = 3) -> None:
 def feed_lines(p, n: int) -> None:
     """Feed `n` lines at the current line height."""
     n = max(0, min(255, int(n)))
-    _send(p, bytes([0x1B, 0x64, n]))
+    send_bytes(p, bytes([0x1B, 0x64, n]))
 
 
 def feed_dots(p, n: int) -> None:
     """Feed `n` dots (1/203 inch on typical 80mm units)."""
     n = max(0, min(255, int(n)))
-    _send(p, bytes([0x1B, 0x4A, n]))
+    send_bytes(p, bytes([0x1B, 0x4A, n]))
 
 
 # ---------- cut ----------
 
 def cut(p, partial: bool = False) -> None:
     """Cut the paper. GS V m  (m=0 full cut, m=1 partial cut)."""
-    _send(p, bytes([0x1D, 0x56, 1 if partial else 0]))
+    send_bytes(p, bytes([0x1D, 0x56, 1 if partial else 0]))
 
 
 def cut_after_feed(p, lines: int = 3, partial: bool = False) -> None:
@@ -79,7 +82,7 @@ def cut_after_feed(p, lines: int = 3, partial: bool = False) -> None:
 
 def reset(p) -> None:
     """ESC @ — initialize printer to defaults."""
-    _send(p, bytes([0x1B, 0x40]))
+    send_bytes(p, bytes([0x1B, 0x40]))
 
 
 # ---------- density ----------
@@ -88,7 +91,7 @@ def set_density(p, level: int = 8) -> None:
     """Set print density. Command: GS ( K pL pH fn m — function 49 sets density.
     `level` is typically 0-15 (some models 0-8). Not all printers honor this."""
     level = max(0, min(15, int(level)))
-    _send(p, bytes([0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, level]))
+    send_bytes(p, bytes([0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, level]))
 
 
 # ---------- code page ----------
@@ -113,7 +116,7 @@ CODE_PAGES: dict[int, str] = {
 def set_code_page(p, n: int) -> None:
     """ESC t n — switch character code table."""
     n = max(0, min(255, int(n)))
-    _send(p, bytes([0x1B, 0x74, n]))
+    send_bytes(p, bytes([0x1B, 0x74, n]))
 
 
 # ---------- self-test ----------
@@ -125,7 +128,7 @@ def self_test(p) -> None:
     doesn't trigger anything on this model.
     """
     # Most common: GS ( A pL pH n m  -> print self-test pattern
-    _send(p, bytes([0x1D, 0x28, 0x41, 0x02, 0x00, 0x00, 0x02]))
+    send_bytes(p, bytes([0x1D, 0x28, 0x41, 0x02, 0x00, 0x00, 0x02]))
 
 
 # ---------- status ----------
@@ -144,7 +147,7 @@ def query_status(p, mode: int = 1, timeout_ms: int = 800) -> Optional[int]:
     mode = int(mode)
     if mode not in STATUS_MODES:
         raise ValueError(f"unknown status mode {mode}")
-    _send(p, bytes([0x10, 0x04, mode]))
+    send_bytes(p, bytes([0x10, 0x04, mode]))
     # Only USB/Serial backends can read back.
     try:
         data = p.device.read(p.in_ep, 64, timeout=timeout_ms)  # type: ignore[attr-defined]
@@ -213,7 +216,7 @@ def send_raw(p, text: str) -> int:
     data = parse_raw_input(text)
     if not data:
         raise ValueError("nothing to send")
-    _send(p, data)
+    send_bytes(p, data)
     return len(data)
 
 

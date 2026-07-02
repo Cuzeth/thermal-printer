@@ -32,12 +32,12 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
 from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
 import config
+from features.markup import Span, parse_inline as _parse_inline
 
 
 # ---------- font loading ----------
@@ -377,9 +377,9 @@ BLOCK_GAP = 10
 
 
 # ---------- inline markup ----------
-
-INLINE_RE = re.compile(r"(\*\*.+?\*\*|__.+?__|~.+?~)")
-
+#
+# Inline parsing (Span + _parse_inline) is shared with features/text.py
+# via features/markup.py.
 
 # Styled subheading markup: `:style: text` on its own line renders the text
 # as a centered subheading in the picked display font. Used by friends'
@@ -395,30 +395,6 @@ NAME_STYLES: dict[str, tuple[str, int, str]] = {
     "mono":   ("mono_bold",      34, "none"),
     "caps":   ("sans_bold",      40, "upper"),
 }
-
-
-@dataclass
-class Span:
-    text: str
-    bold: bool = False
-    underline: bool = False
-    big: bool = False
-
-
-def _parse_inline(line: str) -> list[Span]:
-    spans: list[Span] = []
-    for chunk in INLINE_RE.split(line):
-        if not chunk:
-            continue
-        if chunk.startswith("**") and chunk.endswith("**"):
-            spans.append(Span(chunk[2:-2], bold=True))
-        elif chunk.startswith("__") and chunk.endswith("__"):
-            spans.append(Span(chunk[2:-2], underline=True))
-        elif chunk.startswith("~") and chunk.endswith("~") and len(chunk) > 2:
-            spans.append(Span(chunk[1:-1], big=True))
-        else:
-            spans.append(Span(chunk))
-    return spans
 
 
 # ---------- renderer ----------
@@ -654,10 +630,12 @@ class Renderer:
     def _spans(self, spans: list[Span], align: str, indent: int = 0) -> None:
         """Lay out inline spans with left/center alignment and word-wrap.
 
-        Wrapping applies to plain-text runs; bold/big spans stay as single
-        tokens. Each token carries a base font `kind` rather than a resolved
-        font so the drawing step can do per-character CJK fallback without
-        losing width accuracy.
+        Every span is tokenized for wrapping — styled runs included. Styled
+        spans used to stay single tokens, so a long ~big~ run rendered wider
+        than the canvas and was clipped off the right edge. Each token
+        carries a base font `kind` rather than a resolved font so the
+        drawing step can do per-character CJK fallback without losing
+        width accuracy.
         """
         # (token, span, base_kind, size, width)
         Piece = tuple[str, Span, str, int, int]
@@ -665,17 +643,13 @@ class Renderer:
         for sp in spans:
             size = BODY * 2 if sp.big else BODY
             base_kind = "mono_bold" if sp.bold else "mono_regular"
-            if sp.big or sp.bold or sp.underline:
-                w = self._measure_text(sp.text, base_kind, size)
-                pieces.append((sp.text, sp, base_kind, size, w))
-            else:
-                # Split on runs of ASCII whitespace so wrapping can break. CJK
-                # chars have no spaces between them, so we also split each CJK
-                # run into per-character tokens so wrapping happens mid-word
-                # (which is how CJK text is normally wrapped).
-                for tok in _wrap_tokens(sp.text):
-                    pw = self._measure_text(tok, base_kind, size)
-                    pieces.append((tok, sp, base_kind, size, pw))
+            # Split on runs of ASCII whitespace so wrapping can break. CJK
+            # chars have no spaces between them, so we also split each CJK
+            # run into per-character tokens so wrapping happens mid-word
+            # (which is how CJK text is normally wrapped).
+            for tok in _wrap_tokens(sp.text):
+                pw = self._measure_text(tok, base_kind, size)
+                pieces.append((tok, sp, base_kind, size, pw))
 
         # Wrap into lines
         avail = self.draw_w - indent

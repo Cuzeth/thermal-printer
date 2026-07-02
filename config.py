@@ -82,7 +82,7 @@ SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 # Long random string for admin endpoints (curl + Bearer header). Required
 # in prod (Pi); in dev a fresh one is minted per boot and printed on startup.
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN") or secrets.token_urlsafe(32)
-_ADMIN_TOKEN_FROM_ENV = os.getenv("ADMIN_TOKEN") is not None
+ADMIN_TOKEN_FROM_ENV = os.getenv("ADMIN_TOKEN") is not None
 
 DB_PATH = DATA_DIR / "app.db"
 
