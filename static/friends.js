@@ -46,6 +46,16 @@ function show(state) {
 
 let me = null;
 
+// While the friend sits on the PENDING screen, quietly re-check every 30s
+// so approval flips the page without them hammering "Check again".
+let pendingTimer = null;
+function setPendingPolling(on) {
+  clearInterval(pendingTimer);
+  pendingTimer = on
+    ? setInterval(() => refreshMe().catch(() => {}), 30_000)
+    : null;
+}
+
 // Name-style options mirrored from auth.db.VALID_NAME_STYLES. The `preview`
 // field is CSS-side flavor text — it's not the thermal-printer rendering,
 // just a visual hint so the friend knows what they're picking.
@@ -61,6 +71,7 @@ const NAME_STYLES = [
 
 function applyMe(user) {
   me = user;
+  setPendingPolling(!!user && user.status === "pending");
   const who = $("#who");
   if (user) {
     who.hidden = false;
@@ -232,6 +243,8 @@ function historyItem(msg) {
   return li;
 }
 
+const HISTORY_EMPTY_DEFAULT = "nothing yet — send your first receipt above.";
+
 async function loadHistory() {
   const list = $("#history-list");
   const empty = $("#history-empty");
@@ -240,6 +253,8 @@ async function loadHistory() {
     if (!j.ok) throw new Error(j.error || "couldn't load history");
     const items = (j.messages || []).map(historyItem);
     list.replaceChildren(...items);
+    // Restore the default copy — a previous failed load may have replaced it.
+    empty.textContent = HISTORY_EMPTY_DEFAULT;
     empty.hidden = items.length > 0;
   } catch (err) {
     // Non-fatal: show a lightweight error row but leave the form usable.

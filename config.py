@@ -62,6 +62,11 @@ PORT = _env_int("PORT", 5005)
 
 DRY_RUN = _env_bool("DRY_RUN", False)
 
+# Fallback city for the weather widget + morning briefing. One source of
+# truth — the GUI inputs are prefilled from this too, so the placeholder
+# and the server default can't drift apart.
+DEFAULT_LOCATION = os.getenv("DEFAULT_LOCATION", "Phoenix")
+
 DATA_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).parent / "data"))).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 

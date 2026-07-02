@@ -130,7 +130,7 @@ thanks for reading</textarea>
         </div>
         <div class="grid2">
           <label>Location
-            <input type="text" id="w-brief-loc" placeholder="city, airport, or zip" value="Phoenix" />
+            <input type="text" id="w-brief-loc" placeholder="city, airport, or zip" value="{{ default_location }}" />
           </label>
           <div class="hero-actions">
             <button data-widget="briefing" class="primary">Print briefing</button>
@@ -143,7 +143,7 @@ thanks for reading</textarea>
         <article class="wid">
           <h3>Weather <span class="chip chip-live">live</span></h3>
           <p>Current conditions or a 3-day forecast via wttr.in.</p>
-          <input type="text" id="w-loc" placeholder="city, airport, or zip" value="Phoenix" />
+          <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" />
           <div class="row mini">
             <button data-widget="weather" data-days="1" class="primary">Now</button>
             <button data-widget="weather" data-days="3" class="ghost">3-day forecast</button>

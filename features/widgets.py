@@ -199,7 +199,7 @@ def weather(location: str, days: int = 1) -> str:
     days=1 -> current conditions card (compact)
     days=3 -> 3-day forecast card with hi/lo and afternoon summary
     """
-    location = location.strip() or "Cupertino"
+    location = location.strip() or config.DEFAULT_LOCATION
     days = max(1, min(3, int(days)))
 
     data = _fetch_wttr(location)
@@ -535,7 +535,7 @@ def habit_tracker(habits: list[str], days: int = 7) -> str:
 
 # ---------- morning briefing ----------
 
-def morning_briefing_sections(location: str = "Cupertino") -> list[str]:
+def morning_briefing_sections(location: str = "") -> list[str]:
     """Combo widget split into rendering-friendly sections.
 
     Returned as a list, not a single joined string, so the print path can
@@ -570,7 +570,7 @@ def morning_briefing_sections(location: str = "Cupertino") -> list[str]:
     ]
 
 
-def morning_briefing(location: str = "Cupertino") -> str:
+def morning_briefing(location: str = "") -> str:
     """Joined-string version of the briefing. Useful for previews and
     tests; the live print path should prefer morning_briefing_sections()
     so each block goes over USB as its own image."""

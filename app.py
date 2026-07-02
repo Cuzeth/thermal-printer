@@ -67,6 +67,7 @@ def index():
         pixel_width=config.PRINTER_PIXEL_WIDTH,
         dry_run=config.DRY_RUN,
         admin_token=config.ADMIN_TOKEN,
+        default_location=config.DEFAULT_LOCATION,
     )
 
 
@@ -362,10 +363,11 @@ def print_advice():
 def print_briefing():
     def run():
         data = request.get_json(silent=True) or {}
-        loc = (data.get("location") or "Cupertino").strip() or "Cupertino"
-        # Section-by-section path: one image per subsection avoids the
-        # "garbled after the weather" issue that a single huge raster
-        # caused on the real printer.
+        # Empty location falls through to config.DEFAULT_LOCATION in the
+        # weather widget. Section-by-section path: one image per subsection
+        # avoids the "garbled after the weather" issue that a single huge
+        # raster caused on the real printer.
+        loc = (data.get("location") or "").strip()
         _print_sections(widgets.morning_briefing_sections(location=loc))
         return {}
     return _safe(run)

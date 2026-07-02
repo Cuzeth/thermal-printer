@@ -86,12 +86,18 @@ async function getJSON(url) {
   return apiFetch(url, { method: "GET" });
 }
 
-async function guard(fn, okMsg = "sent to printer") {
+async function guard(fn, okMsg = "sent to printer", btn = null) {
+  // Prints are synchronous server-side (a briefing can take 15s+), so
+  // disable the trigger while in flight — otherwise the natural move
+  // (click again) queues a duplicate behind the USB lock.
+  if (btn) btn.disabled = true;
   try {
     await fn();
     toast(okMsg, "ok");
   } catch (e) {
     toast(e.message, "err");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -151,14 +157,14 @@ $("#compose-body").addEventListener("input", () => {
 });
 $("#compose-preview").addEventListener("click", refreshComposePreview);
 $("#compose-rich").addEventListener("change", refreshComposePreview);
-$("#compose-print").addEventListener("click", () => {
+$("#compose-print").addEventListener("click", (e) => {
   guard(async () => {
     await postJSON("/api/print/text", {
       body: $("#compose-body").value,
       cut: $("#compose-cut").checked,
       rich: $("#compose-rich").checked,
     });
-  }, "printing…");
+  }, "printed", e.currentTarget);
 });
 refreshComposePreview();
 
@@ -239,11 +245,11 @@ function buildImageForm() {
   return fd;
 }
 
-$("#image-print").addEventListener("click", () => {
+$("#image-print").addEventListener("click", (e) => {
   if (!state.imageFile) return;
   guard(async () => {
     await postForm("/api/print/image", buildImageForm());
-  }, "printing…");
+  }, "printed", e.currentTarget);
 });
 
 // ---------- widgets ----------
@@ -311,7 +317,7 @@ $$("button[data-widget]").forEach((b) => {
       } else {
         await postJSON(`/api/print/${kind}`, {});
       }
-    }, kind === "briefing" ? "printing briefing…" : "printing…");
+    }, kind === "briefing" ? "briefing printed" : "printed", b);
   });
 });
 
@@ -345,7 +351,7 @@ $$("button[data-lab]").forEach((b) => {
           note: $("#r-note").value,
         });
       }
-    }, "printing…");
+    }, "printed", b);
   });
 });
 
@@ -403,14 +409,14 @@ qrCtrl.size.addEventListener("input", () => {
 qrCtrl.data.addEventListener("input", debouncedQr);
 qrCtrl.ec.addEventListener("change", debouncedQr);
 $("#qr-refresh").addEventListener("click", refreshQrPreview);
-$("#qr-print").addEventListener("click", () => {
+$("#qr-print").addEventListener("click", (e) => {
   guard(async () => {
     await postJSON("/api/print/qr", {
       data: qrCtrl.data.value,
       ec: qrCtrl.ec.value,
       size: Number(qrCtrl.size.value),
     });
-  }, "printing QR…");
+  }, "QR printed", e.currentTarget);
 });
 
 let qrT;
@@ -453,10 +459,10 @@ const bcCtrl = {
   el.addEventListener("input", debouncedBc)
 );
 $("#bc-refresh").addEventListener("click", refreshBcPreview);
-$("#bc-print").addEventListener("click", () => {
+$("#bc-print").addEventListener("click", (e) => {
   guard(async () => {
     await postJSON("/api/print/barcode", buildBcBody());
-  }, "printing barcode…");
+  }, "barcode printed", e.currentTarget);
 });
 
 let bcT;
@@ -516,13 +522,13 @@ $$("button[data-hw]").forEach((b) => {
         renderStatus(j.statuses);
         return; // custom toast
       }
-    }, kind === "cut" ? "cutting…" :
-       kind === "feed" ? "feeding…" :
-       kind === "cash_drawer" ? "kicking drawer…" :
+    }, kind === "cut" ? "cut" :
+       kind === "feed" ? "fed" :
+       kind === "cash_drawer" ? "drawer kicked" :
        kind === "beep" ? "beep!" :
-       kind === "self_test" ? "running self-test…" :
+       kind === "self_test" ? "self-test sent" :
        kind === "reset" ? "reset sent" :
-       "applied");
+       "applied", b);
   });
 });
 
@@ -633,7 +639,7 @@ $$(".led-preset").forEach((b) => {
   });
 });
 
-$("#led-send")?.addEventListener("click", () => {
+$("#led-send")?.addEventListener("click", (e) => {
   const { r, g, b } = hexColorToRgb($("#led-color").value);
   guard(async () => {
     const j = await postJSON("/api/hw/led", {
@@ -642,16 +648,16 @@ $("#led-send")?.addEventListener("click", () => {
       blink: $("#led-blink").checked,
     });
     $("#led-bytes").textContent = j.bytes;
-  }, "LED bytes sent");
+  }, "LED bytes sent", e.currentTarget);
 });
 
 // ---------- console (raw ESC/POS) ----------
 
-$("#console-send").addEventListener("click", () => {
+$("#console-send").addEventListener("click", (e) => {
   guard(async () => {
     const r = await postJSON("/api/hw/raw", { bytes: $("#console-input").value });
     $("#console-sent").textContent = `sent ${r.sent} bytes`;
-  }, "bytes sent");
+  }, "bytes sent", e.currentTarget);
 });
 
 let cheatLoaded = false;
