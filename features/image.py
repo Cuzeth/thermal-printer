@@ -17,6 +17,13 @@ from PIL import Image, ImageEnhance, ImageOps
 import config
 
 
+# Hard ceiling on the processed image height. Width is clamped to the
+# printer, but height scales proportionally — a 100×20,000 upload would
+# become 576×115,200 after resize: an OOM candidate on a Pi Zero's 512MB
+# and ~14 meters of paper. 4096px ≈ half a meter of receipt.
+MAX_OUTPUT_HEIGHT = 4096
+
+
 @dataclass
 class ProcessOptions:
     width: int = config.PRINTER_PIXEL_WIDTH
@@ -41,9 +48,16 @@ def process(image_bytes: bytes, opts: ProcessOptions) -> Image.Image:
 
     # Resize proportionally to the target width
     target_w = max(8, min(opts.width, config.PRINTER_PIXEL_WIDTH))
+    new_h = img.height
     if img.width != target_w:
         ratio = target_w / img.width
         new_h = max(1, int(round(img.height * ratio)))
+    if new_h > MAX_OUTPUT_HEIGHT:
+        raise ValueError(
+            f"image would be {new_h}px tall at {target_w}px wide "
+            f"(max {MAX_OUTPUT_HEIGHT}px) — crop it or reduce the width"
+        )
+    if img.width != target_w:
         img = img.resize((target_w, new_h), Image.LANCZOS)
 
     # Grayscale

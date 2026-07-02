@@ -66,6 +66,30 @@ def test_pad_is_noop_when_already_full_width():
     assert padded is full
 
 
+def test_rejects_output_taller_than_cap():
+    import pytest
+
+    # 100px wide → scaled to printer width the height multiplies ~5.8×.
+    data = _png_bytes(100, 10_000)
+    with pytest.raises(ValueError, match="crop it"):
+        image_feat.process(data, image_feat.ProcessOptions())
+
+
+def test_rejects_tall_image_even_without_resize():
+    import pytest
+
+    # Already at target width, so no resize happens — the cap must still apply.
+    data = _png_bytes(config.PRINTER_PIXEL_WIDTH, image_feat.MAX_OUTPUT_HEIGHT + 1)
+    with pytest.raises(ValueError):
+        image_feat.process(data, image_feat.ProcessOptions())
+
+
+def test_tall_but_legal_image_passes():
+    data = _png_bytes(config.PRINTER_PIXEL_WIDTH, image_feat.MAX_OUTPUT_HEIGHT)
+    out = image_feat.process(data, image_feat.ProcessOptions())
+    assert out.height == image_feat.MAX_OUTPUT_HEIGHT
+
+
 def test_png_data_url_roundtrip():
     data = _png_bytes(100, 100)
     img = image_feat.process(data, image_feat.ProcessOptions(mode="dither"))
