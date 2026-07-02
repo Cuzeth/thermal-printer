@@ -769,7 +769,8 @@ _MAX_MSG_LEN = 800
 # we return 503 and the friend can retry once the printer catches up.
 # Single-process only — load-bearing alongside `gunicorn --workers 1`.
 _PRINT_QUEUE_MAX = 50
-_PRINT_QUEUE: "queue.Queue[tuple[int, str]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
+# (user_id, message_id, formatted_body)
+_PRINT_QUEUE: "queue.Queue[tuple[int, int, str]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
 
 # Per-user in-flight cap so one friend can't fill all 50 slots (paper DoS,
 # and anonymous mode makes it socially cheap). Incremented at enqueue,
@@ -790,12 +791,14 @@ def _dec_inflight(user_id: int) -> None:
 
 def _print_worker() -> None:
     while True:
-        user_id, formatted = _PRINT_QUEUE.get()
+        user_id, msg_id, formatted = _PRINT_QUEUE.get()
+        status = "printed"
         try:
             _print_body(formatted)
         except Exception as e:
             # Async failure — no HTTP response to attach this to. Log and
             # move on so one bad job doesn't wedge the queue for everyone.
+            status = "failed"
             traceback.print_exc()
             print(
                 f"[queue] print failed for user_id={user_id}: "
@@ -803,9 +806,14 @@ def _print_worker() -> None:
                 file=sys.stderr,
                 flush=True,
             )
-        finally:
-            _dec_inflight(user_id)
-            _PRINT_QUEUE.task_done()
+        try:
+            # Flip the history row so the friend can see whether it actually
+            # hit paper. A DB hiccup here must not kill the worker thread.
+            auth_db.set_message_status(msg_id, status)
+        except Exception:
+            traceback.print_exc()
+        _dec_inflight(user_id)
+        _PRINT_QUEUE.task_done()
 
 
 threading.Thread(target=_print_worker, name="friend-print-worker", daemon=True).start()
@@ -872,25 +880,26 @@ def friend_print():
             }), 429
         _inflight[user["id"]] = _inflight.get(user["id"], 0) + 1
 
+    # Log to history at enqueue time so the friend sees their message
+    # immediately, even before the worker actually pulls it. The row starts
+    # 'queued'; the worker flips it to 'printed' or 'failed' so the friend
+    # can see whether it actually hit paper.
+    msg_id = auth_db.log_message(user["id"], body, status="queued")
+
     # qsize() before put = jobs the printer must finish first. Approximate
     # (the worker may have started one but not yet decremented), but close
     # enough for a UI hint.
     ahead = _PRINT_QUEUE.qsize()
     try:
-        _PRINT_QUEUE.put_nowait((user["id"], formatted))
+        _PRINT_QUEUE.put_nowait((user["id"], msg_id, formatted))
     except queue.Full:
         _dec_inflight(user["id"])
+        auth_db.delete_message(msg_id)  # never entered the queue
         return jsonify({
             "ok": False,
             "error": "the print queue is full — try again in a minute",
             "kind": "queue_full",
         }), 503
-
-    # Log to history at enqueue time so the friend sees their message
-    # immediately, even before the worker actually pulls it. The history
-    # row reflects intent, not on-paper success — async failures are
-    # logged server-side.
-    auth_db.log_message(user["id"], body)
 
     return jsonify({"ok": True, "queued": True, "ahead": ahead})
 

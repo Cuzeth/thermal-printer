@@ -800,6 +800,9 @@ async function loadMessages() {
       const when = document.createElement("span");
       when.className = "admin-msg-when dim";
       when.textContent = fmtWhen(m.printed_at);
+      if (m.status && m.status !== "printed") {
+        when.textContent += ` · ${m.status === "failed" ? "didn't print" : m.status}`;
+      }
       head.append(who, when);
 
       const body = document.createElement("pre");

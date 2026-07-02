@@ -61,6 +61,18 @@ def test_friend_print_per_user_cap(client):
             app_module._inflight.pop(user["id"], None)
 
 
+def test_friend_print_marks_status_printed_on_success(client):
+    """DRY_RUN print succeeds → the worker flips the history row from
+    'queued' to 'printed'."""
+    user = _signed_in_client(client, "q_status")
+    r = client.post("/api/m/print", json={"body": "status check"})
+    assert r.status_code == 200
+    app_module._PRINT_QUEUE.join()  # worker updates status before task_done()
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    row = next(m for m in msgs if m["body"] == "status check")
+    assert row["status"] == "printed"
+
+
 def test_friend_print_queue_full_rolls_back_inflight(client, monkeypatch):
     """queue.Full → 503, and the user's in-flight count is released so they
     aren't locked out once the queue drains."""
@@ -75,3 +87,6 @@ def test_friend_print_queue_full_rolls_back_inflight(client, monkeypatch):
     assert r.get_json()["kind"] == "queue_full"
     with app_module._inflight_lock:
         assert app_module._inflight.get(user["id"], 0) == 0
+    # The optimistic history row is removed — the job never entered the queue.
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    assert not any(m["body"] == "hello" for m in msgs)

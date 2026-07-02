@@ -122,7 +122,7 @@ def test_friend_history_returns_own_messages_only(client):
     assert bodies.index("alice two") < bodies.index("alice one")
     # Each row has the shape the UI expects.
     for m in msgs:
-        assert set(m.keys()) == {"id", "body", "printed_at"}
+        assert set(m.keys()) == {"id", "body", "status", "printed_at"}
 
 
 def test_friend_history_limit_is_clamped(client):
@@ -235,6 +235,8 @@ def test_friend_print_queues_even_when_printer_offline(client, monkeypatch):
     # otherwise the patched USB stub leaks into other tests.
     app_module._PRINT_QUEUE.join()
 
-    # History was written at enqueue time — intent, not on-paper success.
+    # History was written at enqueue time, and the worker flipped the row
+    # to 'failed' so the friend can see it never hit paper.
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
-    assert any(m["body"] == "hello" for m in msgs)
+    row = next(m for m in msgs if m["body"] == "hello")
+    assert row["status"] == "failed"

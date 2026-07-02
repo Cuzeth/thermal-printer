@@ -352,6 +352,23 @@ textarea { resize: vertical; min-height: 120px; }
   margin-bottom: 4px;
   text-transform: uppercase;
 }
+.history-status {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: .5px;
+}
+.history-status.failed {
+  background: rgba(230, 90, 90, .15);
+  color: var(--danger, #e65a5a);
+  border: 1px solid rgba(230, 90, 90, .4);
+}
+.history-status.queued {
+  background: rgba(247, 180, 44, .12);
+  color: var(--accent);
+  border: 1px solid rgba(247, 180, 44, .35);
+}
 .history-body {
   margin: 0;
   font-family: inherit;

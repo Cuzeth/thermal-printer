@@ -201,6 +201,19 @@ function historyItem(msg) {
   when.className = "history-when dim";
   when.textContent = fmtWhen(msg.printed_at);
 
+  // 'printed' is the boring default — only surface the exceptions.
+  if (msg.status === "failed") {
+    const badge = document.createElement("span");
+    badge.className = "history-status failed";
+    badge.textContent = "didn't print";
+    when.appendChild(badge);
+  } else if (msg.status === "queued") {
+    const badge = document.createElement("span");
+    badge.className = "history-status queued";
+    badge.textContent = "queued";
+    when.appendChild(badge);
+  }
+
   const body = document.createElement("pre");
   body.className = "history-body";
   body.textContent = msg.body;

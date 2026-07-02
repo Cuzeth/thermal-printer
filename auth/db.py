@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS messages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body       TEXT    NOT NULL,
+  status     TEXT    NOT NULL DEFAULT 'printed',
   printed_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -83,6 +84,13 @@ def init() -> None:
         if "name_style" not in cols:
             conn.execute(
                 "ALTER TABLE users ADD COLUMN name_style TEXT NOT NULL DEFAULT 'plain'"
+            )
+        msg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
+        if "status" not in msg_cols:
+            # Pre-status rows were logged synchronously at print time, so
+            # 'printed' is the honest backfill.
+            conn.execute(
+                "ALTER TABLE messages ADD COLUMN status TEXT NOT NULL DEFAULT 'printed'"
             )
 
 
@@ -178,19 +186,42 @@ def set_name_style(user_id: int, style: str) -> None:
 
 # ---------- messages ----------
 
-def log_message(user_id: int, body: str) -> int:
+# Lifecycle of a friend print: logged 'queued' at enqueue, flipped to
+# 'printed' or 'failed' by the queue worker. Rows written synchronously
+# (tests, pre-status data) default to 'printed'.
+VALID_MESSAGE_STATUSES = ("queued", "printed", "failed")
+
+
+def log_message(user_id: int, body: str, status: str = "printed") -> int:
+    if status not in VALID_MESSAGE_STATUSES:
+        raise ValueError(f"invalid message status: {status}")
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO messages (user_id, body) VALUES (?, ?)", (user_id, body)
+            "INSERT INTO messages (user_id, body, status) VALUES (?, ?, ?)",
+            (user_id, body, status),
         )
         return cur.lastrowid
+
+
+def set_message_status(message_id: int, status: str) -> None:
+    if status not in VALID_MESSAGE_STATUSES:
+        raise ValueError(f"invalid message status: {status}")
+    with db() as conn:
+        conn.execute(
+            "UPDATE messages SET status = ? WHERE id = ?", (status, message_id)
+        )
+
+
+def delete_message(message_id: int) -> None:
+    with db() as conn:
+        conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
 
 
 def list_messages(limit: int = 20) -> list[dict]:
     with db() as conn:
         # Tie-break on id so same-second prints sort newest-first too.
         rows = conn.execute(
-            "SELECT m.id, m.body, m.printed_at, u.username "
+            "SELECT m.id, m.body, m.status, m.printed_at, u.username "
             "FROM messages m JOIN users u ON u.id = m.user_id "
             "ORDER BY m.printed_at DESC, m.id DESC LIMIT ?",
             (limit,),
@@ -208,7 +239,7 @@ def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
     — otherwise a bursty double-print would show in the wrong order."""
     with db() as conn:
         rows = conn.execute(
-            "SELECT id, body, printed_at FROM messages "
+            "SELECT id, body, status, printed_at FROM messages "
             "WHERE user_id = ? ORDER BY printed_at DESC, id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
