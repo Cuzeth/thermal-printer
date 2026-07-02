@@ -26,7 +26,7 @@
 | **Compose** | Rich-text editor with live preview. Markup: `**bold**`, `__underline__`, `~big~`, `#`/`##` headings, `>` centered, `-` bullets, `[ ]`/`[x]` todos, `---`/`===` rules, `!!!` cut markers. |
 | **Image** | Drop an image, tune contrast/brightness/threshold, Floyd–Steinberg dither, print. |
 | **Codes** | QR + 1D barcodes (CODE128, CODE39, EAN-13, EAN-8, UPC-A, ITF, CODABAR). Preview in the browser, print natively via ESC/POS. |
-| **Widgets** | Weather (wttr.in), quotes, dad jokes, dice, ASCII art, "now" card. |
+| **Widgets** | Morning briefing combo, weather (wttr.in), Hacker News, on-this-day (Wikipedia), advice, calendar, countdown, habit tracker, dice, ASCII art, "now" card. |
 | **Labs** | Todo list, label maker, fake receipt. |
 | **Hardware** | Cash drawer, beep, feed, cut, density, code page, LED (best-effort), status query. |
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
@@ -38,8 +38,8 @@ Friends register with a username + password, sit pending until you approve them 
 
 **Security model:** the entire app is funneled (public HTTPS), but tailnet-only routes (`/`, `/api/*`) are gated by a Flask decorator that checks for the `Tailscale-User-Login` header — present on tailnet requests, absent on public Funnel traffic. Flask must bind to `127.0.0.1` so attackers can't bypass the proxy and forge the header.
 
-Rate limits (all in-memory, reset on restart):
-- 1 message per 10s per approved user
+Abuse limits (all in-memory, reset on restart):
+- friend prints go through a FIFO queue (50 jobs max, 3 in-flight per user)
 - 10 failed logins / 15 min per username
 - 30 failed logins / 15 min per IP
 - 5 signups / hour per IP
@@ -82,7 +82,7 @@ Short version:
 4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale funnel --bg 5005` to expose the app publicly — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
 5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
-The systemd unit runs gunicorn with `--workers 1 --threads 2` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
+The systemd unit runs gunicorn with `--workers 1 --threads 4` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
 
 Full step-by-step (udev, Tailscale wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
 
@@ -100,6 +100,7 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 | `DEV_BYPASS_TAILNET` | no | `false` | Skips the `Tailscale-User-Login` header check. Set `true` for local dev; **never** on the Pi. |
 | `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (Funnel is HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
+| `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
 | `USB_VENDOR_ID` / `USB_PRODUCT_ID` | no | `0x0483` / `0x5720` | Match your printer. |
 | `RECEIPT_WIDTH` / `PRINTER_PIXEL_WIDTH` | no | `42` / `576` | 42 cols / 576 px = 80mm. For 58mm use `32` / `384`. |
 | `DATA_DIR` | no | `./data` | SQLite + `last_print.bin` live here. |
@@ -143,9 +144,10 @@ features/
   hardware.py           cash drawer, cut, feed, density, status, raw bytes
   image.py              upload → grayscale → dither/threshold → 1-bit
   led.py                LED protocol candidates for vendor-specific units
+  markup.py             shared inline-markup grammar (spans: bold/underline/big)
   render.py             PIL-based rich-text rasterizer (growable canvas)
   text.py               plain-text composer (ROM-font path)
-  widgets.py            quote / joke / weather / dice / todo / …
+  widgets.py            weather / HN / on-this-day / dice / todo / …
 auth/
   tailnet.py            require_tailnet decorator (Tailscale identity header gate)
   db.py                 SQLite schema + CRUD (users, messages)
@@ -157,7 +159,7 @@ templates/
 static/
   app.js / style.css    main GUI
   friends.js / .css     friends page
-tests/                  pytest: render / widgets / image / routes
+tests/                  pytest: render / widgets / image / routes / security / queue
 scripts/
   test_auth_flow.py     Flask-test-client auth smoke
 deploy/
@@ -166,7 +168,6 @@ deploy/
   setup.sh                  idempotent Pi bootstrapper
 docs/banner.svg         the receipt up top
 .github/workflows/ci.yml    pytest + auth smoke on push/PR
-AUDIT.md                security/quality audit + remediation log
 DEPLOY.md               Raspberry Pi run-book
 .env.example            what to fill into .env on the Pi
 ```

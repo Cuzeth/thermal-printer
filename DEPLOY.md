@@ -371,7 +371,7 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale funnel status` to confirm the proxy is running. |
 | `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
-| `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. The app auto-renames it to `app.db.bak-*` on first boot — just `sudo systemctl restart thermal-printer` once. |
+| `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. `init()` doesn't migrate that far back — move it aside (`mv data/app.db data/app.db.bak`) and restart; a fresh DB is created on boot. |
 | Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and Funnel is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
 | Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some routers. Use the IP from `tailscale ip -4` (the tailnet IP always works once Tailscale is up). |
 
