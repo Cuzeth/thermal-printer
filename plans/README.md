@@ -15,19 +15,20 @@ to the owner.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Crash-safe friend-print bookkeeping (in-flight leak, stranded 'queued' rows) | P1 | S | — | DONE (reviewed; commit `eb34102` on `advisor/001-friend-print-bookkeeping`, awaiting owner merge) |
-| 002 | Request-size caps + bad uploads as 400s | P1 | S | — | DONE (reviewed after 1 revision — scope amended: `_safe()` re-raises HTTPException; commit `7258e63` on `advisor/002-request-size-caps`) |
-| 003 | Tests for admin approve/revoke/delete/messages | P2 | S | — | DONE (reviewed; commit `da3a6e7` on `advisor/003-admin-endpoint-tests`) |
-| 004 | CLAUDE.md with agent-facing constraints | P2 | S | — | DONE (reviewed after 1 revision — emoji-policy provenance attested; commit `9720a88` on `advisor/004-claude-md`) |
-| 005 | Dependency & repo hygiene (bounded pins, pip-audit, stale artifacts) | P3 | S | — | DONE (reviewed; commit `f6cc5fa` on `advisor/005-dependency-hygiene`) |
+| 001 | Crash-safe friend-print bookkeeping (in-flight leak, stranded 'queued' rows) | P1 | S | — | DONE (merged to main, `eb34102`) |
+| 002 | Request-size caps + bad uploads as 400s | P1 | S | — | DONE (merged to main, `7258e63`; 1 revision — scope amended: `_safe()` re-raises HTTPException) |
+| 003 | Tests for admin approve/revoke/delete/messages | P2 | S | — | DONE (merged to main, `da3a6e7`) |
+| 004 | CLAUDE.md with agent-facing constraints | P2 | S | — | DONE (merged to main, `9720a88`; 1 revision — emoji-policy provenance attested) |
+| 005 | Dependency & repo hygiene (bounded pins, pip-audit, stale artifacts) | P3 | S | — | DONE (merged to main, `f6cc5fa`) |
+| 006 | Opt-in scheduled morning briefing (env-driven, off by default) | P2 | M | 001–005 merged | DONE (reviewed after 1 revision — stale worktree base corrected; commit `408c848`) |
+| 007 | Friend doodles — canvas on /m/ printing through the queue | P2 | M | 001 (002 recommended) | DONE (reviewed; commit `07d1bda`) |
+| 008 | "printer looks offline" banner on the friends page | P2 | S | 001–005 merged | DONE (reviewed; commit `d8e5986`) |
 
-All five DONE plans are stacked linearly on `2b723bc`:
-`eb34102 → 7258e63 → da3a6e7 → 9720a88 → f6cc5fa`. Merging
-`advisor/005-dependency-hygiene` into `main` fast-forwards all of them.
-Final gate at the tip: 95 passed + auth smoke ALL GREEN (reviewer-run).
-| 006 | Opt-in scheduled morning briefing (env-driven, off by default) | P2 | M | 001–005 merged | TODO |
-| 007 | Friend doodles — canvas on /m/ printing through the queue | P2 | M | 001 (002 recommended) | TODO |
-| 008 | "printer looks offline" banner on the friends page | P2 | S | 001–005 merged | TODO |
+All eight plans were executed, reviewed, and fast-forward-merged into
+`main` on 2026-07-06 (owner-directed): fixes `eb34102 → 7258e63 → da3a6e7
+→ 9720a88 → f6cc5fa`, then features `408c848 → 07d1bda → d8e5986`.
+Final gate at the tip: 107 passed + auth smoke ALL GREEN (reviewer-run).
+All advisor branches and worktrees were deleted after the merges.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
