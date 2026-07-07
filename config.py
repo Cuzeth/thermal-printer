@@ -67,6 +67,13 @@ DRY_RUN = _env_bool("DRY_RUN", False)
 # and the server default can't drift apart.
 DEFAULT_LOCATION = os.getenv("DEFAULT_LOCATION", "Phoenix")
 
+# Opt-in daily auto-print of the morning briefing. Empty (the default)
+# = off. Set to a 24h local time like "07:30" to have the briefing print
+# itself every day at that time — location comes from DEFAULT_LOCATION.
+# Validated at boot in app.py so a typo fails loudly instead of silently
+# never printing.
+BRIEFING_SCHEDULE = os.getenv("BRIEFING_SCHEDULE", "").strip()
+
 DATA_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).parent / "data"))).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 

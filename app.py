@@ -10,7 +10,9 @@ import os
 import queue
 import sys
 import threading
+import time
 import traceback
+from datetime import datetime, time as dt_time, timedelta
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
@@ -828,6 +830,59 @@ def _print_worker() -> None:
 threading.Thread(target=_print_worker, name="friend-print-worker", daemon=True).start()
 
 
+# ---------- scheduled briefing (opt-in) ----------
+
+def _parse_schedule(value: str) -> dt_time | None:
+    """Parse BRIEFING_SCHEDULE ("HH:MM", 24h) or None when unset.
+    Raises ValueError on garbage so a typo'd .env fails at boot, loudly,
+    instead of never printing and never saying why."""
+    if not value:
+        return None
+    try:
+        # Exactly one colon, both halves integers, hour/minute in range —
+        # dt_time() enforces the ranges, the unpack enforces the shape.
+        hh, mm = value.split(":")
+        return dt_time(int(hh), int(mm))
+    except ValueError:
+        raise ValueError(
+            f"BRIEFING_SCHEDULE must be a 24h time like 07:30, got {value!r}"
+        ) from None
+
+
+def _seconds_until(target: dt_time, now: datetime) -> float:
+    """Seconds from `now` to the next occurrence of `target` (today if
+    still ahead, else tomorrow). Pure function so tests don't sleep."""
+    candidate = datetime.combine(now.date(), target)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    return (candidate - now).total_seconds()
+
+
+def _briefing_scheduler(target: dt_time) -> None:
+    while True:
+        # Re-check the clock at most every 60s rather than one long
+        # sleep — robust to NTP jumps and suspend/resume on the Pi.
+        remaining = _seconds_until(target, datetime.now())
+        if remaining > 60:
+            time.sleep(60)
+            continue
+        time.sleep(remaining)
+        try:
+            _print_sections(widgets.morning_briefing_sections())
+        except Exception:
+            # Never let a flaky widget or an offline printer kill the
+            # scheduler — tomorrow is another morning.
+            traceback.print_exc()
+        # Skip past the target minute so we fire once per day.
+        time.sleep(61)
+
+
+_briefing_time = _parse_schedule(config.BRIEFING_SCHEDULE)
+if _briefing_time is not None:
+    threading.Thread(target=_briefing_scheduler, args=(_briefing_time,),
+                     name="briefing-scheduler", daemon=True).start()
+
+
 @app.post("/api/m/preview")
 @require_allowed
 def friend_preview():
@@ -1047,6 +1102,8 @@ def _print_banner() -> None:
         print(f"DRY RUN mode: bytes will be written to {config.DRY_RUN_PATH}")
     if not config.ADMIN_TOKEN_FROM_ENV:
         print(f"DEV ADMIN_TOKEN={config.ADMIN_TOKEN}  (set ADMIN_TOKEN in env to persist)")
+    if config.BRIEFING_SCHEDULE:
+        print(f"Scheduled briefing: daily at {config.BRIEFING_SCHEDULE}")
 
 
 _print_banner()
