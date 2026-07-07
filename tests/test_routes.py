@@ -299,3 +299,100 @@ def test_friend_print_queues_even_when_printer_offline(client, monkeypatch):
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
     row = next(m for m in msgs if m["body"] == "hello")
     assert row["status"] == "failed"
+
+
+def test_admin_approve_flow(client, auth):
+    """Approve flips a pending user to allowed and stamps approved_at."""
+    from auth import db as auth_db
+
+    user = auth_db.create_pending_user("adm_approve", "hunter2hunter")
+
+    r = client.post(f"/api/admin/users/{user['id']}/approve", headers=auth)
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+    fresh = auth_db.get_user(user["id"])
+    assert fresh["status"] == "allowed"
+    assert fresh["approved_at"] is not None
+
+
+def test_admin_revoke_blocks_access(client, auth):
+    """Revoke sets status 'blocked' and a blocked friend's session stops
+    working (403 on /m/)."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("adm_revoke", "hunter2hunter")
+    r = client.post(f"/api/admin/users/{user['id']}/approve", headers=auth)
+    assert r.status_code == 200
+
+    r = client.post(f"/api/admin/users/{user['id']}/revoke", headers=auth)
+    assert r.status_code == 200
+    assert auth_db.get_user(user["id"])["status"] == "blocked"
+
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.get("/api/m/history")
+    assert r.status_code == 403
+
+
+def test_admin_delete_removes_user_and_history(client, auth):
+    """Delete removes the user row and cascades to their messages."""
+    from auth import db as auth_db
+
+    user = auth_db.create_pending_user("adm_delete", "hunter2hunter")
+    auth_db.log_message(user["id"], "doomed")
+
+    r = client.post(f"/api/admin/users/{user['id']}/delete", headers=auth)
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+    assert auth_db.get_user(user["id"]) is None
+    assert auth_db.list_messages_for_user(user["id"]) == []
+
+
+def test_admin_lifecycle_404_on_missing_user(client, auth):
+    """All three lifecycle endpoints 404 cleanly on an unknown id."""
+    for action in ("approve", "revoke", "delete"):
+        r = client.post(f"/api/admin/users/999999/{action}", headers=auth)
+        assert r.status_code == 404
+        assert r.get_json()["error"] == "no such user"
+
+
+def test_admin_lifecycle_requires_bearer(client):
+    """No token → 401, and nothing changes."""
+    from auth import db as auth_db
+
+    user = auth_db.create_pending_user("adm_nobearer", "hunter2hunter")
+
+    for action in ("approve", "revoke", "delete"):
+        r = client.post(f"/api/admin/users/{user['id']}/{action}")
+        assert r.status_code == 401
+
+    fresh = auth_db.get_user(user["id"])
+    assert fresh is not None
+    assert fresh["status"] == "pending"
+
+
+def test_admin_messages_lists_all_users_newest_first(client, auth):
+    """Admin messages feed spans users, includes usernames, honors limit."""
+    from auth import db as auth_db
+
+    user_a = auth_db.create_pending_user("adm_msgs_a", "hunter2hunter")
+    user_b = auth_db.create_pending_user("adm_msgs_b", "hunter2hunter")
+    auth_db.log_message(user_a["id"], "message from a")
+    auth_db.log_message(user_b["id"], "message from b")
+
+    r = client.get("/api/admin/messages", headers=auth)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    bodies = [m["body"] for m in body["messages"]]
+    assert "message from a" in bodies
+    assert "message from b" in bodies
+    for m in body["messages"]:
+        assert set(m.keys()) == {"id", "body", "status", "printed_at", "username"}
+
+    r = client.get("/api/admin/messages?limit=1", headers=auth)
+    assert r.status_code == 200
+    assert len(r.get_json()["messages"]) == 1
