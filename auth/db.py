@@ -93,6 +93,14 @@ def init() -> None:
                 "ALTER TABLE messages ADD COLUMN status TEXT NOT NULL DEFAULT 'printed'"
             )
 
+        # The print queue lives in process memory, so any row still
+        # 'queued' at boot belongs to a job that no longer exists — the
+        # process restarted before the worker got to it. Flip them to
+        # 'failed' so the friends page stops showing a print that will
+        # never happen. Safe here: init() runs at import, before the
+        # worker thread starts and before any request can enqueue.
+        conn.execute("UPDATE messages SET status = 'failed' WHERE status = 'queued'")
+
 
 # ---------- users ----------
 

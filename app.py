@@ -873,17 +873,18 @@ def friend_print():
             }), 429
         _inflight[user["id"]] = _inflight.get(user["id"], 0) + 1
 
-    # Log to history at enqueue time so the friend sees their message
-    # immediately, even before the worker actually pulls it. The row starts
-    # 'queued'; the worker flips it to 'printed' or 'failed' so the friend
-    # can see whether it actually hit paper.
-    msg_id = auth_db.log_message(user["id"], body, status="queued")
-
-    # qsize() before put = jobs the printer must finish first. Approximate
-    # (the worker may have started one but not yet decremented), but close
-    # enough for a UI hint.
-    ahead = _PRINT_QUEUE.qsize()
+    msg_id = None
     try:
+        # Log to history at enqueue time so the friend sees their message
+        # immediately, even before the worker actually pulls it. The row
+        # starts 'queued'; the worker flips it to 'printed' or 'failed' so
+        # the friend can see whether it actually hit paper.
+        msg_id = auth_db.log_message(user["id"], body, status="queued")
+
+        # qsize() before put = jobs the printer must finish first.
+        # Approximate (the worker may have started one but not yet
+        # decremented), but close enough for a UI hint.
+        ahead = _PRINT_QUEUE.qsize()
         _PRINT_QUEUE.put_nowait((user["id"], msg_id, formatted))
     except queue.Full:
         _dec_inflight(user["id"])
@@ -893,6 +894,20 @@ def friend_print():
             "error": "the print queue is full — try again in a minute",
             "kind": "queue_full",
         }), 503
+    except Exception:
+        # Bookkeeping failed (most likely a SQLite hiccup). Undo the
+        # in-flight increment so the friend isn't locked out of the cap
+        # until the next restart, and answer in the JSON shape the page
+        # expects instead of Flask's HTML 500.
+        _dec_inflight(user["id"])
+        if msg_id is not None:
+            try:
+                auth_db.delete_message(msg_id)
+            except Exception:
+                pass
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "internal error",
+                        "kind": "server"}), 500
 
     return jsonify({"ok": True, "queued": True, "ahead": ahead})
 

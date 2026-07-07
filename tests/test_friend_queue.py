@@ -4,6 +4,7 @@ is enforced, and one friend can't fill the shared print queue."""
 from __future__ import annotations
 
 import queue
+import sqlite3
 
 import pytest
 
@@ -90,3 +91,66 @@ def test_friend_print_queue_full_rolls_back_inflight(client, monkeypatch):
     # The optimistic history row is removed — the job never entered the queue.
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
     assert not any(m["body"] == "hello" for m in msgs)
+
+
+def test_friend_print_db_failure_rolls_back_inflight(client, monkeypatch):
+    """A log_message crash returns JSON 500 (not Flask's HTML 500 page) and
+    does not eat a cap slot — the friend can retry immediately."""
+    user = _signed_in_client(client, "q_dbfail")
+
+    def _raise(*a, **kw):
+        raise sqlite3.OperationalError("boom")
+
+    monkeypatch.setattr(auth_db, "log_message", _raise)
+    r = client.post("/api/m/print", json={"body": "hello"})
+    assert r.status_code == 500
+    body = r.get_json()
+    assert body["ok"] is False
+    assert body["kind"] == "server"
+    with app_module._inflight_lock:
+        assert app_module._inflight.get(user["id"], 0) == 0
+
+    monkeypatch.undo()
+    r2 = client.post("/api/m/print", json={"body": "hello again"})
+    assert r2.status_code == 200
+    assert r2.get_json()["queued"] is True
+    app_module._PRINT_QUEUE.join()
+
+
+def test_worker_survives_status_update_failure(client, monkeypatch):
+    """A DB error while flipping queued -> printed must not kill the worker
+    thread; the next job still processes and decrements in-flight."""
+    user = _signed_in_client(client, "q_statusfail")
+
+    def _raise(*a, **kw):
+        raise sqlite3.OperationalError("boom")
+
+    monkeypatch.setattr(auth_db, "set_message_status", _raise)
+    r = client.post("/api/m/print", json={"body": "first"})
+    assert r.status_code == 200
+    app_module._PRINT_QUEUE.join()
+
+    monkeypatch.undo()
+    r2 = client.post("/api/m/print", json={"body": "second"})
+    assert r2.status_code == 200
+    app_module._PRINT_QUEUE.join()
+
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    row = next(m for m in msgs if m["body"] == "second")
+    assert row["status"] == "printed"
+    with app_module._inflight_lock:
+        assert app_module._inflight.get(user["id"], 0) == 0
+
+
+def test_init_reconciles_orphaned_queued_rows():
+    """Boot-time init() flips leftover 'queued' rows to 'failed' — the
+    in-memory queue that would have processed them no longer exists after
+    a restart."""
+    user = auth_db.create_pending_user("q_orphan", "hunter2hunter")
+    msg_id = auth_db.log_message(user["id"], "orphan", status="queued")
+
+    auth_db.init()  # idempotent; simulates a restart
+
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    row = next(m for m in msgs if m["id"] == msg_id)
+    assert row["status"] == "failed"
