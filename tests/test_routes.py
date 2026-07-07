@@ -3,6 +3,8 @@ in DRY_RUN so no USB is touched."""
 
 from __future__ import annotations
 
+import io
+
 import pytest
 
 import config
@@ -69,6 +71,24 @@ def test_hw_raw_accepts_small_payload(client, auth):
     r = client.post("/api/hw/raw", json={"bytes": "1b 40"}, headers=auth)
     assert r.status_code == 200
     assert r.get_json()["sent"] == 2
+
+
+def test_oversized_body_returns_json_413(client, auth):
+    data = {"file": (io.BytesIO(b"\0" * (17 * 1024 * 1024)), "big.png")}
+    r = client.post("/api/image/preview", data=data, headers=auth,
+                     content_type="multipart/form-data")
+    assert r.status_code == 413
+    body = r.get_json()
+    assert body["ok"] is False
+    assert body["kind"] == "input"
+
+
+def test_image_preview_rejects_garbage_upload(client, auth):
+    data = {"file": (io.BytesIO(b"not an image"), "x.png")}
+    r = client.post("/api/image/preview", data=data, headers=auth,
+                     content_type="multipart/form-data")
+    assert r.status_code == 400
+    assert r.get_json()["kind"] == "input"
 
 
 def test_friend_print_requires_session(client):

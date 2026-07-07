@@ -95,3 +95,23 @@ def test_png_data_url_roundtrip():
     img = image_feat.process(data, image_feat.ProcessOptions(mode="dither"))
     url = image_feat.to_png_data_url(img)
     assert url.startswith("data:image/png;base64,")
+
+
+def test_rejects_non_image_bytes():
+    import pytest
+
+    with pytest.raises(ValueError, match="look like an image"):
+        image_feat.process(b"definitely not a png", image_feat.ProcessOptions())
+
+
+def test_rejects_too_many_input_pixels():
+    import pytest
+
+    # 8000x4000 = 32M pixels > MAX_INPUT_PIXELS, but mode "1" keeps the
+    # in-memory bitmap small (~4MB) so the test doesn't allocate 90MB.
+    img = Image.new("1", (8000, 4000))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    data = buf.getvalue()
+    with pytest.raises(ValueError, match="pixels"):
+        image_feat.process(data, image_feat.ProcessOptions())

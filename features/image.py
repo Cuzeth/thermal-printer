@@ -23,6 +23,13 @@ import config
 # and ~14 meters of paper. 4096px ≈ half a meter of receipt.
 MAX_OUTPUT_HEIGHT = 4096
 
+# Ceiling on *input* pixels, checked before any decode/convert work.
+# Image.open() only reads the header, so width/height are known cheaply;
+# .convert("RGB") is what actually materializes the bitmap (3 bytes per
+# pixel — 30M px ≈ 90MB, about the most a small Pi should be asked to
+# hold for a hobby print). Any phone photo fits comfortably.
+MAX_INPUT_PIXELS = 30_000_000
+
 
 @dataclass
 class ProcessOptions:
@@ -35,7 +42,19 @@ class ProcessOptions:
 
 
 def process(image_bytes: bytes, opts: ProcessOptions) -> Image.Image:
-    img = Image.open(io.BytesIO(image_bytes))
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+    except Exception as e:
+        # PIL raises UnidentifiedImageError (an OSError) on non-image
+        # bytes. Surface it as input error (400), not a server 500.
+        raise ValueError("that file doesn't look like an image") from e
+    if img.width < 1 or img.height < 1:
+        raise ValueError("image has no pixels")
+    if img.width * img.height > MAX_INPUT_PIXELS:
+        raise ValueError(
+            f"image is {img.width}×{img.height} "
+            f"(max {MAX_INPUT_PIXELS:,} pixels) — resize it first"
+        )
 
     # Handle transparency -> white background
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):

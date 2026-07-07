@@ -14,6 +14,7 @@ import traceback
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 import config
 from auth import auth_bp
@@ -42,6 +43,10 @@ app.config.update(
     # Lax + POST-only state changes = no CSRF surface worth protecting.
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,  # 30 days
+    # Backstop for the public routes: nobody legitimately sends more than
+    # an image upload here, and the Pi has to buffer whatever arrives.
+    # Werkzeug answers oversized bodies with 413 before route code runs.
+    MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB
 )
 app.register_blueprint(auth_bp)
 auth_db.init()
@@ -56,6 +61,12 @@ def _security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     return resp
+
+
+@app.errorhandler(413)
+def _too_large(e):
+    return jsonify({"ok": False, "error": "request too large (max 16MB)",
+                    "kind": "input"}), 413
 
 
 @app.route("/")
@@ -144,6 +155,11 @@ def _safe(handler: Callable[[], Any]):
         return jsonify({"ok": False, "error": str(e), "kind": "printer"}), 503
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e), "kind": "input"}), 400
+    except HTTPException:
+        # Let Flask's own error handlers answer (e.g. the JSON 413 for
+        # body-too-large). Without this, the catch-all turns a werkzeug
+        # abort into a misleading 500.
+        raise
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": str(e), "kind": "server"}), 500
