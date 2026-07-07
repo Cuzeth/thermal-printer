@@ -102,6 +102,28 @@ def test_friend_history_requires_session(client):
     assert r.status_code == 401
 
 
+def test_friend_printer_status_requires_session(client):
+    r = client.get("/api/m/printer")
+    assert r.status_code == 401
+
+
+def test_friend_printer_status_shape(client):
+    """Signed-in allowed friend gets the soft banner's backing data: a
+    top-level ok plus a nested printer object with a boolean ok."""
+    from auth import db as auth_db, session as sess
+
+    user = auth_db.create_pending_user("printer_alice", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    r = client.get("/api/m/printer")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert isinstance(body["printer"]["ok"], bool)
+
+
 def test_friend_history_rejects_pending_user(client):
     """A pending friend is signed-in but not allowed — the endpoint has to
     return 403 (not 401, not the history itself)."""

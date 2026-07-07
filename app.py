@@ -33,7 +33,7 @@ from features import led as led_feat
 from features import render as render_feat
 from features import text as text_feat
 from features import widgets
-from printer import PrinterError, footer, open_printer, print_image as _print_image, reset_device
+from printer import PrinterError, footer, open_printer, print_image as _print_image, reset_device, status as printer_status
 
 
 app = Flask(__name__)
@@ -1071,6 +1071,17 @@ def friend_history():
         "ok": True,
         "messages": auth_db.list_messages_for_user(user["id"], limit=limit),
     })
+
+
+@app.get("/api/m/printer")
+@require_allowed
+def friend_printer_status():
+    """Last-known printer reachability for the soft banner on /m/.
+
+    Deliberately coarse: True until a real USB open fails, False until a
+    print completes. Queueing is unaffected — the banner only sets
+    expectations."""
+    return jsonify({"ok": True, "printer": printer_status()})
 
 
 # ---------- admin (Bearer-token gated) ----------

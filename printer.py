@@ -23,6 +23,27 @@ import config
 
 _lock = threading.Lock()
 
+# Last-known printer reachability, for the friends page's soft banner.
+# Only a real failed open sets it False; only a completed print sets it
+# True — never guessed, so it can't go stale in the scary direction.
+# DRY_RUN never flips it (there's no printer to be offline).
+_status_lock = threading.Lock()
+_last_ok: bool = True
+_last_change: float | None = None
+
+
+def _mark(ok: bool) -> None:
+    global _last_ok, _last_change
+    with _status_lock:
+        if _last_ok != ok:
+            _last_change = time.time()
+        _last_ok = ok
+
+
+def status() -> dict:
+    with _status_lock:
+        return {"ok": _last_ok, "since": _last_change}
+
 
 def _log(msg: str) -> None:
     """Stderr so it lands in the gunicorn error log / journalctl."""
@@ -144,8 +165,10 @@ def open_printer() -> Iterator[object]:
                         _log("recovery succeeded after USB reset")
                     except Exception as e2:
                         _log(f"recovery FAILED after reset: {type(e2).__name__}: {e2}")
+                        _mark(False)
                         raise PrinterError(_offline_msg(e2)) from e2
                 else:
+                    _mark(False)
                     raise PrinterError(_offline_msg(e)) from e
             else:
                 raise PrinterError(
@@ -153,13 +176,18 @@ def open_printer() -> Iterator[object]:
                     f"{config.USB_PRODUCT_ID:#06x}): {e}"
                 ) from e
 
+        ok = False
         try:
             yield p
+            ok = True
         except Exception as e:
             if _looks_offline(e):
+                _mark(False)
                 raise PrinterError(_offline_msg(e)) from e
             raise
         finally:
+            if ok:
+                _mark(True)
             try:
                 p.close()
             except Exception:

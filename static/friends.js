@@ -56,6 +56,26 @@ function setPendingPolling(on) {
     : null;
 }
 
+// Soft "printer looks offline" banner, informational only — the queue
+// still accepts prints while it's showing. Best-effort: any failure
+// leaves the banner hidden rather than toasting an error at the friend.
+async function refreshPrinterBanner() {
+  const banner = $("#printer-banner");
+  if (!banner) return;
+  const j = await getJSON("/api/m/printer");
+  banner.hidden = j.printer?.ok !== false;
+}
+
+// While on the ALLOWED screen, recheck every 60s so the banner clears
+// itself if the printer comes back without the friend reloading.
+let printerTimer = null;
+function setPrinterPolling(on) {
+  clearInterval(printerTimer);
+  printerTimer = on
+    ? setInterval(() => refreshPrinterBanner().catch(() => {}), 60_000)
+    : null;
+}
+
 // Name-style options mirrored from auth.db.VALID_NAME_STYLES. The `preview`
 // field is CSS-side flavor text — it's not the thermal-printer rendering,
 // just a visual hint so the friend knows what they're picking.
@@ -72,6 +92,7 @@ const NAME_STYLES = [
 function applyMe(user) {
   me = user;
   setPendingPolling(!!user && user.status === "pending");
+  setPrinterPolling(!!user && user.status === "allowed");
   const who = $("#who");
   if (user) {
     who.hidden = false;
@@ -91,6 +112,7 @@ function applyMe(user) {
     // Pull the persistent history now that we know who you are. Best-effort —
     // the form still works even if this fetch blows up.
     loadHistory().catch((err) => console.warn("history load failed:", err));
+    refreshPrinterBanner().catch(() => {});
     return;
   }
   show("guest");
@@ -285,6 +307,7 @@ function celebrateQueued(j) {
   const ahead = Number(j.ahead) || 0;
   toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
   loadHistory().catch((err) => console.warn("history refresh failed:", err));
+  refreshPrinterBanner().catch(() => {});
 }
 
 async function sendMessage() {

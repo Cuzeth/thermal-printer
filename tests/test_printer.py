@@ -72,3 +72,25 @@ def test_dry_run_still_yields_dummy():
     # Belt-and-suspenders: the normal DRY_RUN path shouldn't regress.
     with printer.open_printer() as p:
         assert hasattr(p, "_raw") or hasattr(p, "output")
+
+
+def test_status_flips_on_offline_open_and_recovers(live_mode, monkeypatch):
+    # _FakeEagerFail triggers the recovery path, which calls the real
+    # usb.core.find (no device on this dev machine -> returns None ->
+    # clean PrinterError). The other tests in this file already rely on
+    # this same fallthrough.
+    monkeypatch.setattr(printer, "Usb", _FakeEagerFail)
+    with pytest.raises(printer.PrinterError):
+        with printer.open_printer():
+            pass
+    assert printer.status()["ok"] is False
+
+    class _WorksFine:
+        def __init__(self, *a, **k): pass
+        def open(self): pass
+        def close(self): pass
+
+    monkeypatch.setattr(printer, "Usb", _WorksFine)
+    with printer.open_printer():
+        pass
+    assert printer.status()["ok"] is True
