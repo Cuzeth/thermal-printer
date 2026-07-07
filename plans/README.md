@@ -6,10 +6,11 @@ docs, direction). Execute in the order below unless dependencies say otherwise.
 Each executor: read the plan fully before starting, honor its STOP conditions,
 and update your row when done.
 
-Session note: the audit ran non-interactively, so per the skill's default the
-top findings by leverage were planned without an owner-selection step. The
-direction findings below are deliberately *not* planned — those choices belong
-to the owner.
+All eight plan files were executed, reviewed, merged, and then deleted
+(owner-directed, 2026-07-07) — the full text of every plan is retrievable
+from git history at `d680970`. This index stays as the record: statuses,
+owner decisions, and the considered-and-rejected list that keeps future
+audits from re-litigating settled questions.
 
 ## Execution order & status
 
