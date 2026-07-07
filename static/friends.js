@@ -226,10 +226,17 @@ function historyItem(msg) {
   }
 
   const body = document.createElement("pre");
-  body.className = "history-body";
+  const isDoodle = msg.body === "(doodle)";
+  body.className = "history-body" + (isDoodle ? " history-doodle" : "");
   body.textContent = msg.body;
 
   li.append(when, body);
+  if (isDoodle) {
+    // A placeholder body — nothing sensible to restore into the textarea,
+    // so skip the click-to-restore handler and its pointer cursor.
+    li.classList.add("history-doodle-row");
+    return li;
+  }
   // Click-to-restore: drops the body back into the composer so the friend
   // can tweak + reprint without retyping. No auto-submit.
   li.addEventListener("click", () => {
@@ -266,6 +273,20 @@ async function loadHistory() {
 
 // ---------- send message ----------
 
+// Shared success choreography for both print kinds: flash the screen,
+// toast an honest "queued" message using the server's `ahead` count, and
+// refresh history so the new row (with its canonical server timestamp)
+// shows up.
+function celebrateQueued(j) {
+  const flash = document.createElement("div");
+  flash.className = "printed-flash";
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 600);
+  const ahead = Number(j.ahead) || 0;
+  toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
+  loadHistory().catch((err) => console.warn("history refresh failed:", err));
+}
+
 async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
@@ -276,15 +297,68 @@ async function sendMessage() {
   // Reset anon back to the default so it doesn't silently stick.
   if ($("#msg-anon")) $("#msg-anon").checked = false;
   setPreviewPlaceholder("start typing to see how it'll print…");
-  const flash = document.createElement("div");
-  flash.className = "printed-flash";
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 600);
-  // Server prints async via a queue; toast reflects that honestly.
-  const ahead = Number(j.ahead) || 0;
-  toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
-  // Pull the fresh row (+ its canonical server timestamp) into the list.
-  loadHistory().catch((err) => console.warn("history refresh failed:", err));
+  celebrateQueued(j);
+}
+
+// ---------- doodle canvas ----------
+
+let doodleCtx = null;
+
+function doodleFillWhite() {
+  const canvas = $("#doodle-canvas");
+  doodleCtx.fillStyle = "#fff";
+  doodleCtx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function initDoodleCanvas() {
+  const canvas = $("#doodle-canvas");
+  if (!canvas || doodleCtx) return;
+  doodleCtx = canvas.getContext("2d");
+  doodleCtx.strokeStyle = "#000";
+  doodleCtx.lineWidth = 8;
+  doodleCtx.lineCap = "round";
+  doodleCtx.lineJoin = "round";
+  doodleFillWhite();
+
+  let drawing = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  // CSS size can differ from the 576x576 backing store — scale client
+  // coords into canvas space so strokes land under the pointer.
+  function canvasPoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return [(e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY];
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    drawing = true;
+    [lastX, lastY] = canvasPoint(e);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!drawing) return;
+    const [x, y] = canvasPoint(e);
+    doodleCtx.beginPath();
+    doodleCtx.moveTo(lastX, lastY);
+    doodleCtx.lineTo(x, y);
+    doodleCtx.stroke();
+    [lastX, lastY] = [x, y];
+  });
+  canvas.addEventListener("pointerup", () => { drawing = false; });
+  canvas.addEventListener("pointerleave", () => { drawing = false; });
+}
+
+async function sendDoodle() {
+  const canvas = $("#doodle-canvas");
+  const anonymous = !!$("#doodle-anon")?.checked;
+  const image = canvas.toDataURL("image/png");
+  const j = await postJSON("/api/m/print/doodle", { image, anonymous });
+  doodleFillWhite();
+  if ($("#doodle-anon")) $("#doodle-anon").checked = false;
+  celebrateQueued(j);
 }
 
 // ---------- wiring ----------
@@ -352,6 +426,36 @@ $("#msg-body").addEventListener("input", (e) => {
 });
 
 $("#msg-anon")?.addEventListener("change", schedulePreview);
+
+// ---------- write / draw mode switch ----------
+
+function setMode(mode) {
+  const isDraw = mode === "draw";
+  $("#msg-form").hidden = isDraw;
+  $("#doodle-panel").hidden = !isDraw;
+  $("#mode-write").classList.toggle("active", !isDraw);
+  $("#mode-draw").classList.toggle("active", isDraw);
+  if (isDraw) initDoodleCanvas();
+}
+
+$("#mode-write").addEventListener("click", () => setMode("write"));
+$("#mode-draw").addEventListener("click", () => setMode("draw"));
+
+$("#doodle-clear").addEventListener("click", () => {
+  if (doodleCtx) doodleFillWhite();
+});
+
+$("#doodle-send").addEventListener("click", async () => {
+  const btn = $("#doodle-send");
+  btn.disabled = true;
+  try {
+    await sendDoodle();
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 $("#history-refresh").addEventListener("click", async () => {
   try {

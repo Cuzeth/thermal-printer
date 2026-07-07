@@ -3,10 +3,13 @@ is enforced, and one friend can't fill the shared print queue."""
 
 from __future__ import annotations
 
+import base64
+import io
 import queue
 import sqlite3
 
 import pytest
+from PIL import Image, ImageDraw
 
 import app as app_module
 from auth import db as auth_db, session as sess
@@ -24,6 +27,14 @@ def _signed_in_client(client, name: str):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
     return user
+
+
+def _doodle_data_url(blank: bool = False) -> str:
+    img = Image.new("RGB", (576, 576), (255, 255, 255))
+    if not blank:
+        ImageDraw.Draw(img).rectangle([100, 100, 300, 300], fill=(0, 0, 0))
+    buf = io.BytesIO(); img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 def test_friend_message_strips_cut_directive():
@@ -154,3 +165,64 @@ def test_init_reconciles_orphaned_queued_rows():
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
     row = next(m for m in msgs if m["id"] == msg_id)
     assert row["status"] == "failed"
+
+
+# ---------- doodles ----------
+
+def test_doodle_prints_and_lands_in_history(client):
+    """A real doodle queues, the DRY_RUN worker actually runs the doodle
+    job, and the history row shows the '(doodle)' placeholder body."""
+    user = _signed_in_client(client, "q_doodle")
+    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+    assert r.status_code == 200
+    assert r.get_json()["queued"] is True
+    app_module._PRINT_QUEUE.join()
+    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
+    row = next(m for m in msgs if m["body"] == "(doodle)")
+    assert row["status"] == "printed"
+
+
+def test_doodle_rejects_blank_canvas(client):
+    """An untouched canvas thresholds to pure white — nothing to print."""
+    _signed_in_client(client, "q_doodle_blank")
+    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url(blank=True)})
+    assert r.status_code == 400
+    assert "draw" in r.get_json()["error"]
+
+
+def test_doodle_rejects_garbage_payloads(client):
+    """Missing image, non-data-url strings, and bad base64 all come back
+    as a clean 400 input error instead of a 500."""
+    _signed_in_client(client, "q_doodle_garbage")
+    for payload in (
+        {},
+        {"image": "hello"},
+        {"image": "data:image/png;base64,@@@"},
+    ):
+        r = client.post("/api/m/print/doodle", json=payload)
+        assert r.status_code == 400
+        assert r.get_json()["kind"] == "input"
+
+
+def test_doodle_requires_approval(client):
+    """A pending (not yet approved) user can't print a doodle either."""
+    user = auth_db.create_pending_user("q_doodle_pending", "hunter2hunter")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+    assert r.status_code == 403
+
+
+def test_doodle_counts_against_user_cap(client):
+    """A friend already at the in-flight cap gets a 429 from the doodle
+    route too — it shares the same enqueue bookkeeping as text prints."""
+    user = _signed_in_client(client, "q_doodle_flood")
+    with app_module._inflight_lock:
+        app_module._inflight[user["id"]] = app_module._PER_USER_QUEUE_CAP
+    try:
+        r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+        assert r.status_code == 429
+        assert r.get_json()["kind"] == "user_cap"
+    finally:
+        with app_module._inflight_lock:
+            app_module._inflight.pop(user["id"], None)

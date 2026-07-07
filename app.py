@@ -6,6 +6,8 @@ Open:      http://127.0.0.1:5005
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import queue
 import sys
@@ -123,6 +125,19 @@ def _print_body(body: str, cut: bool = True, rich: bool = True) -> None:
             text_feat.render(p, body)
             if cut:
                 footer(p)
+
+
+def _print_doodle(job: dict) -> None:
+    """Header, the drawing, timestamp footer — one tear-off. Header and
+    footer are rasterized like any markup; the doodle goes between them
+    as its own transfer, same buffer-safe shape as _print_sections."""
+    header = render_feat.render_markup(job["header"])
+    footer_img = render_feat.render_markup(job["footer"])
+    with open_printer() as p:
+        _print_image(p, header)
+        _print_image(p, job["image"])
+        _print_image(p, footer_img)
+        footer(p)
 
 
 def _print_sections(sections: list[str]) -> None:
@@ -770,6 +785,12 @@ def hw_cheatsheet():
 
 _MAX_MSG_LEN = 800
 
+# Canvas PNGs are tiny (white bg + strokes compress well); 2MB of decoded
+# PNG is already far beyond any honest doodle. Guards the b64 decode, the
+# 16MB global body cap guards the transport.
+_MAX_DOODLE_BYTES = 2 * 1024 * 1024
+_DOODLE_PREFIX = "data:image/png;base64,"
+
 # Friend-message print queue. POST /api/m/print enqueues and returns
 # immediately; a single daemon worker drains in FIFO order so two friends
 # hitting send at the same time both get an instant "queued" instead of
@@ -780,8 +801,10 @@ _MAX_MSG_LEN = 800
 # we return 503 and the friend can retry once the printer catches up.
 # Single-process only — load-bearing alongside `gunicorn --workers 1`.
 _PRINT_QUEUE_MAX = 50
-# (user_id, message_id, formatted_body)
-_PRINT_QUEUE: "queue.Queue[tuple[int, int, str]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
+# (user_id, message_id, job_dict) — job is {"kind": "text", "body": <markup>}
+# or {"kind": "doodle", "image": <1-bit PIL image>, "header": <markup>,
+# "footer": <markup>}.
+_PRINT_QUEUE: "queue.Queue[tuple[int, int, dict]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
 
 # Per-user in-flight cap so one friend can't fill all 50 slots (paper DoS,
 # and anonymous mode makes it socially cheap). Incremented at enqueue,
@@ -802,10 +825,13 @@ def _dec_inflight(user_id: int) -> None:
 
 def _print_worker() -> None:
     while True:
-        user_id, msg_id, formatted = _PRINT_QUEUE.get()
+        user_id, msg_id, job = _PRINT_QUEUE.get()
         status = "printed"
         try:
-            _print_body(formatted)
+            if job["kind"] == "doodle":
+                _print_doodle(job)
+            else:
+                _print_body(job["body"])
         except Exception as e:
             # Async failure — no HTTP response to attach this to. Log and
             # move on so one bad job doesn't wedge the queue for everyone.
@@ -916,24 +942,10 @@ def friend_preview():
     return _safe(run)
 
 
-@app.post("/api/m/print")
-@require_allowed
-def friend_print():
-    user = current_user()
-    data = request.get_json(silent=True) or {}
-    body = (data.get("body") or "").strip()
-    if not body:
-        return jsonify({"ok": False, "error": "message is empty"}), 400
-    if len(body) > _MAX_MSG_LEN:
-        return jsonify({"ok": False, "error": f"message too long (max {_MAX_MSG_LEN} chars)"}), 400
-
-    formatted = widgets.friend_message(
-        user["username"],
-        body,
-        style=user.get("name_style") or "plain",
-        anonymous=bool(data.get("anonymous", False)),
-    )
-
+def _enqueue_friend_print(user: dict, history_body: str, job: dict):
+    """Shared bookkeeping for every friend print kind: per-user cap,
+    optimistic history row, queue insert, and the crash-safe unwind.
+    Returns a Flask response."""
     with _inflight_lock:
         if _inflight.get(user["id"], 0) >= _PER_USER_QUEUE_CAP:
             return jsonify({
@@ -950,13 +962,13 @@ def friend_print():
         # immediately, even before the worker actually pulls it. The row
         # starts 'queued'; the worker flips it to 'printed' or 'failed' so
         # the friend can see whether it actually hit paper.
-        msg_id = auth_db.log_message(user["id"], body, status="queued")
+        msg_id = auth_db.log_message(user["id"], history_body, status="queued")
 
         # qsize() before put = jobs the printer must finish first.
         # Approximate (the worker may have started one but not yet
         # decremented), but close enough for a UI hint.
         ahead = _PRINT_QUEUE.qsize()
-        _PRINT_QUEUE.put_nowait((user["id"], msg_id, formatted))
+        _PRINT_QUEUE.put_nowait((user["id"], msg_id, job))
     except queue.Full:
         _dec_inflight(user["id"])
         auth_db.delete_message(msg_id)  # never entered the queue
@@ -981,6 +993,64 @@ def friend_print():
                         "kind": "server"}), 500
 
     return jsonify({"ok": True, "queued": True, "ahead": ahead})
+
+
+@app.post("/api/m/print")
+@require_allowed
+def friend_print():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    body = (data.get("body") or "").strip()
+    if not body:
+        return jsonify({"ok": False, "error": "message is empty"}), 400
+    if len(body) > _MAX_MSG_LEN:
+        return jsonify({"ok": False, "error": f"message too long (max {_MAX_MSG_LEN} chars)"}), 400
+
+    formatted = widgets.friend_message(
+        user["username"],
+        body,
+        style=user.get("name_style") or "plain",
+        anonymous=bool(data.get("anonymous", False)),
+    )
+    return _enqueue_friend_print(user, body, {"kind": "text", "body": formatted})
+
+
+@app.post("/api/m/print/doodle")
+@require_allowed
+def friend_print_doodle():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    raw = data.get("image") or ""
+    if not isinstance(raw, str) or not raw.startswith(_DOODLE_PREFIX):
+        return jsonify({"ok": False, "error": "no drawing attached",
+                        "kind": "input"}), 400
+    try:
+        png = base64.b64decode(raw[len(_DOODLE_PREFIX):], validate=True)
+    except binascii.Error:
+        return jsonify({"ok": False, "error": "bad image data",
+                        "kind": "input"}), 400
+    if len(png) > _MAX_DOODLE_BYTES:
+        return jsonify({"ok": False, "error": "drawing too large",
+                        "kind": "input"}), 400
+    try:
+        img = image_feat.process(
+            png, image_feat.ProcessOptions(mode="threshold", threshold=160))
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e), "kind": "input"}), 400
+    # An untouched canvas thresholds to pure white — nothing to print.
+    if img.convert("L").getextrema()[0] == 255:
+        return jsonify({"ok": False, "error": "draw something first",
+                        "kind": "input"}), 400
+    img = image_feat.pad_to_printer_width(img)
+    header, footer_markup = widgets.friend_frame(
+        user["username"],
+        style=user.get("name_style") or "plain",
+        anonymous=bool(data.get("anonymous", False)),
+    )
+    return _enqueue_friend_print(user, "(doodle)", {
+        "kind": "doodle", "image": img,
+        "header": header, "footer": footer_markup,
+    })
 
 
 @app.get("/api/m/history")

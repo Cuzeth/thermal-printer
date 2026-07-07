@@ -233,6 +233,46 @@ textarea { resize: vertical; min-height: 120px; }
 .style-gothic .style-chip-preview { font-family: Papyrus, "Herculanum", fantasy; letter-spacing: .5px; }
 .style-mono   .style-chip-preview { font-family: var(--mono), "Courier New", monospace; }
 
+/* MODE SWITCH — write / draw tabs above the composer */
+.mode-switch {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 4px;
+}
+.mode-tab {
+  flex: 1;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 8px;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color .12s ease, color .12s ease;
+}
+.mode-tab:hover { border-color: var(--accent); }
+.mode-tab.active {
+  border-color: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(247,180,44,.25);
+}
+
+/* DOODLE — draw panel */
+#doodle-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  touch-action: none;
+  cursor: crosshair;
+}
+
 /* ANONYMOUS toggle */
 .anon-toggle {
   display: flex;
@@ -382,6 +422,12 @@ textarea { resize: vertical; min-height: 120px; }
   mask-image: linear-gradient(180deg, #000 70%, transparent);
   -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent);
 }
+.history-doodle {
+  font-style: italic;
+  color: var(--dim);
+}
+.history-doodle-row { cursor: default; }
+.history-doodle-row:active { transform: none; }
 .history-empty { font-size: 12px; margin: 8px 0 0; }
 
 /* PRINTED flash effect after a successful send */

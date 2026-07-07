@@ -818,6 +818,19 @@ def _name_header(username: str, style: str) -> str:
     return "## from " + name
 
 
+def friend_frame(username: str, *, style: str = "plain",
+                 anonymous: bool = False) -> tuple[str, str]:
+    """Markup for the lines that frame a friend print — the "from <name>"
+    header and the timestamp footer. Shared by text messages and doodles
+    so the two kinds are visually siblings on paper."""
+    timestamp = dt.datetime.now().strftime("%a %b %-d \u00b7 %I:%M %p").lower()
+    if anonymous:
+        header = "## from anonymous"
+    else:
+        header = _name_header(username, style)
+    return f"{header}\n===", f"---\n> {timestamp}\n---"
+
+
 def friend_message(username: str, body: str, *,
                    style: str = "plain",
                    anonymous: bool = False) -> str:
@@ -829,12 +842,8 @@ def friend_message(username: str, body: str, *,
     replaces the username with "anonymous" and ignores `style`.
     """
     body = (body or "").strip()
-    timestamp = dt.datetime.now().strftime("%a %b %-d \u00b7 %I:%M %p").lower()
-    if anonymous:
-        header = "## from anonymous"
-    else:
-        header = _name_header(username, style)
-    lines = [header, "===", ""]
+    header, footer = friend_frame(username, style=style, anonymous=anonymous)
+    lines = [header, ""]
     for paragraph in body.split("\n"):
         if paragraph.strip() == "!!!":
             # Friends don't get the cut directive — 800 chars of "!!!" lines
@@ -845,5 +854,5 @@ def friend_message(username: str, body: str, *,
             lines.append(textwrap.fill(paragraph, width=config.RECEIPT_WIDTH))
         else:
             lines.append("")
-    lines.extend(["", "---", f"> {timestamp}", "---"])
+    lines.extend(["", footer])
     return "\n".join(lines)
