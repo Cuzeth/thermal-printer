@@ -172,6 +172,7 @@ deploy/
 docs/banner.svg         the receipt up top
 .github/workflows/ci.yml    pytest + auth smoke on push/PR
 DEPLOY.md               Raspberry Pi run-book
+MIGRATION.md            one-time cutover: Tailscale Funnel -> Cloudflare
 .env.example            what to fill into .env on the Pi
 ```
 

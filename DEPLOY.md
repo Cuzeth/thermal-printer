@@ -325,15 +325,10 @@ forged `Cf-Access-*` headers would otherwise ride through to Flask on
 allowlisted paths — this rule kills them at the edge, and even if both
 walls fail, `auth/access.py` only opens for `OWNER_EMAIL` anyway.
 
-**Migrating from the Tailscale setup?** Tear it down once the tunnel
-works — the app no longer reads Tailscale headers:
-
-```sh
-sudo tailscale serve reset
-# optional: remove Tailscale entirely (keep it if you still want it
-# for SSH'ing into the Pi from outside your apartment)
-sudo apt-get remove tailscale
-```
+**Migrating a Pi that's already running the old Tailscale Funnel
+setup?** Don't improvise from this section — follow
+[MIGRATION.md](MIGRATION.md), the start-to-finish cutover runbook
+(teardown order, backups, verification, rollback).
 
 ---
 
