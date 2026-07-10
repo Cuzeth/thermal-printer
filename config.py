@@ -55,8 +55,10 @@ IMAGE_FRAGMENT_HEIGHT = _env_int("IMAGE_FRAGMENT_HEIGHT", 256)
 
 # ---------- runtime ----------
 
-# Must be 127.0.0.1 — the app trusts Tailscale's identity headers, so it
-# must only be reachable via the local proxy. Never bind to 0.0.0.0.
+# Must be 127.0.0.1 — only the two local proxies may reach the app:
+# tailscaled (tailnet console; injects the identity headers the tailnet
+# gate trusts) and cloudflared (print.cuzeth.com friend traffic). Never
+# bind to 0.0.0.0.
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _env_int("PORT", 5005)
 

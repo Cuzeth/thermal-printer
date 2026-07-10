@@ -2,8 +2,9 @@
 
 Hobby project: a web GUI for an 80mm USB thermal receipt printer on a
 Raspberry Pi, plus a public "send me a receipt" page for friends
-(`/m/`, exposed via Tailscale Funnel). Tone of the codebase: lean and
-playful, not enterprise. Prefer the smallest change that keeps the
+(`/m/`, public at print.cuzeth.com via Cloudflare Tunnel; the console
+stays tailnet-only via `tailscale serve`). Tone of the codebase: lean
+and playful, not enterprise. Prefer the smallest change that keeps the
 comments honest.
 
 ## Run / test
@@ -30,9 +31,14 @@ DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.
   of them.
 - **Bind 127.0.0.1 only.** Private routes trust the
   `Tailscale-User-Login` header (`auth/tailnet.py`); that is only safe
-  because nothing but the local Tailscale proxy can reach the port.
-  Never bind 0.0.0.0, never set `DEV_BYPASS_TAILNET` or `FLASK_DEBUG` in
-  anything deploy-shaped (the Werkzeug debugger on a funneled app is RCE).
+  because nothing but the two local proxies (tailscaled serve +
+  cloudflared) can reach the port. cloudflared forwards client headers
+  verbatim, so three walls guard against forged identity headers: the
+  tunnel's path allowlist (`deploy/cloudflared-config.yml`), an edge
+  Transform Rule stripping the header, and the CF-Ray check in
+  `auth/tailnet.py` — don't weaken any of them. Never bind 0.0.0.0,
+  never set `DEV_BYPASS_TAILNET` or `FLASK_DEBUG` in anything
+  deploy-shaped (the Werkzeug debugger on an internet-exposed app is RCE).
 - **Render constants are hardware-validated.** Font sizes and spacing in
   `features/render.py` look wrong in PIL previews but print correctly on
   the real 80mm printer. Do not retune them from previews.

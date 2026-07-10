@@ -39,7 +39,8 @@ from printer import PrinterError, footer, open_printer, print_image as _print_im
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=config.SECRET_KEY,
-    # Secure requires HTTPS — true on the Pi (Funnel), false in local dev.
+    # Secure requires HTTPS — true on the Pi (Cloudflare + tailscale serve
+    # both terminate TLS), false in local dev.
     # Gated by an explicit env var rather than FLASK_DEBUG because debug is
     # usually off in dev too, which would silently kill the session cookie.
     SESSION_COOKIE_SECURE=config.COOKIE_SECURE,
@@ -58,7 +59,7 @@ auth_db.init()
 
 @app.after_request
 def _security_headers(resp):
-    # Cheap hardening — /m/* is on the public internet via Funnel. DENY
+    # Cheap hardening — /m/* is on the public internet at print.cuzeth.com. DENY
     # framing (nothing here is meant to be embedded), stop MIME sniffing,
     # and keep referrers on-site.
     resp.headers.setdefault("X-Frame-Options", "DENY")
@@ -1193,5 +1194,5 @@ _print_banner()
 if __name__ == "__main__":
     # Dev server. Prod runs under gunicorn (see deploy/thermal-printer.service).
     # FLASK_DEBUG=1 opts in to the Werkzeug reloader/debugger; never set it on
-    # the Pi — /m/* is public via Funnel and the debugger = RCE.
+    # the Pi — /m/* is public at print.cuzeth.com and the debugger = RCE.
     app.run(host=config.HOST, port=config.PORT, debug=os.environ.get("FLASK_DEBUG") == "1")

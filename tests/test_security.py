@@ -63,6 +63,30 @@ def test_friend_routes_stay_public_without_tailnet(client, no_bypass):
     assert client.get("/api/ping").status_code == 200
 
 
+def test_cloudflare_marked_request_is_never_tailnet(client, no_bypass):
+    """cloudflared forwards client headers verbatim, so a public visitor can
+    send a forged Tailscale-User-Login — but they can't remove the CF-Ray
+    marker Cloudflare's edge stamps on every proxied request. Backstop
+    behind the tunnel's path allowlist and the edge header-strip rule."""
+    r = client.get("/", headers={"Tailscale-User-Login": "owner@example.com",
+                                 "CF-Ray": "8f1a2b3c4d5e6f70-PHX"})
+    assert r.status_code == 403
+
+
+def test_cloudflare_marked_request_blocked_even_with_valid_bearer(client, auth, no_bypass):
+    # The realistic worst case: leaked ADMIN_TOKEN + forged identity header,
+    # arriving through the tunnel. Must still be a 403 from the gate.
+    headers = {**auth, "Tailscale-User-Login": "owner@example.com",
+               "CF-Ray": "8f1a2b3c4d5e6f70-PHX"}
+    r = client.post("/api/print/now", json={}, headers=headers)
+    assert r.status_code == 403
+
+
+def test_cloudflare_marker_does_not_break_friend_routes(client, no_bypass):
+    # Real friend traffic always carries CF-Ray; public routes must not care.
+    assert client.get("/m/", headers={"CF-Ray": "8f1a2b3c4d5e6f70-PHX"}).status_code == 200
+
+
 # ---------- rate-limit plumbing ----------
 
 def test_client_ip_uses_last_xff_hop():

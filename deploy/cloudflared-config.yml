@@ -1,0 +1,32 @@
+# Cloudflare Tunnel config — the only internet-facing door, at
+# https://print.cuzeth.com. cloudflared dials out to Cloudflare's edge, so
+# no router config or open ports are needed; it then proxies allowed
+# requests to the Flask app on 127.0.0.1:5005.
+#
+# The ingress below is a PATH ALLOWLIST, and it is load-bearing: only the
+# friends page, its API (which includes /api/m/auth/*), static assets, and
+# the health check reach Flask. Everything else — the owner console,
+# /api/print/*, /api/admin/* — is answered 404 here and never touches the
+# app. Widening this list re-exposes private routes to the internet, so
+# don't, and keep the deployed /etc/cloudflared/config.yml identical to
+# this file.
+#
+# SECURITY: unlike Tailscale's proxy, cloudflared forwards client headers
+# verbatim — a public visitor can send a forged Tailscale-User-Login. This
+# allowlist is the first of three walls against that; the others are a
+# Cloudflare Transform Rule stripping the header at the edge (dashboard
+# side — see DEPLOY.md) and auth/tailnet.py refusing tailnet status to any
+# request bearing CF-Ray.
+#
+# Install: DEPLOY.md § "Cloudflare Tunnel" walks through creating the
+# tunnel, filling in TUNNEL_ID below (both places), and installing this
+# file at /etc/cloudflared/config.yml as a systemd service.
+
+tunnel: TUNNEL_ID
+credentials-file: /home/pi/.cloudflared/TUNNEL_ID.json
+
+ingress:
+  - hostname: print.cuzeth.com
+    path: ^/(m(/.*)?|api/m/.+|static/.+|api/ping)$
+    service: http://127.0.0.1:5005
+  - service: http_status:404

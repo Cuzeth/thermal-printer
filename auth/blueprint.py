@@ -3,7 +3,7 @@
 Simple username + password. Passwords hashed with werkzeug's scrypt
 helper (ships with Flask, no new dep). Failed-login rate limit is an
 in-memory per-username sliding window — resets on restart, fine for a
-small-audience app behind Funnel.
+small-audience app behind Cloudflare.
 """
 
 from __future__ import annotations
@@ -38,14 +38,16 @@ _register_attempts: dict[str, list[float]] = {}
 
 
 def _client_ip() -> str:
-    """Last hop in X-Forwarded-For (the one the local proxy appended), else
-    remote_addr.
+    """Last hop in X-Forwarded-For (the one the trusted proxy appended),
+    else remote_addr.
 
-    The app only ever hears from the local Tailscale proxy (bound to
-    127.0.0.1), so the *last* XFF entry is trustworthy. The first entry is
-    client-controlled — proxies append, so a `curl -H "X-Forwarded-For: x"`
-    would land first and let an attacker rotate fake addresses to bypass
-    the per-IP buckets."""
+    The app only ever hears from the two local proxies (bound to
+    127.0.0.1), and both append the real client address as the *last* XFF
+    entry — Cloudflare's edge for friend traffic at print.cuzeth.com,
+    tailscaled for tailnet traffic. The first entry is client-controlled —
+    proxies append, so a `curl -H "X-Forwarded-For: x"` would land first
+    and let an attacker rotate fake addresses to bypass the per-IP
+    buckets."""
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
         last = xff.split(",")[-1].strip()

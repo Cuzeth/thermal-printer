@@ -32,11 +32,11 @@
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
 | **Admin** | Approve / block / delete friends, review recent prints. |
 
-**Friends page** — `/m/` · public-facing, via Tailscale Funnel.
+**Friends page** — `/m/` · public at <https://print.cuzeth.com>, via Cloudflare Tunnel.
 
 Friends register with a username + password, sit pending until you approve them from the Admin tab, then send you messages that print immediately with their name attached. Supports the same markup vocabulary as the composer.
 
-**Security model:** the entire app is funneled (public HTTPS), but tailnet-only routes (`/`, `/api/*`) are gated by a Flask decorator that checks for the `Tailscale-User-Login` header — present on tailnet requests, absent on public Funnel traffic. Flask must bind to `127.0.0.1` so attackers can't bypass the proxy and forge the header.
+**Security model:** two local proxies front `127.0.0.1:5005`. `tailscale serve` publishes the app to the tailnet only and injects the `Tailscale-User-Login` header that private routes (`/`, `/api/*`) require. `cloudflared` publishes the friends page to the internet at print.cuzeth.com — and since it forwards client headers verbatim, three walls keep forged identity headers out: the tunnel's ingress allowlists only `/m`, `/api/m/*`, `/static/*`, and `/api/ping` ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)); a Cloudflare Transform Rule strips `Tailscale-User-Login` at the edge; and the app refuses tailnet status to any request bearing Cloudflare's `CF-Ray` marker (`auth/tailnet.py`). Flask must bind to `127.0.0.1` so nothing bypasses the proxies.
 
 Abuse limits (all in-memory, reset on restart):
 - friend prints go through a FIFO queue (50 jobs max, 3 in-flight per user)
@@ -58,13 +58,13 @@ Open <http://localhost:5005>. The startup banner prints a dev `ADMIN_TOKEN` — 
 
 Both env vars are load-bearing in local dev:
 - `DEV_BYPASS_TAILNET=true` — skips the `Tailscale-User-Login` header check so private routes (`/`, `/api/*`) don't return 403.
-- `COOKIE_SECURE=false` — the default is `true` (prod is HTTPS via Funnel), and without it over plain HTTP the browser silently drops the session cookie and every `/m/*` request fails as "not signed in."
+- `COOKIE_SECURE=false` — the default is `true` (both prod doors are HTTPS), and without it over plain HTTP the browser silently drops the session cookie and every `/m/*` request fails as "not signed in."
 
 For a local friends demo, open <http://localhost:5005/m/>, click **Create an account**, pick any username + password (8+ chars), then approve yourself from the Admin tab in the main GUI.
 
 Set `DRY_RUN=true` to skip USB and dump ESC/POS bytes to `./data/last_print.bin` instead. Useful for iterating on layouts without burning paper.
 
-Set `FLASK_DEBUG=1` **locally only** if you want the Werkzeug reloader. Never on the Pi — `/m/*` is public via Funnel and the debugger page is RCE.
+Set `FLASK_DEBUG=1` **locally only** if you want the Werkzeug reloader. Never on the Pi — `/m/*` is public at print.cuzeth.com and the debugger page is RCE.
 
 ---
 
@@ -79,8 +79,9 @@ Short version:
    python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
    python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
    ```
-4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale funnel --bg 5005` to expose the app publicly — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
-5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
+4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale serve --bg 5005` to publish the console to your tailnet (and only your tailnet) — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
+5. Set up the Cloudflare Tunnel for print.cuzeth.com — `cloudflared` install, tunnel creation, DNS route, and the header-strip Transform Rule are step-by-step in [DEPLOY.md](DEPLOY.md).
+6. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
 The systemd unit runs gunicorn with `--workers 1 --threads 4` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
 
@@ -96,9 +97,9 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 |---|---|---|---|
 | `SECRET_KEY` | yes (prod) | random per boot | Flask session signing. Persist to keep sessions across restarts. |
 | `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer gate for `/api/admin/*` and every private console route. |
-| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — the app trusts Tailscale's identity headers, so it must only be reachable via the local proxy. |
+| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only the two local proxies (tailscaled + cloudflared) may reach the app, because the tailnet gate trusts Tailscale's identity headers. |
 | `DEV_BYPASS_TAILNET` | no | `false` | Skips the `Tailscale-User-Login` header check. Set `true` for local dev; **never** on the Pi. |
-| `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (Funnel is HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
+| `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (print.cuzeth.com and the tailnet console are both HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
 | `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
 | `BRIEFING_SCHEDULE` | no | (off) | Set `HH:MM` (24h) to auto-print the morning briefing daily. Empty = off. |
@@ -126,7 +127,7 @@ CI runs both on push + PR (see [.github/workflows/ci.yml](.github/workflows/ci.y
 - **Backend** · Python 3.12 · Flask · gunicorn · python-escpos · Pillow · SQLite (WAL)
 - **Frontend** · vanilla JS, no build step
 - **Auth** · werkzeug scrypt for passwords, signed-cookie sessions for friends, bearer token for owner
-- **Hosting** · Raspberry Pi + Tailscale Funnel (app-level tailnet gating via identity headers)
+- **Hosting** · Raspberry Pi · Cloudflare Tunnel for the public friends page (print.cuzeth.com) · `tailscale serve` for the private console (tailnet gating via identity headers)
 
 ---
 
@@ -166,6 +167,7 @@ scripts/
 deploy/
   thermal-printer.service   systemd unit (gunicorn, workers=1)
   99-thermal-printer.rules  udev rule (USB access for non-root)
+  cloudflared-config.yml    Cloudflare Tunnel ingress (public path allowlist)
   setup.sh                  idempotent Pi bootstrapper
 docs/banner.svg         the receipt up top
 .github/workflows/ci.yml    pytest + auth smoke on push/PR

@@ -97,6 +97,19 @@ Original evidence for these findings (kept for the record):
    worse than none; needs a cheap freshness rule (e.g. cleared on any
    successful print, set on any PrinterError).
 
+## Hosting decision — recorded 2026-07-10
+
+5. **Custom domain / drop Funnel** — owner-directed: the friends page
+   moved from Tailscale Funnel to a Cloudflare Tunnel at
+   `print.cuzeth.com`, with **no backwards compatibility** — the funnel
+   is gone and all friends are assumed to be on the new domain. The
+   console stays tailnet-only via `tailscale serve` (an upgrade: private
+   routes are no longer internet-reachable at all). Because cloudflared
+   forwards client headers verbatim, three walls guard against forged
+   `Tailscale-User-Login` headers: the tunnel's path allowlist
+   (`deploy/cloudflared-config.yml`), an edge Transform Rule stripping
+   the header, and a CF-Ray check in `auth/tailnet.py`.
+
 ## Findings considered and rejected
 
 Recorded so the next audit doesn't re-litigate them:
