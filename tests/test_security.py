@@ -1,9 +1,9 @@
-"""Security-surface tests: the tailnet gate, rate-limit plumbing, token
-comparison edge cases, and response headers.
+"""Security-surface tests: the Cloudflare Access gate, rate-limit plumbing,
+token comparison edge cases, and response headers.
 
-The tailnet tests are the important ones — every other test file runs with
-DEV_BYPASS_TAILNET=true, which short-circuits require_tailnet entirely. A
-route that forgot the decorator would otherwise ship with green CI."""
+The Access-gate tests are the important ones — every other test file runs
+with DEV_BYPASS_ACCESS=true, which short-circuits require_access entirely.
+A route that forgot the decorator would otherwise ship with green CI."""
 
 from __future__ import annotations
 
@@ -26,65 +26,79 @@ def auth():
 
 @pytest.fixture
 def no_bypass(monkeypatch):
-    """Turn the dev tailnet bypass OFF so require_tailnet actually runs."""
-    monkeypatch.setattr(config, "DEV_BYPASS_TAILNET", False)
+    """Turn the dev Access bypass OFF (and pin an owner identity) so
+    require_access actually runs."""
+    monkeypatch.setattr(config, "DEV_BYPASS_ACCESS", False)
+    monkeypatch.setattr(config, "OWNER_EMAIL", "owner@example.com")
 
 
-# ---------- tailnet gate ----------
+# Headers Cloudflare adds after Access authenticates a visitor. Flask only
+# ever sees these on requests the connector already JWT-validated; here we
+# inject them directly because the test client plays the role of cloudflared.
+ACCESS_HEADERS = {
+    "Cf-Access-Jwt-Assertion": "test-jwt-not-validated-here",
+    "Cf-Access-Authenticated-User-Email": "owner@example.com",
+}
 
-def test_tailnet_gate_blocks_public_gui(client, no_bypass):
+
+# ---------- Cloudflare Access gate ----------
+
+def test_access_gate_blocks_public_gui(client, no_bypass):
     assert client.get("/").status_code == 403
 
 
-def test_tailnet_gate_blocks_private_api_even_with_valid_bearer(client, auth, no_bypass):
+def test_access_gate_blocks_private_api_even_with_valid_bearer(client, auth, no_bypass):
     # The gate sits OUTSIDE the bearer check — a leaked token alone must
     # not be enough from the public internet.
     r = client.post("/api/print/now", json={}, headers=auth)
     assert r.status_code == 403
 
 
-def test_tailnet_gate_admits_header_plus_bearer(client, auth, no_bypass):
-    headers = {**auth, "Tailscale-User-Login": "owner@example.com"}
-    r = client.post("/api/print/now", json={}, headers=headers)
+def test_access_gate_admits_owner_plus_bearer(client, auth, no_bypass):
+    r = client.post("/api/print/now", json={}, headers={**auth, **ACCESS_HEADERS})
     assert r.status_code == 200
-    assert client.get("/", headers={"Tailscale-User-Login": "x"}).status_code == 200
+    # Email comparison is case-insensitive — Access preserves whatever
+    # case the IdP reports, and the owner shouldn't get locked out by it.
+    shouty = {**ACCESS_HEADERS,
+              "Cf-Access-Authenticated-User-Email": "Owner@Example.COM"}
+    assert client.get("/", headers=shouty).status_code == 200
 
 
-def test_tailnet_header_alone_is_not_enough_for_private_api(client, no_bypass):
-    # On-tailnet but no bearer → 401 from require_owner.
-    r = client.post("/api/print/now", json={},
-                    headers={"Tailscale-User-Login": "owner@example.com"})
+def test_access_gate_pins_owner_email(client, auth, no_bypass):
+    # Someone else passing the Access policy (widened by mistake) is still
+    # not the owner. Wall three.
+    headers = {**auth, **ACCESS_HEADERS,
+               "Cf-Access-Authenticated-User-Email": "intruder@example.com"}
+    r = client.post("/api/print/now", json={}, headers=headers)
+    assert r.status_code == 403
+
+
+def test_forged_email_without_jwt_marker_is_rejected(client, no_bypass):
+    # A forged identity header arriving without the connector's JWT marker
+    # (e.g. through a fat-fingered friend-host allowlist) must not pass.
+    r = client.get("/", headers={
+        "Cf-Access-Authenticated-User-Email": "owner@example.com"})
+    assert r.status_code == 403
+
+
+def test_access_gate_fails_closed_without_owner_email(client, monkeypatch):
+    # OWNER_EMAIL unset (fresh .env) → nobody is the owner, not even a
+    # fully Access-authenticated visitor. Loud beats open.
+    monkeypatch.setattr(config, "DEV_BYPASS_ACCESS", False)
+    monkeypatch.setattr(config, "OWNER_EMAIL", "")
+    assert client.get("/", headers=ACCESS_HEADERS).status_code == 403
+
+
+def test_access_identity_alone_is_not_enough_for_private_api(client, no_bypass):
+    # Authenticated owner but no bearer → 401 from require_owner.
+    r = client.post("/api/print/now", json={}, headers=ACCESS_HEADERS)
     assert r.status_code == 401
 
 
-def test_friend_routes_stay_public_without_tailnet(client, no_bypass):
+def test_friend_routes_stay_public_without_access(client, no_bypass):
     assert client.get("/m/").status_code == 200
     assert client.get("/api/m/me").status_code == 200
     assert client.get("/api/ping").status_code == 200
-
-
-def test_cloudflare_marked_request_is_never_tailnet(client, no_bypass):
-    """cloudflared forwards client headers verbatim, so a public visitor can
-    send a forged Tailscale-User-Login — but they can't remove the CF-Ray
-    marker Cloudflare's edge stamps on every proxied request. Backstop
-    behind the tunnel's path allowlist and the edge header-strip rule."""
-    r = client.get("/", headers={"Tailscale-User-Login": "owner@example.com",
-                                 "CF-Ray": "8f1a2b3c4d5e6f70-PHX"})
-    assert r.status_code == 403
-
-
-def test_cloudflare_marked_request_blocked_even_with_valid_bearer(client, auth, no_bypass):
-    # The realistic worst case: leaked ADMIN_TOKEN + forged identity header,
-    # arriving through the tunnel. Must still be a 403 from the gate.
-    headers = {**auth, "Tailscale-User-Login": "owner@example.com",
-               "CF-Ray": "8f1a2b3c4d5e6f70-PHX"}
-    r = client.post("/api/print/now", json={}, headers=headers)
-    assert r.status_code == 403
-
-
-def test_cloudflare_marker_does_not_break_friend_routes(client, no_bypass):
-    # Real friend traffic always carries CF-Ray; public routes must not care.
-    assert client.get("/m/", headers={"CF-Ray": "8f1a2b3c4d5e6f70-PHX"}).status_code == 200
 
 
 # ---------- rate-limit plumbing ----------

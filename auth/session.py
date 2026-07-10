@@ -75,8 +75,9 @@ def require_owner(fn):
     /api/preview*, /api/image/*, /api/code/*).
 
     Uses the same ADMIN_TOKEN as /api/admin/*. The main GUI already inlines it
-    into the page body; app.js attaches it to every fetch. Keeps the console
-    safe if the tailnet ever sprouts an extra device.
+    into the page body; app.js attaches it to every fetch. A second factor
+    under the Access gate — the console stays safe even if the edge policy
+    is ever misconfigured.
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):

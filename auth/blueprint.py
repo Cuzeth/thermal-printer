@@ -41,13 +41,11 @@ def _client_ip() -> str:
     """Last hop in X-Forwarded-For (the one the trusted proxy appended),
     else remote_addr.
 
-    The app only ever hears from the two local proxies (bound to
-    127.0.0.1), and both append the real client address as the *last* XFF
-    entry — Cloudflare's edge for friend traffic at print.cuzeth.com,
-    tailscaled for tailnet traffic. The first entry is client-controlled —
-    proxies append, so a `curl -H "X-Forwarded-For: x"` would land first
-    and let an attacker rotate fake addresses to bypass the per-IP
-    buckets."""
+    The app only ever hears from cloudflared (bound to 127.0.0.1), and
+    Cloudflare's edge appends the real client address as the *last* XFF
+    entry. The first entry is client-controlled — proxies append, so a
+    `curl -H "X-Forwarded-For: x"` would land first and let an attacker
+    rotate fake addresses to bypass the per-IP buckets."""
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
         last = xff.split(",")[-1].strip()

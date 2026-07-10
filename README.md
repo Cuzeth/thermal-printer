@@ -19,7 +19,7 @@
 
 ## What's inside
 
-**Main console** — `/` · private, meant to live on your tailnet.
+**Main console** — `/` · private at <https://console.cuzeth.com>, behind Cloudflare Access.
 
 | Tab | What it does |
 |---|---|
@@ -36,7 +36,7 @@
 
 Friends register with a username + password, sit pending until you approve them from the Admin tab, then send you messages that print immediately with their name attached. Supports the same markup vocabulary as the composer.
 
-**Security model:** two local proxies front `127.0.0.1:5005`. `tailscale serve` publishes the app to the tailnet only and injects the `Tailscale-User-Login` header that private routes (`/`, `/api/*`) require. `cloudflared` publishes the friends page to the internet at print.cuzeth.com — and since it forwards client headers verbatim, three walls keep forged identity headers out: the tunnel's ingress allowlists only `/m`, `/api/m/*`, `/static/*`, and `/api/ping` ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)); a Cloudflare Transform Rule strips `Tailscale-User-Login` at the edge; and the app refuses tailnet status to any request bearing Cloudflare's `CF-Ray` marker (`auth/tailnet.py`). Flask must bind to `127.0.0.1` so nothing bypasses the proxies.
+**Security model:** one Cloudflare Tunnel fronts `127.0.0.1:5005` with two hostnames. `console.cuzeth.com` serves the whole app, but cloudflared validates a Cloudflare Access JWT on every request — unauthenticated visitors die at the connector, and the Access policy admits only the owner's email (login via one-time code or SSO). `print.cuzeth.com` serves friends anonymously, so its ingress allowlists only `/m`, `/api/m/*`, `/static/*`, and `/api/ping` ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)). Since cloudflared forwards client headers verbatim, forged `Cf-Access-*` identity headers are kept out by three walls: the friend-host path allowlist, an edge Transform Rule stripping `Cf-Access-*` from friend-host requests, and the app pinning the authenticated email to `OWNER_EMAIL` (`auth/access.py`). Flask must bind to `127.0.0.1` so nothing bypasses the tunnel.
 
 Abuse limits (all in-memory, reset on restart):
 - friend prints go through a FIFO queue (50 jobs max, 3 in-flight per user)
@@ -51,13 +51,13 @@ Abuse limits (all in-memory, reset on restart):
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-DEV_BYPASS_TAILNET=true COOKIE_SECURE=false python3 app.py
+DEV_BYPASS_ACCESS=true COOKIE_SECURE=false python3 app.py
 ```
 
 Open <http://localhost:5005>. The startup banner prints a dev `ADMIN_TOKEN` — the main GUI inlines it automatically, so you don't need to copy it.
 
 Both env vars are load-bearing in local dev:
-- `DEV_BYPASS_TAILNET=true` — skips the `Tailscale-User-Login` header check so private routes (`/`, `/api/*`) don't return 403.
+- `DEV_BYPASS_ACCESS=true` — skips the Cloudflare Access header check so private routes (`/`, `/api/*`) don't return 403.
 - `COOKIE_SECURE=false` — the default is `true` (both prod doors are HTTPS), and without it over plain HTTP the browser silently drops the session cookie and every `/m/*` request fails as "not signed in."
 
 For a local friends demo, open <http://localhost:5005/m/>, click **Create an account**, pick any username + password (8+ chars), then approve yourself from the Admin tab in the main GUI.
@@ -79,13 +79,12 @@ Short version:
    python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
    python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
    ```
-4. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`. Run `sudo tailscale serve --bg 5005` to publish the console to your tailnet (and only your tailnet) — private routes are gated at the Flask layer via the `Tailscale-User-Login` header.
-5. Set up the Cloudflare Tunnel for print.cuzeth.com — `cloudflared` install, tunnel creation, DNS route, and the header-strip Transform Rule are step-by-step in [DEPLOY.md](DEPLOY.md).
-6. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
+4. Set up the Cloudflare Tunnel — `cloudflared` install, tunnel creation, DNS routes for both hostnames, the Access application for console.cuzeth.com, and the header-strip Transform Rule are step-by-step in [DEPLOY.md](DEPLOY.md). Set `OWNER_EMAIL` in `.env` to the address your Access policy admits.
+5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
 The systemd unit runs gunicorn with `--workers 1 --threads 4` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
 
-Full step-by-step (udev, Tailscale wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
+Full step-by-step (udev, tunnel + Access wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
 
 ---
 
@@ -97,9 +96,10 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 |---|---|---|---|
 | `SECRET_KEY` | yes (prod) | random per boot | Flask session signing. Persist to keep sessions across restarts. |
 | `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer gate for `/api/admin/*` and every private console route. |
-| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only the two local proxies (tailscaled + cloudflared) may reach the app, because the tailnet gate trusts Tailscale's identity headers. |
-| `DEV_BYPASS_TAILNET` | no | `false` | Skips the `Tailscale-User-Login` header check. Set `true` for local dev; **never** on the Pi. |
-| `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (print.cuzeth.com and the tailnet console are both HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
+| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only cloudflared may reach the app, because the console gate trusts the `Cf-Access-*` identity headers. |
+| `OWNER_EMAIL` | yes (prod) | (empty) | The email Cloudflare Access must have authenticated for private routes to open. Empty = console fails closed (every private route 403s). |
+| `DEV_BYPASS_ACCESS` | no | `false` | Skips the Cloudflare Access header check. Set `true` for local dev; **never** on the Pi. |
+| `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (both hostnames are HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
 | `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
 | `BRIEFING_SCHEDULE` | no | (off) | Set `HH:MM` (24h) to auto-print the morning briefing daily. Empty = off. |
@@ -127,7 +127,7 @@ CI runs both on push + PR (see [.github/workflows/ci.yml](.github/workflows/ci.y
 - **Backend** · Python 3.12 · Flask · gunicorn · python-escpos · Pillow · SQLite (WAL)
 - **Frontend** · vanilla JS, no build step
 - **Auth** · werkzeug scrypt for passwords, signed-cookie sessions for friends, bearer token for owner
-- **Hosting** · Raspberry Pi · Cloudflare Tunnel for the public friends page (print.cuzeth.com) · `tailscale serve` for the private console (tailnet gating via identity headers)
+- **Hosting** · Raspberry Pi · one Cloudflare Tunnel, two hostnames: print.cuzeth.com (public friends page) and console.cuzeth.com (owner console behind Cloudflare Access)
 
 ---
 
@@ -151,7 +151,7 @@ features/
   text.py               plain-text composer (ROM-font path)
   widgets.py            weather / HN / on-this-day / dice / todo / …
 auth/
-  tailnet.py            require_tailnet decorator (Tailscale identity header gate)
+  access.py             require_access decorator (Cloudflare Access identity gate)
   db.py                 SQLite schema + CRUD (users, messages)
   session.py            require_allowed / require_admin / require_owner
   blueprint.py          /api/m/auth/{register,login,logout} + /me

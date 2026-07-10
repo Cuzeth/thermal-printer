@@ -1,31 +1,46 @@
-# Cloudflare Tunnel config — the only internet-facing door, at
-# https://print.cuzeth.com. cloudflared dials out to Cloudflare's edge, so
-# no router config or open ports are needed; it then proxies allowed
-# requests to the Flask app on 127.0.0.1:5005.
+# Cloudflare Tunnel config — the only door to the app, public or private.
+# cloudflared dials out to Cloudflare's edge, so no router config or open
+# ports are needed; it proxies allowed requests to Flask on 127.0.0.1:5005.
 #
-# The ingress below is a PATH ALLOWLIST, and it is load-bearing: only the
-# friends page, its API (which includes /api/m/auth/*), static assets, and
-# the health check reach Flask. Everything else — the owner console,
-# /api/print/*, /api/admin/* — is answered 404 here and never touches the
-# app. Widening this list re-exposes private routes to the internet, so
-# don't, and keep the deployed /etc/cloudflared/config.yml identical to
-# this file.
+# Two hostnames, two trust levels:
 #
-# SECURITY: unlike Tailscale's proxy, cloudflared forwards client headers
-# verbatim — a public visitor can send a forged Tailscale-User-Login. This
-# allowlist is the first of three walls against that; the others are a
-# Cloudflare Transform Rule stripping the header at the edge (dashboard
-# side — see DEPLOY.md) and auth/tailnet.py refusing tailnet status to any
-# request bearing CF-Ray.
+#   console.cuzeth.com — the owner console, everything on it. The `access`
+#   block below makes cloudflared itself validate a Cloudflare Access JWT
+#   on every request; anything unauthenticated dies at the connector and
+#   never reaches Flask. The Access application (who may log in, session
+#   length) lives in the Zero Trust dashboard — see DEPLOY.md.
 #
-# Install: DEPLOY.md § "Cloudflare Tunnel" walks through creating the
-# tunnel, filling in TUNNEL_ID below (both places), and installing this
-# file at /etc/cloudflared/config.yml as a systemd service.
+#   print.cuzeth.com — the friends page. The `path` rule is a PATH
+#   ALLOWLIST and it is load-bearing: only the friends page, its API
+#   (which includes /api/m/auth/*), static assets, and the health check
+#   reach Flask. Widening it re-exposes private routes to the anonymous
+#   internet, so don't.
+#
+# SECURITY: cloudflared forwards client headers verbatim, so a friend-host
+# request could carry forged Cf-Access-* identity headers. Three walls
+# keep forgeries away from private routes: the friend path allowlist
+# (here), an edge Transform Rule stripping Cf-Access-* headers from
+# friend-host requests (dashboard side — see DEPLOY.md), and
+# auth/access.py pinning the authenticated email to OWNER_EMAIL.
+#
+# Install: DEPLOY.md walks through creating the tunnel, filling in
+# TUNNEL_ID (both places), TEAM_NAME (your Zero Trust team slug), and
+# ACCESS_APP_AUD (the Access application's audience tag), and installing
+# this file at /etc/cloudflared/config.yml as a systemd service. Keep the
+# deployed copy identical to this file apart from those placeholders.
 
 tunnel: TUNNEL_ID
 credentials-file: /home/pi/.cloudflared/TUNNEL_ID.json
 
 ingress:
+  - hostname: console.cuzeth.com
+    service: http://127.0.0.1:5005
+    originRequest:
+      access:
+        required: true
+        teamName: TEAM_NAME
+        audTag:
+          - ACCESS_APP_AUD
   - hostname: print.cuzeth.com
     path: ^/(m(/.*)?|api/m/.+|static/.+|api/ping)$
     service: http://127.0.0.1:5005
