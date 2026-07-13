@@ -16,9 +16,10 @@ EnvironmentFile=/home/pi/thermal-printer/.env
 # --threads 4 so a couple of slow widget fetches (weather/HN over the
 # network) can't occupy every request thread and starve the public /m/.
 #
-# Bind to 127.0.0.1 ONLY. The app relies on Tailscale's proxy to inject
-# identity headers for tailnet gating — if the app listened on 0.0.0.0,
-# anyone on the LAN could bypass auth by forging Tailscale-User-Login.
+# Bind to 127.0.0.1 ONLY. cloudflared is the sole front door for this
+# port (console.cuzeth.com behind Cloudflare Access, print.cuzeth.com for
+# friends). If the app listened on 0.0.0.0, anyone on the LAN could
+# bypass auth by forging the Cf-Access-* identity headers.
 ExecStart=/home/pi/thermal-printer/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:${PORT} --access-logfile - --error-logfile - app:app
 Restart=always
 RestartSec=5

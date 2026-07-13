@@ -25,7 +25,7 @@ from auth import auth_bp
 from auth import db as auth_db
 from auth.blueprint import validate_password
 from auth.session import current_user, require_admin, require_allowed, require_owner
-from auth.tailnet import require_tailnet
+from auth.access import require_access
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
@@ -39,7 +39,8 @@ from printer import PrinterError, footer, open_printer, print_image as _print_im
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=config.SECRET_KEY,
-    # Secure requires HTTPS — true on the Pi (Funnel), false in local dev.
+    # Secure requires HTTPS — true on the Pi (Cloudflare terminates TLS
+    # for both hostnames), false in local dev.
     # Gated by an explicit env var rather than FLASK_DEBUG because debug is
     # usually off in dev too, which would silently kill the session cookie.
     SESSION_COOKIE_SECURE=config.COOKIE_SECURE,
@@ -58,7 +59,7 @@ auth_db.init()
 
 @app.after_request
 def _security_headers(resp):
-    # Cheap hardening — /m/* is on the public internet via Funnel. DENY
+    # Cheap hardening — /m/* is on the public internet at print.cuzeth.com. DENY
     # framing (nothing here is meant to be embedded), stop MIME sniffing,
     # and keep referrers on-site.
     resp.headers.setdefault("X-Frame-Options", "DENY")
@@ -74,7 +75,7 @@ def _too_large(e):
 
 
 @app.route("/")
-@require_tailnet
+@require_access
 def index():
     return render_template(
         "index.html",
@@ -185,7 +186,7 @@ def _safe(handler: Callable[[], Any]):
 # ---------- text composer ----------
 
 @app.post("/api/preview")
-@require_tailnet
+@require_access
 @require_owner
 def preview():
     body = (request.get_json(silent=True) or {}).get("body", "")
@@ -193,7 +194,7 @@ def preview():
 
 
 @app.post("/api/preview/rich")
-@require_tailnet
+@require_access
 @require_owner
 def preview_rich():
     def run():
@@ -208,7 +209,7 @@ def preview_rich():
 
 
 @app.post("/api/print/text")
-@require_tailnet
+@require_access
 @require_owner
 def print_text():
     def run():
@@ -240,7 +241,7 @@ def _image_opts_from_form() -> image_feat.ProcessOptions:
 
 
 @app.post("/api/image/preview")
-@require_tailnet
+@require_access
 @require_owner
 def image_preview():
     def run():
@@ -254,7 +255,7 @@ def image_preview():
 
 
 @app.post("/api/print/image")
-@require_tailnet
+@require_access
 @require_owner
 def print_image():
     def run():
@@ -279,7 +280,7 @@ def print_image():
 # ---------- widget routes ----------
 
 @app.post("/api/print/weather")
-@require_tailnet
+@require_access
 @require_owner
 def print_weather():
     def run():
@@ -294,7 +295,7 @@ def print_weather():
 
 
 @app.post("/api/print/dice")
-@require_tailnet
+@require_access
 @require_owner
 def print_dice():
     def run():
@@ -309,7 +310,7 @@ def print_dice():
 
 
 @app.post("/api/print/hn")
-@require_tailnet
+@require_access
 @require_owner
 def print_hn():
     def run():
@@ -320,7 +321,7 @@ def print_hn():
 
 
 @app.post("/api/print/onthisday")
-@require_tailnet
+@require_access
 @require_owner
 def print_on_this_day():
     def run():
@@ -331,7 +332,7 @@ def print_on_this_day():
 
 
 @app.post("/api/print/calendar")
-@require_tailnet
+@require_access
 @require_owner
 def print_calendar():
     def run():
@@ -347,7 +348,7 @@ def print_calendar():
 
 
 @app.post("/api/print/countdown")
-@require_tailnet
+@require_access
 @require_owner
 def print_countdown():
     def run():
@@ -361,7 +362,7 @@ def print_countdown():
 
 
 @app.post("/api/print/habits")
-@require_tailnet
+@require_access
 @require_owner
 def print_habits():
     def run():
@@ -378,7 +379,7 @@ def print_habits():
 
 
 @app.post("/api/print/advice")
-@require_tailnet
+@require_access
 @require_owner
 def print_advice():
     def run():
@@ -388,7 +389,7 @@ def print_advice():
 
 
 @app.post("/api/print/briefing")
-@require_tailnet
+@require_access
 @require_owner
 def print_briefing():
     def run():
@@ -404,7 +405,7 @@ def print_briefing():
 
 
 @app.post("/api/print/todo")
-@require_tailnet
+@require_access
 @require_owner
 def print_todo():
     def run():
@@ -421,7 +422,7 @@ def print_todo():
 
 
 @app.post("/api/print/receipt")
-@require_tailnet
+@require_access
 @require_owner
 def print_receipt():
     def run():
@@ -440,7 +441,7 @@ def print_receipt():
 
 
 @app.post("/api/print/label")
-@require_tailnet
+@require_access
 @require_owner
 def print_label():
     def run():
@@ -454,7 +455,7 @@ def print_label():
 
 
 @app.post("/api/print/ascii")
-@require_tailnet
+@require_access
 @require_owner
 def print_ascii():
     def run():
@@ -465,7 +466,7 @@ def print_ascii():
 
 
 @app.post("/api/print/now")
-@require_tailnet
+@require_access
 @require_owner
 def print_now():
     def run():
@@ -497,7 +498,7 @@ def _barcode_opts(data: dict) -> codes_feat.BarcodeOptions:
 
 
 @app.post("/api/code/qr/preview")
-@require_tailnet
+@require_access
 @require_owner
 def qr_preview():
     def run():
@@ -509,7 +510,7 @@ def qr_preview():
 
 
 @app.post("/api/print/qr")
-@require_tailnet
+@require_access
 @require_owner
 def print_qr():
     def run():
@@ -524,7 +525,7 @@ def print_qr():
 
 
 @app.post("/api/code/barcode/preview")
-@require_tailnet
+@require_access
 @require_owner
 def barcode_preview():
     def run():
@@ -536,7 +537,7 @@ def barcode_preview():
 
 
 @app.post("/api/print/barcode")
-@require_tailnet
+@require_access
 @require_owner
 def print_barcode():
     def run():
@@ -551,7 +552,7 @@ def print_barcode():
 
 
 @app.get("/api/code/barcode/types")
-@require_tailnet
+@require_access
 @require_owner
 def barcode_types():
     return jsonify({"ok": True,
@@ -562,7 +563,7 @@ def barcode_types():
 # ---------- hardware controls ----------
 
 @app.post("/api/hw/cash_drawer")
-@require_tailnet
+@require_access
 @require_owner
 def hw_cash_drawer():
     def run():
@@ -575,7 +576,7 @@ def hw_cash_drawer():
 
 
 @app.post("/api/hw/beep")
-@require_tailnet
+@require_access
 @require_owner
 def hw_beep():
     def run():
@@ -589,7 +590,7 @@ def hw_beep():
 
 
 @app.post("/api/hw/feed")
-@require_tailnet
+@require_access
 @require_owner
 def hw_feed():
     def run():
@@ -601,7 +602,7 @@ def hw_feed():
 
 
 @app.post("/api/hw/cut")
-@require_tailnet
+@require_access
 @require_owner
 def hw_cut():
     def run():
@@ -617,7 +618,7 @@ def hw_cut():
 
 
 @app.post("/api/hw/reset")
-@require_tailnet
+@require_access
 @require_owner
 def hw_reset():
     def run():
@@ -628,7 +629,7 @@ def hw_reset():
 
 
 @app.post("/api/hw/self_test")
-@require_tailnet
+@require_access
 @require_owner
 def hw_self_test():
     def run():
@@ -639,7 +640,7 @@ def hw_self_test():
 
 
 @app.post("/api/hw/density")
-@require_tailnet
+@require_access
 @require_owner
 def hw_density():
     def run():
@@ -651,7 +652,7 @@ def hw_density():
 
 
 @app.post("/api/hw/codepage")
-@require_tailnet
+@require_access
 @require_owner
 def hw_codepage():
     def run():
@@ -663,7 +664,7 @@ def hw_codepage():
 
 
 @app.get("/api/hw/codepages")
-@require_tailnet
+@require_access
 @require_owner
 def hw_codepages():
     return jsonify({
@@ -673,7 +674,7 @@ def hw_codepages():
 
 
 @app.post("/api/hw/status")
-@require_tailnet
+@require_access
 @require_owner
 def hw_status():
     def run():
@@ -693,7 +694,7 @@ _MAX_RAW_BYTES = 4096
 
 
 @app.post("/api/hw/raw")
-@require_tailnet
+@require_access
 @require_owner
 def hw_raw():
     def run():
@@ -711,7 +712,7 @@ def hw_raw():
 
 
 @app.get("/api/hw/led/protocols")
-@require_tailnet
+@require_access
 @require_owner
 def hw_led_protocols():
     return jsonify({
@@ -724,7 +725,7 @@ def hw_led_protocols():
 
 
 @app.post("/api/hw/led/preview")
-@require_tailnet
+@require_access
 @require_owner
 def hw_led_preview():
     def run():
@@ -740,7 +741,7 @@ def hw_led_preview():
 
 
 @app.post("/api/hw/led")
-@require_tailnet
+@require_access
 @require_owner
 def hw_led():
     def run():
@@ -769,7 +770,7 @@ def hw_led():
 
 
 @app.get("/api/hw/cheatsheet")
-@require_tailnet
+@require_access
 @require_owner
 def hw_cheatsheet():
     return jsonify({
@@ -1087,7 +1088,7 @@ def friend_printer_status():
 # ---------- admin (Bearer-token gated) ----------
 
 @app.get("/api/admin/users")
-@require_tailnet
+@require_access
 @require_admin
 def admin_list_users():
     status = request.args.get("status")
@@ -1099,7 +1100,7 @@ def admin_list_users():
 
 
 @app.post("/api/admin/users/<int:user_id>/approve")
-@require_tailnet
+@require_access
 @require_admin
 def admin_approve_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1109,7 +1110,7 @@ def admin_approve_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/revoke")
-@require_tailnet
+@require_access
 @require_admin
 def admin_revoke_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1119,7 +1120,7 @@ def admin_revoke_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/delete")
-@require_tailnet
+@require_access
 @require_admin
 def admin_delete_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1129,7 +1130,7 @@ def admin_delete_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/password")
-@require_tailnet
+@require_access
 @require_admin
 def admin_set_password(user_id: int):
     """Reset a friend's password. There's no self-service reset on /m/ —
@@ -1147,7 +1148,7 @@ def admin_set_password(user_id: int):
 
 
 @app.get("/api/admin/messages")
-@require_tailnet
+@require_access
 @require_admin
 def admin_list_messages():
     try:
@@ -1158,7 +1159,7 @@ def admin_list_messages():
 
 
 @app.post("/api/admin/printer/reset")
-@require_tailnet
+@require_access
 @require_admin
 def admin_reset_printer():
     """Issue a USB port reset to the printer — software unplug-replug."""
@@ -1193,5 +1194,5 @@ _print_banner()
 if __name__ == "__main__":
     # Dev server. Prod runs under gunicorn (see deploy/thermal-printer.service).
     # FLASK_DEBUG=1 opts in to the Werkzeug reloader/debugger; never set it on
-    # the Pi — /m/* is public via Funnel and the debugger = RCE.
+    # the Pi — /m/* is public at print.cuzeth.com and the debugger = RCE.
     app.run(host=config.HOST, port=config.PORT, debug=os.environ.get("FLASK_DEBUG") == "1")

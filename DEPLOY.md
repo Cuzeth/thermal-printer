@@ -2,16 +2,25 @@
 
 Target hardware: a **Raspberry Pi Zero 2W** (but any Pi works) running
 **Raspberry Pi OS Lite (64-bit)**. The printer plugs into the Pi over
-USB; the Pi joins your tailnet; friends reach `/m/` over Tailscale
-Funnel.
+USB; one Cloudflare Tunnel carries everything. Friends reach `/m/` at
+`https://print.cuzeth.com`; you reach the console at
+`https://console.cuzeth.com` from any browser, anywhere, after passing
+Cloudflare Access (a one-time email code — no VPN, no client software).
+No port forwarding anywhere — the tunnel is an outbound-only connection
+from the Pi, so this works from an apartment with untouchable router
+settings.
 
 End state:
 
-- Entire app funneled at `https://thermal-printer.<tailnet>.ts.net/`.
-- Main GUI (`/`) and private API — gated by a Flask decorator that
-  checks for the `Tailscale-User-Login` header (tailnet-only).
-- Friends page (`/m/`) and its API — public.
-- Runs as a `systemd` service. Survives reboots. Logs with `journalctl`.
+- Main GUI (`/`) and private API — at `https://console.cuzeth.com`,
+  behind Cloudflare Access. cloudflared itself rejects requests without
+  a valid Access login, so anonymous internet never reaches these routes;
+  the app additionally pins the authenticated email to `OWNER_EMAIL`.
+- Friends page (`/m/`) and its API — public at
+  `https://print.cuzeth.com` via an ingress rule that allowlists only
+  the friend paths.
+- Runs as two `systemd` services (`thermal-printer`, `cloudflared`).
+  Survives reboots. Logs with `journalctl`.
 
 Work top-to-bottom. Nothing clever, just a lot of small steps.
 
@@ -73,29 +82,7 @@ per character automatically.
 
 ---
 
-## 3 · Install Tailscale
-
-The official installer script is the easiest path and stays
-up-to-date with apt:
-
-```sh
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
-`tailscale up` prints a login URL. Open it on your Mac, sign in, and
-the Pi shows up in your tailnet as `thermal-printer`. Confirm:
-
-```sh
-tailscale ip -4
-# e.g. 100.x.y.z
-```
-
-We'll wire up Funnel later, after the app is running.
-
----
-
-## 4 · Clone the repo and set up the venv
+## 3 · Clone the repo and set up the venv
 
 ```sh
 cd ~
@@ -109,14 +96,14 @@ pip install -r requirements.txt
 deactivate
 ```
 
-> **Shortcut:** steps 2 + 4 + 5 + 6 are all bundled in
+> **Shortcut:** steps 2 + 3 + 4 + 5 are all bundled in
 > `deploy/setup.sh` — run `bash deploy/setup.sh` from the repo root
-> and skip straight to step 7 (fill in `.env`). The script is
+> and skip straight to step 6 (fill in `.env`). The script is
 > idempotent; safe to run twice.
 
 ---
 
-## 5 · USB permissions (udev rule)
+## 4 · USB permissions (udev rule)
 
 By default, only root can open raw USB devices on Linux. The app runs
 as `pi`, so we need a udev rule that marks the printer world-writable:
@@ -147,7 +134,7 @@ If it's `crw-------`, unplug / replug the printer so the rule re-fires.
 
 ---
 
-## 6 · systemd service
+## 5 · systemd service
 
 Install the unit:
 
@@ -170,7 +157,7 @@ Don't start it yet — it'll crash without `.env`.
 
 ---
 
-## 7 · Fill in `.env`
+## 6 · Fill in `.env`
 
 ```sh
 cd ~/thermal-printer
@@ -184,21 +171,24 @@ python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
 python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
 ```
 
-Paste each full line into `.env`, replacing the blank placeholders. The
-rest of `.env.example` is just documented defaults — leave them alone
-unless you know you need to override something.
+Paste each full line into `.env`, replacing the blank placeholders.
+Also set `OWNER_EMAIL` to the address your Cloudflare Access policy
+will admit (step 8.4) — the app pins the authenticated identity to it,
+and with it unset the console fails closed and every private route
+403s. The rest of `.env.example` is just documented defaults — leave
+them alone unless you know you need to override something.
 
 > You don't need to memorize `ADMIN_TOKEN`. The main GUI reads it from
 > the env and inlines it in the page automatically. Keep it secret —
 > anyone with it has full console access.
 
 You **don't** need to set `COOKIE_SECURE` — it defaults to `true`,
-which is correct for the Pi (Funnel is HTTPS). Only set it to `false`
-for local HTTP dev on your Mac.
+which is correct for the Pi (both hostnames are HTTPS). Only set it to
+`false` for local HTTP dev on your Mac.
 
 ---
 
-## 8 · Start the service
+## 7 · Start the service
 
 ```sh
 sudo systemctl start thermal-printer
@@ -231,56 +221,118 @@ shows the traceback. Most common issue: `.env` has a typo or a missing
 
 ---
 
-## 9 · Tailscale Funnel
+## 8 · Cloudflare Tunnel (both doors)
 
-One command:
+Everything is served by `cloudflared` — an outbound-only connector to
+Cloudflare's edge that proxies allowed requests to `127.0.0.1:5005`.
+The repo's ingress config carries two hostnames: `print.cuzeth.com`
+(friends, path-allowlisted) and `console.cuzeth.com` (you, gated by
+Cloudflare Access — set up in 8.4).
 
-```sh
-sudo tailscale funnel --bg 5005
-```
+One thing to internalize before wiring it up: **cloudflared forwards
+client headers verbatim.** After Access authenticates you, Cloudflare
+attaches `Cf-Access-*` identity headers — and a public visitor on the
+friend hostname could forge those same headers. Three walls stop that,
+and you're about to build two of them (the third, an `OWNER_EMAIL` pin,
+already lives in `auth/access.py`): the ingress rules in the config
+file, and an edge rule stripping the headers from friend traffic.
 
-This exposes the **entire** app publicly at
-`https://thermal-printer.<tailnet>.ts.net/` with a real HTTPS cert.
-Private routes are protected at the Flask layer, not the Tailscale
-layer — the app checks for the `Tailscale-User-Login` header that
-Tailscale's proxy injects on tailnet requests (the header is absent
-on public Funnel traffic). Any route decorated with `@require_tailnet` returns
-403 to public visitors.
+Prerequisite: `cuzeth.com` is on Cloudflare (free plan) — the tunnel
+can only route hostnames whose DNS Cloudflare controls.
 
-> Funnel requires one-time setup in the Tailscale admin console: make
-> sure **MagicDNS** is on, **HTTPS Certificates** is enabled
-> ([DNS settings](https://login.tailscale.com/admin/dns)), and your
-> ACLs grant the `funnel` nodeAttr to this device
-> ([ACL editor](https://login.tailscale.com/admin/acls)). Tailscale
-> will tell you if you're missing either.
-
-Check what's wired up:
+**8.1 · Install cloudflared** (Cloudflare's apt repo, arm64 builds
+included):
 
 ```sh
-tailscale funnel status
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | \
+  sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | \
+  sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
 ```
 
-<details>
-<summary><strong>Why not path-based funnel?</strong></summary>
+**8.2 · Create the tunnel.** The login prints a URL — open it on your
+Mac and pick the `cuzeth.com` zone:
 
-You might expect `tailscale serve` on `/` + `tailscale funnel --set-path=/m`
-to keep the root private while only exposing `/m/` publicly. **It doesn't.**
-Tailscale's `AllowFunnel` flag is a per-port boolean (`map[HostPort]bool`),
-not per-path — whichever command touched the port last wins for the entire
-port. Running `funnel --set-path=/m` flips the port to public, making `/`,
-`/api/`, and everything else publicly reachable too.
+```sh
+cloudflared tunnel login
+cloudflared tunnel create thermal-printer
+```
 
-This is a documented limitation with open GitHub issues:
-[#10234](https://github.com/tailscale/tailscale/issues/10234),
-[#11009](https://github.com/tailscale/tailscale/issues/11009).
+`create` prints a tunnel UUID and writes a credentials file to
+`~/.cloudflared/<UUID>.json`. Note both.
 
-That's why we funnel the whole app and gate private routes in Flask instead.
+**8.3 · Point DNS at the tunnel** (creates proxied CNAMEs for both
+hostnames):
 
-</details>
+```sh
+cloudflared tunnel route dns thermal-printer print.cuzeth.com
+cloudflared tunnel route dns thermal-printer console.cuzeth.com
+```
+
+**8.4 · Create the Access application** (this is what replaces the
+tailnet). In [one.dash.cloudflare.com](https://one.dash.cloudflare.com):
+
+1. First visit only: pick a **team name** when Zero Trust prompts you
+   (the free plan covers 50 users; you need 1). Note the slug — it's
+   `TEAM_NAME` in the config.
+2. **Access** → **Applications** → **Add an application** →
+   **Self-hosted**. Domain: `console.cuzeth.com` (whole hostname, no
+   path). Session duration: your call — 1 week is a sane default.
+3. Add a policy: Action **Allow**, Include → **Emails** → your email.
+   Nobody else, nothing clever.
+4. Leave the default **One-time PIN** login method on — that's the
+   emailed code. (You can add Google/GitHub SSO later if typing codes
+   gets old.)
+5. On the application's overview, copy the **Application Audience
+   (AUD) tag** — it's `ACCESS_APP_AUD` in the config.
+
+**8.5 · Install the repo's ingress config.** The file in the repo is
+the source of truth — both its path allowlist and its `access` block
+are load-bearing (see the comments inside it):
+
+```sh
+sudo mkdir -p /etc/cloudflared
+sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+sudo nano /etc/cloudflared/config.yml
+# replace TUNNEL_ID (both places), TEAM_NAME, and ACCESS_APP_AUD
+```
+
+If your username isn't `pi`, also fix the home dir in
+`credentials-file`. Then run it as a service:
+
+```sh
+sudo cloudflared --config /etc/cloudflared/config.yml service install
+sudo systemctl start cloudflared
+sudo systemctl status cloudflared      # "active (running)"
+```
+
+**8.6 · Strip identity headers from friend traffic at the edge.** In
+the Cloudflare dashboard: `cuzeth.com` zone → **Rules** → **Transform
+Rules** → **Modify Request Header** → create rule:
+
+- Name: `strip access identity from friend host`
+- When: Custom filter expression → Hostname equals `print.cuzeth.com`
+- Then: **Remove** header `Cf-Access-Jwt-Assertion`, **Remove** header
+  `Cf-Access-Authenticated-User-Email`
+
+(If you still have the old `strip tailscale identity` rule from the
+Funnel era, delete it — the app no longer reads that header.)
+
+This is wall two. No Access application covers the friend hostname, so
+forged `Cf-Access-*` headers would otherwise ride through to Flask on
+allowlisted paths — this rule kills them at the edge, and even if both
+walls fail, `auth/access.py` only opens for `OWNER_EMAIL` anyway.
+
+**Migrating a Pi that's already running the old Tailscale Funnel
+setup?** Don't improvise from this section — follow
+[MIGRATION.md](MIGRATION.md), the start-to-finish cutover runbook
+(teardown order, backups, verification, rollback).
 
 ---
 
-## 10 · Verify it works
+## 9 · Verify it works
 
 1. **Local** (SSH'd in on the Pi):
    ```sh
@@ -288,30 +340,41 @@ That's why we funnel the whole app and gate private routes in Flask instead.
    # {"ok": true, "dry_run": false}
    ```
 
-2. **Tailnet** (laptop/phone with Tailscale **on**):
-   - `https://thermal-printer.<tailnet>.ts.net/` → full GUI loads, real TLS cert.
+2. **Console** (any device, any network — this is the point):
+   - `https://console.cuzeth.com/` → Cloudflare Access login screen →
+     enter your email → type the emailed code → full GUI loads.
+   - Wrong email (or a friend trying it) → Access refuses at the edge;
+     Flask never hears about it.
 
-3. **Public** (phone on cellular, Tailscale **off**):
-   - `https://thermal-printer.<tailnet>.ts.net/m/` → friends page loads with CSS/JS.
-   - `https://thermal-printer.<tailnet>.ts.net/api/ping` → `{"ok": true}` (health check stays public).
-   - `https://thermal-printer.<tailnet>.ts.net/` → **403** (tailnet-only route, properly gated).
-   - `https://thermal-printer.<tailnet>.ts.net/api/print/text` → **403** (private API, properly gated).
+3. **Public** (phone on cellular):
+   - `https://print.cuzeth.com/m/` → friends page loads with CSS/JS.
+   - `https://print.cuzeth.com/api/ping` → `{"ok": true}` (health check is allowlisted).
+   - `https://print.cuzeth.com/` → **404** (not in the tunnel's path allowlist — the console isn't just gated there, it's unreachable).
+   - `https://print.cuzeth.com/api/print/text` → **404** (same).
+   - `https://console.cuzeth.com/api/ping` in a fresh private window →
+     Access login screen, not JSON (the whole hostname is gated).
 
-Find your exact `<tailnet>` slug in the
-[admin console → Machines](https://login.tailscale.com/admin/machines).
+4. **The header-forgery drill** (same public device) — all three walls
+   at once:
+   ```sh
+   curl -si -H "Cf-Access-Authenticated-User-Email: you@example.com" https://print.cuzeth.com/ | head -1
+   # HTTP/2 404  ← the allowlist answered; Flask never saw it. And had it
+   # gotten through, the edge rule strips Cf-Access-* from friend traffic
+   # and auth/access.py demands the connector's JWT marker anyway.
+   ```
 
 ---
 
-## 11 · Use it
+## 10 · Use it
 
-1. Open `/m/` on your phone, tap **Create an account**, username +
-   password (8+ chars), submit.
-2. On your laptop, open `/` → **Admin** tab → see yourself in
-   **Pending** → **Approve**.
+1. Open `https://print.cuzeth.com/m/` on your phone, tap **Create an
+   account**, username + password (8+ chars), submit.
+2. On your laptop, open `https://console.cuzeth.com/` → **Admin** tab →
+   see yourself in **Pending** → **Approve**.
 3. Back on the phone → tap **Check again** → state flips to ALLOWED.
 4. Type a message → **Print it** → paper comes out.
 
-Share the `/m/` URL with whoever you want to let in.
+Share `https://print.cuzeth.com/m/` with whoever you want to let in.
 
 ---
 
@@ -341,12 +404,14 @@ curl http://localhost:5005/api/ping       # {"ok": true}
 `data/` is inside the repo but gitignored, so the SQLite DB (users +
 messages) and any DRY_RUN bytes survive `git pull`.
 
-**If you need to reconfigure Tailscale Funnel** (unlikely after initial
-setup), tear down and rebuild:
+**If you need to reconfigure the tunnel** (unlikely after initial
+setup) — re-sync the config from the repo and restart:
 
 ```sh
-sudo tailscale funnel --https=443 off
-sudo tailscale funnel --bg 5005
+sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+sudo nano /etc/cloudflared/config.yml    # re-fill TUNNEL_ID (both places),
+                                         # TEAM_NAME, ACCESS_APP_AUD
+sudo systemctl restart cloudflared
 ```
 
 **One-liner** for quick pulls when nothing changed in `.env` or deps:
@@ -364,16 +429,17 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `Could not connect to printer` on every print | udev rule didn't apply. Unplug/replug the printer, or re-run `sudo udevadm trigger`. Check `ls -l /dev/bus/usb/...` — expect `crw-rw-rw-`. |
 | Service crashes on start with `USBError: Access denied` | Same as above — the app is running as `pi` but the device is still root-only. |
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
-| Funnel URL returns 502 | Service isn't running (`sudo systemctl status thermal-printer`) or funnel isn't set up. Run `tailscale funnel status` and re-run step 9. |
-| Public URL: "couldn't establish a secure connection" / hangs then fails | Funnel cert hasn't provisioned (or went stale after an idle period). Force a refresh: `sudo tailscale cert thermal-printer.<tailnet>.ts.net`. If still failing, `sudo systemctl restart tailscaled && sudo tailscale funnel --bg 5005`. |
+| print.cuzeth.com returns 502 | The app isn't running (`sudo systemctl status thermal-printer`) — the tunnel is up but has nothing to proxy to. |
+| print.cuzeth.com shows a Cloudflare error page (530 / error 1033) | The tunnel itself is down. `sudo systemctl status cloudflared`, then `journalctl -u cloudflared -n 50`. Usual causes: TUNNEL_ID placeholder left in `/etc/cloudflared/config.yml`, or the credentials-file path is wrong. |
+| console.cuzeth.com returns a bare 401 with no login screen | cloudflared's `access` block is rejecting before Access can even ask you to log in — `TEAM_NAME`/`ACCESS_APP_AUD` placeholders still in `/etc/cloudflared/config.yml`, or the AUD doesn't match the Access application. Re-copy the AUD tag from the app's overview page. |
+| Console loads the Access login, you get in, but every page/API call 403s | Flask's email pin is rejecting you: `OWNER_EMAIL` unset in `.env` (fails closed by design) or doesn't match the address you authenticated with. Fix `.env`, `sudo systemctl restart thermal-printer`. |
 | Friend messages print as rows of boxes / blank where CJK, Arabic, braille, or music symbols should be | Missing font glyphs on the Pi. Install the full set: `sudo apt-get install -y fonts-dejavu fonts-noto-cjk fonts-noto-core && sudo systemctl restart thermal-printer`. The renderer picks fonts per character; `fonts-noto-cjk` covers CJK, `fonts-noto-core` covers Arabic + Noto Sans Symbols(2) for music/math/misc, and the full `fonts-dejavu` (not `-core`) covers braille. |
 | Arabic prints but reads left-to-right | `arabic-reshaper` / `python-bidi` weren't installed. `.venv/bin/pip install -r requirements.txt && sudo systemctl restart thermal-printer`. The renderer detects RTL runs and applies UAX #9 before drawing; without those libs it falls back to logical-order output. |
-| `/` returns 403 even when I'm on the tailnet | Tailscale's identity headers aren't being injected. Check that MagicDNS and HTTPS certificates are enabled, and that you're accessing the app via its `*.ts.net` hostname (not the raw IP). Run `tailscale funnel status` to confirm the proxy is running. |
-| `/m/` loads but `/` is also accessible from the public internet | The `@require_tailnet` decorator isn't applied to the route, or Flask is bound to `0.0.0.0` and the request bypassed the Tailscale proxy. Verify gunicorn binds to `127.0.0.1` (`ss -tlnp | grep 5005`). |
+| `/` is reachable at print.cuzeth.com | The tunnel's path allowlist got widened — diff `/etc/cloudflared/config.yml` against `deploy/cloudflared-config.yml` and restart `cloudflared`. Also verify the Transform Rule (strip `Cf-Access-*` on the friend host) still exists in the Cloudflare dashboard, and that gunicorn binds to `127.0.0.1` (`ss -tlnp \| grep 5005`). |
 | Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
 | `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. `init()` doesn't migrate that far back — move it aside (`mv data/app.db data/app.db.bak`) and restart; a fresh DB is created on boot. |
-| Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and Funnel is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
-| Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some routers. Use the IP from `tailscale ip -4` (the tailnet IP always works once Tailscale is up). |
+| Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and print.cuzeth.com is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
+| Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some networks. Find the Pi's IP another way — `ping thermal-printer.local` from a phone app, an ARP scan (`arp -a`), or plug in a screen and run `hostname -I` — and SSH to that. |
 
 ---
 
@@ -386,13 +452,13 @@ sudo systemctl stop thermal-printer
 sudo shutdown now
 ```
 
-**Start up:** just plug in power. Both the service and Funnel survive
-reboots automatically — `thermal-printer.service` is `enabled` in
-systemd, and Funnel's `--bg` flag persists the config. Verify:
+**Start up:** just plug in power. Everything survives reboots
+automatically — `thermal-printer.service` and `cloudflared.service` are
+both `enabled` in systemd. Verify:
 
 ```sh
 sudo systemctl status thermal-printer    # "active (running)"
-tailscale funnel status                  # shows "Funnel on"
+sudo systemctl status cloudflared        # "active (running)"
 ```
 
 If the service didn't come up (e.g. after a power cut), start it
@@ -407,18 +473,16 @@ sudo systemctl start thermal-printer
 ## Cheat sheet
 
 ```sh
-# service
+# services
 sudo systemctl status thermal-printer
 sudo systemctl restart thermal-printer
 journalctl -u thermal-printer -f
+sudo systemctl status cloudflared
+journalctl -u cloudflared -f
 
 # shutdown / startup
 sudo systemctl stop thermal-printer && sudo shutdown now   # off
 sudo systemctl status thermal-printer                      # verify after boot
-
-# tailscale
-tailscale status
-tailscale funnel status
 
 # quick update (no dep changes)
 cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
@@ -428,9 +492,10 @@ cd ~/thermal-printer && git pull && \
   .venv/bin/pip install -r requirements.txt && \
   sudo systemctl restart thermal-printer
 
-# rebuild funnel from scratch
-sudo tailscale funnel --https=443 off
-sudo tailscale funnel --bg 5005
+# re-sync the tunnel ingress from the repo
+sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
+sudo nano /etc/cloudflared/config.yml   # re-fill TUNNEL_ID, TEAM_NAME, ACCESS_APP_AUD
+sudo systemctl restart cloudflared
 ```
 
 That's it. Deep breath. You're running a Flask app as a systemd

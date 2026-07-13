@@ -1,16 +1,18 @@
 # CLAUDE.md
 
 Hobby project: a web GUI for an 80mm USB thermal receipt printer on a
-Raspberry Pi, plus a public "send me a receipt" page for friends
-(`/m/`, exposed via Tailscale Funnel). Tone of the codebase: lean and
-playful, not enterprise. Prefer the smallest change that keeps the
-comments honest.
+Raspberry Pi, plus a public "send me a receipt" page for friends. Both
+doors go through one Cloudflare Tunnel: friends at print.cuzeth.com
+(`/m/`), the owner console at console.cuzeth.com behind Cloudflare
+Access. No Tailscale anywhere. Tone of the codebase: lean and playful,
+not enterprise. Prefer the smallest change that keeps the comments
+honest.
 
 ## Run / test
 
 ```sh
 source .venv/bin/activate
-DEV_BYPASS_TAILNET=true COOKIE_SECURE=false python3 app.py   # dev server :5005
+DEV_BYPASS_ACCESS=true COOKIE_SECURE=false python3 app.py    # dev server :5005
 python -m pytest -q                                          # full suite, ~2s
 DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.py
 ```
@@ -28,11 +30,18 @@ DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.
   (`app.py:_PRINT_QUEUE`), the in-flight caps, and the login rate-limit
   buckets all live in process memory. Adding workers silently breaks all
   of them.
-- **Bind 127.0.0.1 only.** Private routes trust the
-  `Tailscale-User-Login` header (`auth/tailnet.py`); that is only safe
-  because nothing but the local Tailscale proxy can reach the port.
-  Never bind 0.0.0.0, never set `DEV_BYPASS_TAILNET` or `FLASK_DEBUG` in
-  anything deploy-shaped (the Werkzeug debugger on a funneled app is RCE).
+- **Bind 127.0.0.1 only.** Private routes trust the `Cf-Access-*`
+  headers (`auth/access.py`); that is only safe because nothing but
+  cloudflared can reach the port. cloudflared forwards client headers
+  verbatim, so three walls guard against forged identity headers: the
+  console ingress requires a connector-validated Access JWT and the
+  friend ingress path-allowlists only `/m` + friend API paths
+  (`deploy/cloudflared-config.yml`), an edge Transform Rule strips
+  `Cf-Access-*` from friend-host requests, and `auth/access.py` pins the
+  authenticated email to `OWNER_EMAIL` — don't weaken any of them. Never
+  bind 0.0.0.0, never set `DEV_BYPASS_ACCESS` or `FLASK_DEBUG` in
+  anything deploy-shaped (the Werkzeug debugger on an internet-exposed
+  app is RCE).
 - **Render constants are hardware-validated.** Font sizes and spacing in
   `features/render.py` look wrong in PIL previews but print correctly on
   the real 80mm printer. Do not retune them from previews.
@@ -48,8 +57,8 @@ DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.
   `"kind": <"input"|"printer"|"server"|...>`. Owner POST routes wrap
   handlers in `_safe()` (`app.py`); friend routes return the same shape
   inline.
-- Route gating: private console = `@require_tailnet` + `@require_owner`;
-  admin = `@require_tailnet` + `@require_admin`; friend routes =
+- Route gating: private console = `@require_access` + `@require_owner`;
+  admin = `@require_access` + `@require_admin`; friend routes =
   `@require_allowed` (session). Every new route must pick one deliberately.
 - Comments explain *why*, in full sentences; load-bearing decisions get a
   paragraph. Match that voice. Tests carry contract-stating docstrings and
