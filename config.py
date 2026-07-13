@@ -55,10 +55,10 @@ IMAGE_FRAGMENT_HEIGHT = _env_int("IMAGE_FRAGMENT_HEIGHT", 256)
 
 # ---------- runtime ----------
 
-# Must be 127.0.0.1 — only cloudflared may reach the app. The console
-# gate trusts the Cf-Access-* headers, which is only safe because every
-# request has to come through the tunnel (and its Access check) first.
-# Never bind to 0.0.0.0.
+# Must be 127.0.0.1 — only cloudflared may reach the app. The login
+# rate limiters trust the last X-Forwarded-For hop as the client's real
+# address, which is only safe when Cloudflare's edge is the one that
+# appended it. Never bind to 0.0.0.0.
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _env_int("PORT", 5005)
 
@@ -97,16 +97,16 @@ DB_PATH = DATA_DIR / "app.db"
 
 # Defaults true so prod is secure with zero config. For local HTTP dev, set
 # COOKIE_SECURE=false in your shell — otherwise the browser won't send the
-# session cookie back and every /m/* request lands as "not signed in".
+# session cookie back and every friend request lands as "not signed in".
 COOKIE_SECURE = _env_bool("COOKIE_SECURE", True)
 
-# The email Cloudflare Access must have authenticated for private routes
-# to open (auth/access.py pins it, on top of the Access policy itself).
-# Required on the Pi — with it unset the console fails closed and every
-# private route 403s. Compared case-insensitively.
-OWNER_EMAIL = os.getenv("OWNER_EMAIL", "").strip().lower()
+# Base32 TOTP secret for the /admin login — generate one with
+# `python3 scripts/gen_totp.py` and enroll it in an authenticator app.
+# Required on the Pi; with it unset (and no dev bypass) the admin login
+# fails closed and only the Bearer ADMIN_TOKEN can reach admin routes.
+TOTP_SECRET = os.getenv("TOTP_SECRET", "").strip()
 
-# When true, is_console_request() always returns True — so private routes
-# are accessible without the Cf-Access-* headers.  For local dev only;
-# never set this on the Pi.
-DEV_BYPASS_ACCESS = _env_bool("DEV_BYPASS_ACCESS", False)
+# When true, require_admin always passes — so /admin and the owner API
+# work without a TOTP code or bearer token. For local dev only; never
+# set this on the Pi.
+DEV_BYPASS_ADMIN = _env_bool("DEV_BYPASS_ADMIN", False)

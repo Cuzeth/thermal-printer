@@ -1,17 +1,24 @@
-"""Security-surface tests: the Cloudflare Access gate, rate-limit plumbing,
+"""Security-surface tests: the admin TOTP gate, rate-limit plumbing,
 token comparison edge cases, and response headers.
 
-The Access-gate tests are the important ones — every other test file runs
-with DEV_BYPASS_ACCESS=true, which short-circuits require_access entirely.
-A route that forgot the decorator would otherwise ship with green CI."""
+The admin-gate tests are the important ones — the whole app is on the
+public internet now, so the only thing between an anonymous visitor and
+the printer console is this login. There is no dev bypass in tests: the
+gate runs for real, with codes minted from the well-known conftest
+secret."""
 
 from __future__ import annotations
+
+import time
 
 import pytest
 
 import config
 import app as app_module
+from auth import admin as admin_mod
 from auth import blueprint as auth_bp_mod
+from auth import ratelimit, totp
+from auth import session as sess
 
 
 @pytest.fixture
@@ -24,81 +31,141 @@ def auth():
     return {"Authorization": f"Bearer {config.ADMIN_TOKEN}"}
 
 
-@pytest.fixture
-def no_bypass(monkeypatch):
-    """Turn the dev Access bypass OFF (and pin an owner identity) so
-    require_access actually runs."""
-    monkeypatch.setattr(config, "DEV_BYPASS_ACCESS", False)
-    monkeypatch.setattr(config, "OWNER_EMAIL", "owner@example.com")
+@pytest.fixture(autouse=True)
+def clean_admin_state():
+    """TOTP failure buckets and the replay guard are process-global;
+    reset them so tests can't trip each other's rate limits."""
+    admin_mod._failures.clear()
+    admin_mod._last_used_step = 0
+    yield
+    admin_mod._failures.clear()
+    admin_mod._last_used_step = 0
 
 
-# Headers Cloudflare adds after Access authenticates a visitor. Flask only
-# ever sees these on requests the connector already JWT-validated; here we
-# inject them directly because the test client plays the role of cloudflared.
-ACCESS_HEADERS = {
-    "Cf-Access-Jwt-Assertion": "test-jwt-not-validated-here",
-    "Cf-Access-Authenticated-User-Email": "owner@example.com",
-}
+def _code_now() -> str:
+    return totp.code_at(config.TOTP_SECRET, time.time())
 
 
-# ---------- Cloudflare Access gate ----------
-
-def test_access_gate_blocks_public_gui(client, no_bypass):
-    assert client.get("/").status_code == 403
-
-
-def test_access_gate_blocks_private_api_even_with_valid_bearer(client, auth, no_bypass):
-    # The gate sits OUTSIDE the bearer check — a leaked token alone must
-    # not be enough from the public internet.
-    r = client.post("/api/print/now", json={}, headers=auth)
-    assert r.status_code == 403
+def _wrong_code() -> str:
+    """A code guaranteed invalid for the whole accept window."""
+    valid = {totp.code_at(config.TOTP_SECRET, time.time() + d)
+             for d in (-30, 0, 30)}
+    return next(c for c in ("000000", "111111", "222222", "333333")
+                if c not in valid)
 
 
-def test_access_gate_admits_owner_plus_bearer(client, auth, no_bypass):
-    r = client.post("/api/print/now", json={}, headers={**auth, **ACCESS_HEADERS})
+# ---------- the admin gate ----------
+
+def test_admin_page_serves_login_form_when_signed_out(client):
+    r = client.get("/admin")
     assert r.status_code == 200
-    # Email comparison is case-insensitive — Access preserves whatever
-    # case the IdP reports, and the owner shouldn't get locked out by it.
-    shouty = {**ACCESS_HEADERS,
-              "Cf-Access-Authenticated-User-Email": "Owner@Example.COM"}
-    assert client.get("/", headers=shouty).status_code == 200
+    assert b"login-form" in r.data
+    # The console itself must not leak to anonymous visitors.
+    assert b'data-pane="compose"' not in r.data
 
 
-def test_access_gate_pins_owner_email(client, auth, no_bypass):
-    # Someone else passing the Access policy (widened by mistake) is still
-    # not the owner. Wall three.
-    headers = {**auth, **ACCESS_HEADERS,
-               "Cf-Access-Authenticated-User-Email": "intruder@example.com"}
-    r = client.post("/api/print/now", json={}, headers=headers)
-    assert r.status_code == 403
-
-
-def test_forged_email_without_jwt_marker_is_rejected(client, no_bypass):
-    # A forged identity header arriving without the connector's JWT marker
-    # (e.g. through a fat-fingered friend-host allowlist) must not pass.
-    r = client.get("/", headers={
-        "Cf-Access-Authenticated-User-Email": "owner@example.com"})
-    assert r.status_code == 403
-
-
-def test_access_gate_fails_closed_without_owner_email(client, monkeypatch):
-    # OWNER_EMAIL unset (fresh .env) → nobody is the owner, not even a
-    # fully Access-authenticated visitor. Loud beats open.
-    monkeypatch.setattr(config, "DEV_BYPASS_ACCESS", False)
-    monkeypatch.setattr(config, "OWNER_EMAIL", "")
-    assert client.get("/", headers=ACCESS_HEADERS).status_code == 403
-
-
-def test_access_identity_alone_is_not_enough_for_private_api(client, no_bypass):
-    # Authenticated owner but no bearer → 401 from require_owner.
-    r = client.post("/api/print/now", json={}, headers=ACCESS_HEADERS)
+def test_admin_api_requires_auth(client):
+    r = client.post("/api/admin/print/now", json={})
     assert r.status_code == 401
+    assert r.get_json()["error"] == "auth required"
 
 
-def test_friend_routes_stay_public_without_access(client, no_bypass):
-    assert client.get("/m/").status_code == 200
-    assert client.get("/api/m/me").status_code == 200
+def test_totp_login_unlocks_console_and_api(client):
+    r = client.post("/api/admin/auth/login", json={"code": _code_now()})
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+    # Session cookie now carries the admin stamp — no bearer anywhere.
+    assert client.get("/api/admin/users").status_code == 200
+    assert b'data-pane="compose"' in client.get("/admin").data
+
+
+def test_totp_login_rejects_wrong_code(client):
+    r = client.post("/api/admin/auth/login", json={"code": _wrong_code()})
+    assert r.status_code == 401
+    assert client.get("/api/admin/users").status_code == 401
+
+
+def test_totp_login_rejects_replayed_code(client):
+    """A code is single-use: the standard TOTP replay guard. The second
+    login with the same (still time-valid) code must fail."""
+    code = _code_now()
+    assert client.post("/api/admin/auth/login", json={"code": code}).status_code == 200
+    fresh = app_module.app.test_client()
+    r = fresh.post("/api/admin/auth/login", json={"code": code})
+    assert r.status_code == 401
+    assert "already used" in r.get_json()["error"]
+
+
+def test_totp_login_rate_limits(client):
+    """6-digit codes are a small space — the endpoint has to slam the
+    door after repeated failures, and a correct code must not slip
+    through during the lockout."""
+    wrong = _wrong_code()
+    for _ in range(admin_mod._MAX_IP_FAILURES):
+        client.post("/api/admin/auth/login", json={"code": wrong})
+    r = client.post("/api/admin/auth/login", json={"code": wrong})
+    assert r.status_code == 429
+    r = client.post("/api/admin/auth/login", json={"code": _code_now()})
+    assert r.status_code == 429
+
+
+def test_totp_login_fails_closed_without_secret(client, monkeypatch):
+    """Fresh .env (no TOTP_SECRET) → the login can't succeed, and says
+    why instead of pretending the code was wrong."""
+    monkeypatch.setattr(config, "TOTP_SECRET", "")
+    r = client.post("/api/admin/auth/login", json={"code": "123456"})
+    assert r.status_code == 503
+    assert "TOTP_SECRET" in r.get_json()["error"]
+
+
+def test_admin_session_expires(client):
+    """The admin stamp is only honored for ADMIN_SESSION_SECONDS; a
+    30-day-old friend cookie must not still be an admin cookie."""
+    with client.session_transaction() as s:
+        s[sess.SESSION_ADMIN_KEY] = time.time() - sess.ADMIN_SESSION_SECONDS - 1
+    assert client.get("/api/admin/users").status_code == 401
+    assert b"login-form" in client.get("/admin").data
+
+
+def test_admin_logout_drops_admin_but_keeps_friend_session(client):
+    """The owner is often signed in as a friend in the same browser —
+    signing out of /admin must not log the friend account out too."""
+    from auth import db as auth_db
+
+    user = auth_db.create_pending_user("sec_owner", "hunter2hunter")
+    auth_db.set_status(user["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = user["id"]
+
+    assert client.post("/api/admin/auth/login",
+                       json={"code": _code_now()}).status_code == 200
+    assert client.post("/api/admin/auth/logout").status_code == 200
+    assert client.get("/api/admin/users").status_code == 401
+    r = client.get("/api/me")
+    assert r.get_json()["user"]["username"] == "sec_owner"
+
+
+def test_bearer_token_still_works_for_scripts(client, auth):
+    """curl + ADMIN_TOKEN is the no-cookie path (smoke tests, scripts) —
+    and it must keep working even while the TOTP login is rate-limited."""
+    wrong = _wrong_code()
+    for _ in range(admin_mod._MAX_IP_FAILURES):
+        client.post("/api/admin/auth/login", json={"code": wrong})
+    assert client.get("/api/admin/users", headers=auth).status_code == 200
+
+
+def test_friend_surfaces_are_public(client):
+    assert client.get("/").status_code == 200
+    assert client.get("/api/me").status_code == 200
     assert client.get("/api/ping").status_code == 200
+
+
+def test_legacy_m_path_redirects_home(client):
+    """Friends' old /m/ bookmarks survive the move to /."""
+    for path in ("/m", "/m/"):
+        r = client.get(path)
+        assert r.status_code == 301
+        assert r.headers["Location"].endswith("/")
 
 
 # ---------- rate-limit plumbing ----------
@@ -110,14 +177,14 @@ def test_client_ip_uses_last_xff_hop():
     with app_module.app.test_request_context(
         headers={"X-Forwarded-For": "6.6.6.6, 100.64.0.1"}
     ):
-        assert auth_bp_mod._client_ip() == "100.64.0.1"
+        assert ratelimit.client_ip() == "100.64.0.1"
 
 
 def test_client_ip_falls_back_to_remote_addr():
     with app_module.app.test_request_context(
         environ_base={"REMOTE_ADDR": "127.0.0.1"}
     ):
-        assert auth_bp_mod._client_ip() == "127.0.0.1"
+        assert ratelimit.client_ip() == "127.0.0.1"
 
 
 def test_login_success_does_not_clear_ip_bucket():
@@ -140,9 +207,9 @@ def test_register_rate_limit_trips(client):
     auth_bp_mod._register_attempts.clear()
     try:
         for i in range(auth_bp_mod._MAX_REGISTERS):
-            client.post("/api/m/auth/register",
+            client.post("/api/auth/register",
                         json={"username": f"ratelim_{i}", "password": "longenough"})
-        r = client.post("/api/m/auth/register",
+        r = client.post("/api/auth/register",
                         json={"username": "ratelim_last", "password": "longenough"})
         assert r.status_code == 429
     finally:

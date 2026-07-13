@@ -124,6 +124,17 @@ Original evidence for these findings (kept for the record):
    (`deploy/cloudflared-config.yml`), an edge Transform Rule stripping
    `Cf-Access-*` from friend-host requests, and an `OWNER_EMAIL` pin in
    the app (fails closed when unset).
+7. **Retire Cloudflare Access / single hostname + TOTP admin login** —
+   owner-directed (2026-07-13), supersedes decision 6: the dashboard
+   ceremony (Access application, Transform Rule, second hostname) was
+   too much for a receipt printer. Friends now live at `/` on
+   print.cuzeth.com, the console at `/admin` behind an RFC 6238 TOTP
+   code (`TOTP_SECRET` in .env, `auth/totp.py`) with per-IP + global
+   lockouts and a single-use replay guard (`auth/admin.py`). The
+   tradeoff decision 6 warned about is accepted knowingly: anonymous
+   internet now reaches Flask's login surface and in-memory rate
+   limits are the wall. `auth/access.py` is gone; `Cf-Access-*`
+   headers mean nothing anymore.
 
 ## Findings considered and rejected
 

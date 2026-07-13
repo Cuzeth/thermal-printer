@@ -1,4 +1,4 @@
-"""Auth package — passkey (WebAuthn) login + allow-list."""
+"""Auth package — friend username/password login + the admin TOTP gate."""
 
 from auth.blueprint import auth_bp
 

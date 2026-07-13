@@ -11,4 +11,7 @@ _TMP = tempfile.mkdtemp(prefix="tp-pytest-")
 os.environ.setdefault("DATA_DIR", _TMP)
 os.environ.setdefault("DRY_RUN", "true")
 os.environ.setdefault("ADMIN_TOKEN", "pytest-token")
-os.environ.setdefault("DEV_BYPASS_ACCESS", "true")
+# The RFC 6238 test-vector secret (base32 of ASCII "12345678901234567890").
+# Tests mint valid codes from it with auth.totp.code_at — no bypass flag,
+# so the admin gate runs for real in every test.
+os.environ.setdefault("TOTP_SECRET", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")

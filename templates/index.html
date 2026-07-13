@@ -6,7 +6,7 @@
   <title>Thermal Printer Console</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
-<body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}" data-admin-token="{{ admin_token }}">
+<body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}">
 
 <header class="top">
   <div class="brand">
@@ -24,6 +24,7 @@
     <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">Console</button>
     <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">Admin</button>
   </nav>
+  <button class="ghost tiny" id="signout" title="End the admin session">Sign out</button>
 </header>
 
 <main>
@@ -517,7 +518,7 @@ ship the thing</textarea>
     <!-- Admin tab -->
     <div class="tabpane" data-pane="admin" role="tabpanel" id="pane-admin" aria-labelledby="tab-admin" tabindex="0">
       <h2>Friend approvals</h2>
-      <p class="help">Friends sign in at <code>/m/</code> with a username + password. They sit pending until you approve.</p>
+      <p class="help">Friends sign in on the front page (<code>/</code>) with a username + password. They sit pending until you approve.</p>
 
       <div class="admin-section">
         <div class="admin-head">

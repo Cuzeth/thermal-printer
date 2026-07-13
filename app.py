@@ -17,15 +17,15 @@ import traceback
 from datetime import datetime, time as dt_time, timedelta
 from typing import Any, Callable
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 from werkzeug.exceptions import HTTPException
 
 import config
 from auth import auth_bp
 from auth import db as auth_db
+from auth.admin import admin_auth_bp
 from auth.blueprint import validate_password
-from auth.session import current_user, require_admin, require_allowed, require_owner
-from auth.access import require_access
+from auth.session import current_user, is_admin_request, require_admin, require_allowed
 from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
@@ -54,14 +54,15 @@ app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB
 )
 app.register_blueprint(auth_bp)
+app.register_blueprint(admin_auth_bp)
 auth_db.init()
 
 
 @app.after_request
 def _security_headers(resp):
-    # Cheap hardening — /m/* is on the public internet at print.cuzeth.com. DENY
-    # framing (nothing here is meant to be embedded), stop MIME sniffing,
-    # and keep referrers on-site.
+    # Cheap hardening — the whole app is on the public internet at
+    # print.cuzeth.com. DENY framing (nothing here is meant to be embedded),
+    # stop MIME sniffing, and keep referrers on-site.
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
@@ -75,22 +76,31 @@ def _too_large(e):
 
 
 @app.route("/")
-@require_access
-def index():
+def friends_index():
+    return render_template("friends.html")
+
+
+@app.route("/m/")
+@app.route("/m")
+def legacy_friends_redirect():
+    # Friends' bookmarks predate the /m -> / move; don't 404 them.
+    return redirect("/", code=301)
+
+
+@app.route("/admin")
+def admin_index():
+    # The page gate renders the login form instead of a JSON 401 — a
+    # browser deserves a code prompt. Every /api/admin route underneath
+    # still carries @require_admin itself.
+    if not is_admin_request():
+        return render_template("admin_login.html")
     return render_template(
         "index.html",
         width=config.RECEIPT_WIDTH,
         pixel_width=config.PRINTER_PIXEL_WIDTH,
         dry_run=config.DRY_RUN,
-        admin_token=config.ADMIN_TOKEN,
         default_location=config.DEFAULT_LOCATION,
     )
-
-
-@app.route("/m/")
-@app.route("/m")
-def friends_index():
-    return render_template("friends.html")
 
 
 # ---------- generic body-printer helper ----------
@@ -185,17 +195,15 @@ def _safe(handler: Callable[[], Any]):
 
 # ---------- text composer ----------
 
-@app.post("/api/preview")
-@require_access
-@require_owner
+@app.post("/api/admin/preview")
+@require_admin
 def preview():
     body = (request.get_json(silent=True) or {}).get("body", "")
     return jsonify({"ok": True, "preview": text_feat.preview(body), "width": config.RECEIPT_WIDTH})
 
 
-@app.post("/api/preview/rich")
-@require_access
-@require_owner
+@app.post("/api/admin/preview/rich")
+@require_admin
 def preview_rich():
     def run():
         body = (request.get_json(silent=True) or {}).get("body", "")
@@ -208,9 +216,8 @@ def preview_rich():
     return _safe(run)
 
 
-@app.post("/api/print/text")
-@require_access
-@require_owner
+@app.post("/api/admin/print/text")
+@require_admin
 def print_text():
     def run():
         data = request.get_json(silent=True) or {}
@@ -240,9 +247,8 @@ def _image_opts_from_form() -> image_feat.ProcessOptions:
     )
 
 
-@app.post("/api/image/preview")
-@require_access
-@require_owner
+@app.post("/api/admin/image/preview")
+@require_admin
 def image_preview():
     def run():
         if "file" not in request.files:
@@ -254,9 +260,8 @@ def image_preview():
     return _safe(run)
 
 
-@app.post("/api/print/image")
-@require_access
-@require_owner
+@app.post("/api/admin/print/image")
+@require_admin
 def print_image():
     def run():
         if "file" not in request.files:
@@ -279,9 +284,8 @@ def print_image():
 
 # ---------- widget routes ----------
 
-@app.post("/api/print/weather")
-@require_access
-@require_owner
+@app.post("/api/admin/print/weather")
+@require_admin
 def print_weather():
     def run():
         data = request.get_json(silent=True) or {}
@@ -294,9 +298,8 @@ def print_weather():
     return _safe(run)
 
 
-@app.post("/api/print/dice")
-@require_access
-@require_owner
+@app.post("/api/admin/print/dice")
+@require_admin
 def print_dice():
     def run():
         data = request.get_json(silent=True) or {}
@@ -309,9 +312,8 @@ def print_dice():
     return _safe(run)
 
 
-@app.post("/api/print/hn")
-@require_access
-@require_owner
+@app.post("/api/admin/print/hn")
+@require_admin
 def print_hn():
     def run():
         data = request.get_json(silent=True) or {}
@@ -320,9 +322,8 @@ def print_hn():
     return _safe(run)
 
 
-@app.post("/api/print/onthisday")
-@require_access
-@require_owner
+@app.post("/api/admin/print/onthisday")
+@require_admin
 def print_on_this_day():
     def run():
         data = request.get_json(silent=True) or {}
@@ -331,9 +332,8 @@ def print_on_this_day():
     return _safe(run)
 
 
-@app.post("/api/print/calendar")
-@require_access
-@require_owner
+@app.post("/api/admin/print/calendar")
+@require_admin
 def print_calendar():
     def run():
         data = request.get_json(silent=True) or {}
@@ -347,9 +347,8 @@ def print_calendar():
     return _safe(run)
 
 
-@app.post("/api/print/countdown")
-@require_access
-@require_owner
+@app.post("/api/admin/print/countdown")
+@require_admin
 def print_countdown():
     def run():
         data = request.get_json(silent=True) or {}
@@ -361,9 +360,8 @@ def print_countdown():
     return _safe(run)
 
 
-@app.post("/api/print/habits")
-@require_access
-@require_owner
+@app.post("/api/admin/print/habits")
+@require_admin
 def print_habits():
     def run():
         data = request.get_json(silent=True) or {}
@@ -378,9 +376,8 @@ def print_habits():
     return _safe(run)
 
 
-@app.post("/api/print/advice")
-@require_access
-@require_owner
+@app.post("/api/admin/print/advice")
+@require_admin
 def print_advice():
     def run():
         _print_body(widgets.advice())
@@ -388,9 +385,8 @@ def print_advice():
     return _safe(run)
 
 
-@app.post("/api/print/briefing")
-@require_access
-@require_owner
+@app.post("/api/admin/print/briefing")
+@require_admin
 def print_briefing():
     def run():
         data = request.get_json(silent=True) or {}
@@ -404,9 +400,8 @@ def print_briefing():
     return _safe(run)
 
 
-@app.post("/api/print/todo")
-@require_access
-@require_owner
+@app.post("/api/admin/print/todo")
+@require_admin
 def print_todo():
     def run():
         data = request.get_json(silent=True) or {}
@@ -421,9 +416,8 @@ def print_todo():
     return _safe(run)
 
 
-@app.post("/api/print/receipt")
-@require_access
-@require_owner
+@app.post("/api/admin/print/receipt")
+@require_admin
 def print_receipt():
     def run():
         data = request.get_json(silent=True) or {}
@@ -440,9 +434,8 @@ def print_receipt():
     return _safe(run)
 
 
-@app.post("/api/print/label")
-@require_access
-@require_owner
+@app.post("/api/admin/print/label")
+@require_admin
 def print_label():
     def run():
         data = request.get_json(silent=True) or {}
@@ -454,9 +447,8 @@ def print_label():
     return _safe(run)
 
 
-@app.post("/api/print/ascii")
-@require_access
-@require_owner
+@app.post("/api/admin/print/ascii")
+@require_admin
 def print_ascii():
     def run():
         data = request.get_json(silent=True) or {}
@@ -465,9 +457,8 @@ def print_ascii():
     return _safe(run)
 
 
-@app.post("/api/print/now")
-@require_access
-@require_owner
+@app.post("/api/admin/print/now")
+@require_admin
 def print_now():
     def run():
         _print_body(widgets.now_card())
@@ -497,9 +488,8 @@ def _barcode_opts(data: dict) -> codes_feat.BarcodeOptions:
     )
 
 
-@app.post("/api/code/qr/preview")
-@require_access
-@require_owner
+@app.post("/api/admin/code/qr/preview")
+@require_admin
 def qr_preview():
     def run():
         opts = _qr_opts(request.get_json(silent=True) or {})
@@ -509,9 +499,8 @@ def qr_preview():
     return _safe(run)
 
 
-@app.post("/api/print/qr")
-@require_access
-@require_owner
+@app.post("/api/admin/print/qr")
+@require_admin
 def print_qr():
     def run():
         opts = _qr_opts(request.get_json(silent=True) or {})
@@ -524,9 +513,8 @@ def print_qr():
     return _safe(run)
 
 
-@app.post("/api/code/barcode/preview")
-@require_access
-@require_owner
+@app.post("/api/admin/code/barcode/preview")
+@require_admin
 def barcode_preview():
     def run():
         opts = _barcode_opts(request.get_json(silent=True) or {})
@@ -536,9 +524,8 @@ def barcode_preview():
     return _safe(run)
 
 
-@app.post("/api/print/barcode")
-@require_access
-@require_owner
+@app.post("/api/admin/print/barcode")
+@require_admin
 def print_barcode():
     def run():
         opts = _barcode_opts(request.get_json(silent=True) or {})
@@ -551,9 +538,8 @@ def print_barcode():
     return _safe(run)
 
 
-@app.get("/api/code/barcode/types")
-@require_access
-@require_owner
+@app.get("/api/admin/code/barcode/types")
+@require_admin
 def barcode_types():
     return jsonify({"ok": True,
                     "types": list(codes_feat.BARCODE_TYPES.keys()),
@@ -562,9 +548,8 @@ def barcode_types():
 
 # ---------- hardware controls ----------
 
-@app.post("/api/hw/cash_drawer")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/cash_drawer")
+@require_admin
 def hw_cash_drawer():
     def run():
         data = request.get_json(silent=True) or {}
@@ -575,9 +560,8 @@ def hw_cash_drawer():
     return _safe(run)
 
 
-@app.post("/api/hw/beep")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/beep")
+@require_admin
 def hw_beep():
     def run():
         data = request.get_json(silent=True) or {}
@@ -589,9 +573,8 @@ def hw_beep():
     return _safe(run)
 
 
-@app.post("/api/hw/feed")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/feed")
+@require_admin
 def hw_feed():
     def run():
         data = request.get_json(silent=True) or {}
@@ -601,9 +584,8 @@ def hw_feed():
     return _safe(run)
 
 
-@app.post("/api/hw/cut")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/cut")
+@require_admin
 def hw_cut():
     def run():
         data = request.get_json(silent=True) or {}
@@ -617,9 +599,8 @@ def hw_cut():
     return _safe(run)
 
 
-@app.post("/api/hw/reset")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/reset")
+@require_admin
 def hw_reset():
     def run():
         with open_printer() as p:
@@ -628,9 +609,8 @@ def hw_reset():
     return _safe(run)
 
 
-@app.post("/api/hw/self_test")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/self_test")
+@require_admin
 def hw_self_test():
     def run():
         with open_printer() as p:
@@ -639,9 +619,8 @@ def hw_self_test():
     return _safe(run)
 
 
-@app.post("/api/hw/density")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/density")
+@require_admin
 def hw_density():
     def run():
         data = request.get_json(silent=True) or {}
@@ -651,9 +630,8 @@ def hw_density():
     return _safe(run)
 
 
-@app.post("/api/hw/codepage")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/codepage")
+@require_admin
 def hw_codepage():
     def run():
         data = request.get_json(silent=True) or {}
@@ -663,9 +641,8 @@ def hw_codepage():
     return _safe(run)
 
 
-@app.get("/api/hw/codepages")
-@require_access
-@require_owner
+@app.get("/api/admin/hw/codepages")
+@require_admin
 def hw_codepages():
     return jsonify({
         "ok": True,
@@ -673,9 +650,8 @@ def hw_codepages():
     })
 
 
-@app.post("/api/hw/status")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/status")
+@require_admin
 def hw_status():
     def run():
         results = []
@@ -693,9 +669,8 @@ def hw_status():
 _MAX_RAW_BYTES = 4096
 
 
-@app.post("/api/hw/raw")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/raw")
+@require_admin
 def hw_raw():
     def run():
         data = request.get_json(silent=True) or {}
@@ -711,9 +686,8 @@ def hw_raw():
     return _safe(run)
 
 
-@app.get("/api/hw/led/protocols")
-@require_access
-@require_owner
+@app.get("/api/admin/hw/led/protocols")
+@require_admin
 def hw_led_protocols():
     return jsonify({
         "ok": True,
@@ -724,9 +698,8 @@ def hw_led_protocols():
     })
 
 
-@app.post("/api/hw/led/preview")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/led/preview")
+@require_admin
 def hw_led_preview():
     def run():
         data = request.get_json(silent=True) or {}
@@ -740,9 +713,8 @@ def hw_led_preview():
     return _safe(run)
 
 
-@app.post("/api/hw/led")
-@require_access
-@require_owner
+@app.post("/api/admin/hw/led")
+@require_admin
 def hw_led():
     def run():
         import time
@@ -769,9 +741,8 @@ def hw_led():
     return _safe(run)
 
 
-@app.get("/api/hw/cheatsheet")
-@require_access
-@require_owner
+@app.get("/api/admin/hw/cheatsheet")
+@require_admin
 def hw_cheatsheet():
     return jsonify({
         "ok": True,
@@ -792,7 +763,7 @@ _MAX_MSG_LEN = 800
 _MAX_DOODLE_BYTES = 2 * 1024 * 1024
 _DOODLE_PREFIX = "data:image/png;base64,"
 
-# Friend-message print queue. POST /api/m/print enqueues and returns
+# Friend-message print queue. POST /api/print enqueues and returns
 # immediately; a single daemon worker drains in FIFO order so two friends
 # hitting send at the same time both get an instant "queued" instead of
 # one of them blocking on the USB lock for the duration of the other's
@@ -910,7 +881,7 @@ if _briefing_time is not None:
                      name="briefing-scheduler", daemon=True).start()
 
 
-@app.post("/api/m/preview")
+@app.post("/api/preview")
 @require_allowed
 def friend_preview():
     """Render a WYSIWYG preview of what the message will print as.
@@ -996,7 +967,7 @@ def _enqueue_friend_print(user: dict, history_body: str, job: dict):
     return jsonify({"ok": True, "queued": True, "ahead": ahead})
 
 
-@app.post("/api/m/print")
+@app.post("/api/print")
 @require_allowed
 def friend_print():
     user = current_user()
@@ -1016,7 +987,7 @@ def friend_print():
     return _enqueue_friend_print(user, body, {"kind": "text", "body": formatted})
 
 
-@app.post("/api/m/print/doodle")
+@app.post("/api/print/doodle")
 @require_allowed
 def friend_print_doodle():
     user = current_user()
@@ -1054,7 +1025,7 @@ def friend_print_doodle():
     })
 
 
-@app.get("/api/m/history")
+@app.get("/api/history")
 @require_allowed
 def friend_history():
     """Return the signed-in friend's own print history, newest first.
@@ -1074,10 +1045,10 @@ def friend_history():
     })
 
 
-@app.get("/api/m/printer")
+@app.get("/api/printer")
 @require_allowed
 def friend_printer_status():
-    """Last-known printer reachability for the soft banner on /m/.
+    """Last-known printer reachability for the soft banner on the friends page.
 
     Deliberately coarse: True until a real USB open fails, False until a
     print completes. Queueing is unaffected — the banner only sets
@@ -1085,10 +1056,9 @@ def friend_printer_status():
     return jsonify({"ok": True, "printer": printer_status()})
 
 
-# ---------- admin (Bearer-token gated) ----------
+# ---------- admin: friend management ----------
 
 @app.get("/api/admin/users")
-@require_access
 @require_admin
 def admin_list_users():
     status = request.args.get("status")
@@ -1100,7 +1070,6 @@ def admin_list_users():
 
 
 @app.post("/api/admin/users/<int:user_id>/approve")
-@require_access
 @require_admin
 def admin_approve_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1110,7 +1079,6 @@ def admin_approve_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/revoke")
-@require_access
 @require_admin
 def admin_revoke_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1120,7 +1088,6 @@ def admin_revoke_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/delete")
-@require_access
 @require_admin
 def admin_delete_user(user_id: int):
     if not auth_db.get_user(user_id):
@@ -1130,12 +1097,11 @@ def admin_delete_user(user_id: int):
 
 
 @app.post("/api/admin/users/<int:user_id>/password")
-@require_access
 @require_admin
 def admin_set_password(user_id: int):
-    """Reset a friend's password. There's no self-service reset on /m/ —
-    without this, a friend who forgot their password could only be deleted
-    (losing their history and burning the username)."""
+    """Reset a friend's password. There's no self-service reset on the
+    friends page — without this, a friend who forgot their password could
+    only be deleted (losing their history and burning the username)."""
     if not auth_db.get_user(user_id):
         return jsonify({"ok": False, "error": "no such user"}), 404
     data = request.get_json(silent=True) or {}
@@ -1148,7 +1114,6 @@ def admin_set_password(user_id: int):
 
 
 @app.get("/api/admin/messages")
-@require_access
 @require_admin
 def admin_list_messages():
     try:
@@ -1159,7 +1124,6 @@ def admin_list_messages():
 
 
 @app.post("/api/admin/printer/reset")
-@require_access
 @require_admin
 def admin_reset_printer():
     """Issue a USB port reset to the printer — software unplug-replug."""
@@ -1194,5 +1158,5 @@ _print_banner()
 if __name__ == "__main__":
     # Dev server. Prod runs under gunicorn (see deploy/thermal-printer.service).
     # FLASK_DEBUG=1 opts in to the Werkzeug reloader/debugger; never set it on
-    # the Pi — /m/* is public at print.cuzeth.com and the debugger = RCE.
+    # the Pi — the app is public at print.cuzeth.com and the debugger = RCE.
     app.run(host=config.HOST, port=config.PORT, debug=os.environ.get("FLASK_DEBUG") == "1")

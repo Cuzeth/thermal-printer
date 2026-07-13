@@ -239,7 +239,7 @@ def list_messages(limit: int = 20) -> list[dict]:
 
 def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
     """Every print this user has made, newest first. Powers the personal
-    history panel on /m/ — no JOIN to users (it's always the caller's own
+    history panel on the friends page — no JOIN to users (it's always the caller's own
     row), no username field in the result.
 
     `printed_at` is second-precision in SQLite, so two rapid prints can tie.

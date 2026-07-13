@@ -11,15 +11,16 @@ Group=pi
 WorkingDirectory=/home/pi/thermal-printer
 EnvironmentFile=/home/pi/thermal-printer/.env
 # --workers 1 is load-bearing: printer.py serializes USB via an in-process
-# threading.Lock, and /api/m/print rate limiting lives in a process-local dict.
-# Threads are fine (lock handles them); workers would race and double-print.
+# threading.Lock, and the print queue + login rate limits live in
+# process-local memory. Threads are fine (lock handles them); workers
+# would race and double-print.
 # --threads 4 so a couple of slow widget fetches (weather/HN over the
-# network) can't occupy every request thread and starve the public /m/.
+# network) can't occupy every request thread and starve the friends page.
 #
 # Bind to 127.0.0.1 ONLY. cloudflared is the sole front door for this
-# port (console.cuzeth.com behind Cloudflare Access, print.cuzeth.com for
-# friends). If the app listened on 0.0.0.0, anyone on the LAN could
-# bypass auth by forging the Cf-Access-* identity headers.
+# port (print.cuzeth.com). The login rate limiters trust the last
+# X-Forwarded-For hop as the client address; on 0.0.0.0 anyone on the
+# LAN could spoof it and sidestep the per-IP buckets.
 ExecStart=/home/pi/thermal-printer/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:${PORT} --access-logfile - --error-logfile - app:app
 Restart=always
 RestartSec=5

@@ -73,10 +73,11 @@ cat <<'DONE'
 ==> setup complete.
 
 Next steps:
-  1. If you haven't already:  cp .env.example .env  and fill in SECRET_KEY + ADMIN_TOKEN.
-     Generate them with:
+  1. If you haven't already:  cp .env.example .env  and fill in
+     SECRET_KEY, ADMIN_TOKEN, and TOTP_SECRET. Generate them with:
        python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
        python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
+       .venv/bin/python scripts/gen_totp.py   # scan the QR before closing!
   2. Plug the printer in (USB). Unplug/replug if it was already connected
      before the udev rule was installed.
   3. Start the service:

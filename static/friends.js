@@ -62,7 +62,7 @@ function setPendingPolling(on) {
 async function refreshPrinterBanner() {
   const banner = $("#printer-banner");
   if (!banner) return;
-  const j = await getJSON("/api/m/printer");
+  const j = await getJSON("/api/printer");
   banner.hidden = j.printer?.ok !== false;
 }
 
@@ -141,7 +141,7 @@ function renderStylePicker(current) {
 
 async function saveNameStyle(style) {
   try {
-    const j = await postJSON("/api/m/settings", { name_style: style });
+    const j = await postJSON("/api/settings", { name_style: style });
     applyMe(j.user);
     toast("style: " + style, "ok");
     // Refresh the preview so they see the new header font immediately.
@@ -152,7 +152,7 @@ async function saveNameStyle(style) {
 }
 
 async function refreshMe() {
-  const j = await getJSON("/api/m/me");
+  const j = await getJSON("/api/me");
   applyMe(j.user);
 }
 
@@ -186,7 +186,7 @@ async function updatePreview() {
     return;
   }
   try {
-    const j = await postJSON("/api/m/preview", { body, anonymous });
+    const j = await postJSON("/api/preview", { body, anonymous });
     if (seq !== previewSeq) return; // stale — user kept typing
     const segments = j.segments || [];
     if (segments.length === 0) {
@@ -278,7 +278,7 @@ async function loadHistory() {
   const list = $("#history-list");
   const empty = $("#history-empty");
   try {
-    const j = await getJSON("/api/m/history?limit=50");
+    const j = await getJSON("/api/history?limit=50");
     if (!j.ok) throw new Error(j.error || "couldn't load history");
     const items = (j.messages || []).map(historyItem);
     list.replaceChildren(...items);
@@ -314,7 +314,7 @@ async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
   const anonymous = !!$("#msg-anon")?.checked;
-  const j = await postJSON("/api/m/print", { body, anonymous });
+  const j = await postJSON("/api/print", { body, anonymous });
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
   // Reset anon back to the default so it doesn't silently stick.
@@ -378,7 +378,7 @@ async function sendDoodle() {
   const canvas = $("#doodle-canvas");
   const anonymous = !!$("#doodle-anon")?.checked;
   const image = canvas.toDataURL("image/png");
-  const j = await postJSON("/api/m/print/doodle", { image, anonymous });
+  const j = await postJSON("/api/print/doodle", { image, anonymous });
   doodleFillWhite();
   if ($("#doodle-anon")) $("#doodle-anon").checked = false;
   celebrateQueued(j);
@@ -403,7 +403,7 @@ $("#register-form").addEventListener("submit", async (e) => {
   const btn = e.submitter || e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   try {
-    const j = await postJSON("/api/m/auth/register", { username, password });
+    const j = await postJSON("/api/auth/register", { username, password });
     applyMe(j.user);
     toast("account created — waiting for approval", "ok");
   } catch (err) {
@@ -420,7 +420,7 @@ $("#login-form").addEventListener("submit", async (e) => {
   const btn = e.submitter || e.target.querySelector("button[type=submit]");
   btn.disabled = true;
   try {
-    const j = await postJSON("/api/m/auth/login", { username, password });
+    const j = await postJSON("/api/auth/login", { username, password });
     applyMe(j.user);
     toast("signed in", "ok");
   } catch (err) {
@@ -499,7 +499,7 @@ $("#recheck").addEventListener("click", async () => {
 
 $("#logout").addEventListener("click", async () => {
   try {
-    await postJSON("/api/m/auth/logout", {});
+    await postJSON("/api/auth/logout", {});
     me = null;
     applyMe(null);
   } catch (e) {

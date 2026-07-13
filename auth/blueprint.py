@@ -1,4 +1,4 @@
-"""Friend-facing auth endpoints. Mounted at /api/m/auth/* by app.py.
+"""Friend-facing auth endpoints. Mounted at /api/auth/* by app.py.
 
 Simple username + password. Passwords hashed with werkzeug's scrypt
 helper (ships with Flask, no new dep). Failed-login rate limit is an
@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import re
 import sqlite3
-import time
 
 from flask import Blueprint, jsonify, request
 
 from auth import db, session as sess
+from auth.ratelimit import client_ip as _client_ip
+from auth.ratelimit import sliding_check as _sliding_check
+from auth.ratelimit import sliding_record as _sliding_record
 
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/m")
+auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,20}$")
 MIN_PASSWORD_LEN = 8
@@ -35,42 +37,6 @@ _REGISTER_WINDOW = 60 * 60
 _failures: dict[str, list[float]] = {}
 _ip_failures: dict[str, list[float]] = {}
 _register_attempts: dict[str, list[float]] = {}
-
-
-def _client_ip() -> str:
-    """Last hop in X-Forwarded-For (the one the trusted proxy appended),
-    else remote_addr.
-
-    The app only ever hears from cloudflared (bound to 127.0.0.1), and
-    Cloudflare's edge appends the real client address as the *last* XFF
-    entry. The first entry is client-controlled — proxies append, so a
-    `curl -H "X-Forwarded-For: x"` would land first and let an attacker
-    rotate fake addresses to bypass the per-IP buckets."""
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        last = xff.split(",")[-1].strip()
-        if last:
-            return last
-    return request.remote_addr or "?"
-
-
-def _sliding_check(bucket: dict[str, list[float]], key: str,
-                   limit: int, window: int) -> bool:
-    """Return True if the key is already at/over the limit. Also prunes."""
-    cutoff = time.time() - window
-    arr = [t for t in bucket.get(key, []) if t > cutoff]
-    if arr:
-        bucket[key] = arr
-    else:
-        bucket.pop(key, None)
-    return len(arr) >= limit
-
-
-def _sliding_record(bucket: dict[str, list[float]], key: str, window: int) -> None:
-    cutoff = time.time() - window
-    arr = [t for t in bucket.get(key, []) if t > cutoff]
-    arr.append(time.time())
-    bucket[key] = arr
 
 
 # ---------- helpers ----------

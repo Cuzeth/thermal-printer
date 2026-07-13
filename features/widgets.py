@@ -321,7 +321,7 @@ def hacker_news(count: int = 5) -> str:
 
     # Fetch items concurrently — serially this was up to count×4s of a
     # gunicorn thread blocked on the network, enough to starve the whole
-    # app (only 2-4 threads serve everything, including the public /m/).
+    # app (only 2-4 threads serve everything, including the friends page).
     with ThreadPoolExecutor(max_workers=min(8, max(1, len(ids)))) as ex:
         stories = [s for s in ex.map(_fetch_item, ids) if s]
 
@@ -848,7 +848,7 @@ def friend_message(username: str, body: str, *,
         if paragraph.strip() == "!!!":
             # Friends don't get the cut directive — 800 chars of "!!!" lines
             # would fire the cutter ~160 times in one message. The composer
-            # keeps it; here it's dropped (it's not in the /m/ markup hint).
+            # keeps it; here it's dropped (it's not in the friends-page markup hint).
             continue
         if paragraph.strip():
             lines.append(textwrap.fill(paragraph, width=config.RECEIPT_WIDTH))

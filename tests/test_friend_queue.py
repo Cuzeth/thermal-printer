@@ -47,14 +47,14 @@ def test_friend_preview_yields_single_segment_despite_cuts(client):
     the directive is dropped for friends."""
     _signed_in_client(client, "q_cutter")
     body = "hello\n" + "\n".join(["!!!"] * 40) + "\nbye"
-    r = client.post("/api/m/preview", json={"body": body})
+    r = client.post("/api/preview", json={"body": body})
     assert r.status_code == 200
     assert len(r.get_json()["segments"]) == 1
 
 
 def test_friend_print_rejects_oversized_body(client):
     _signed_in_client(client, "q_long")
-    r = client.post("/api/m/print", json={"body": "x" * (app_module._MAX_MSG_LEN + 1)})
+    r = client.post("/api/print", json={"body": "x" * (app_module._MAX_MSG_LEN + 1)})
     assert r.status_code == 400
     assert "too long" in r.get_json()["error"]
 
@@ -65,7 +65,7 @@ def test_friend_print_per_user_cap(client):
     with app_module._inflight_lock:
         app_module._inflight[user["id"]] = app_module._PER_USER_QUEUE_CAP
     try:
-        r = client.post("/api/m/print", json={"body": "hello"})
+        r = client.post("/api/print", json={"body": "hello"})
         assert r.status_code == 429
         assert r.get_json()["kind"] == "user_cap"
     finally:
@@ -77,7 +77,7 @@ def test_friend_print_marks_status_printed_on_success(client):
     """DRY_RUN print succeeds → the worker flips the history row from
     'queued' to 'printed'."""
     user = _signed_in_client(client, "q_status")
-    r = client.post("/api/m/print", json={"body": "status check"})
+    r = client.post("/api/print", json={"body": "status check"})
     assert r.status_code == 200
     app_module._PRINT_QUEUE.join()  # worker updates status before task_done()
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
@@ -94,7 +94,7 @@ def test_friend_print_queue_full_rolls_back_inflight(client, monkeypatch):
         raise queue.Full
 
     monkeypatch.setattr(app_module._PRINT_QUEUE, "put_nowait", _raise_full)
-    r = client.post("/api/m/print", json={"body": "hello"})
+    r = client.post("/api/print", json={"body": "hello"})
     assert r.status_code == 503
     assert r.get_json()["kind"] == "queue_full"
     with app_module._inflight_lock:
@@ -113,7 +113,7 @@ def test_friend_print_db_failure_rolls_back_inflight(client, monkeypatch):
         raise sqlite3.OperationalError("boom")
 
     monkeypatch.setattr(auth_db, "log_message", _raise)
-    r = client.post("/api/m/print", json={"body": "hello"})
+    r = client.post("/api/print", json={"body": "hello"})
     assert r.status_code == 500
     body = r.get_json()
     assert body["ok"] is False
@@ -122,7 +122,7 @@ def test_friend_print_db_failure_rolls_back_inflight(client, monkeypatch):
         assert app_module._inflight.get(user["id"], 0) == 0
 
     monkeypatch.undo()
-    r2 = client.post("/api/m/print", json={"body": "hello again"})
+    r2 = client.post("/api/print", json={"body": "hello again"})
     assert r2.status_code == 200
     assert r2.get_json()["queued"] is True
     app_module._PRINT_QUEUE.join()
@@ -137,12 +137,12 @@ def test_worker_survives_status_update_failure(client, monkeypatch):
         raise sqlite3.OperationalError("boom")
 
     monkeypatch.setattr(auth_db, "set_message_status", _raise)
-    r = client.post("/api/m/print", json={"body": "first"})
+    r = client.post("/api/print", json={"body": "first"})
     assert r.status_code == 200
     app_module._PRINT_QUEUE.join()
 
     monkeypatch.undo()
-    r2 = client.post("/api/m/print", json={"body": "second"})
+    r2 = client.post("/api/print", json={"body": "second"})
     assert r2.status_code == 200
     app_module._PRINT_QUEUE.join()
 
@@ -173,7 +173,7 @@ def test_doodle_prints_and_lands_in_history(client):
     """A real doodle queues, the DRY_RUN worker actually runs the doodle
     job, and the history row shows the '(doodle)' placeholder body."""
     user = _signed_in_client(client, "q_doodle")
-    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+    r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
     assert r.status_code == 200
     assert r.get_json()["queued"] is True
     app_module._PRINT_QUEUE.join()
@@ -185,7 +185,7 @@ def test_doodle_prints_and_lands_in_history(client):
 def test_doodle_rejects_blank_canvas(client):
     """An untouched canvas thresholds to pure white — nothing to print."""
     _signed_in_client(client, "q_doodle_blank")
-    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url(blank=True)})
+    r = client.post("/api/print/doodle", json={"image": _doodle_data_url(blank=True)})
     assert r.status_code == 400
     assert "draw" in r.get_json()["error"]
 
@@ -199,7 +199,7 @@ def test_doodle_rejects_garbage_payloads(client):
         {"image": "hello"},
         {"image": "data:image/png;base64,@@@"},
     ):
-        r = client.post("/api/m/print/doodle", json=payload)
+        r = client.post("/api/print/doodle", json=payload)
         assert r.status_code == 400
         assert r.get_json()["kind"] == "input"
 
@@ -209,7 +209,7 @@ def test_doodle_requires_approval(client):
     user = auth_db.create_pending_user("q_doodle_pending", "hunter2hunter")
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
-    r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+    r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
     assert r.status_code == 403
 
 
@@ -220,7 +220,7 @@ def test_doodle_counts_against_user_cap(client):
     with app_module._inflight_lock:
         app_module._inflight[user["id"]] = app_module._PER_USER_QUEUE_CAP
     try:
-        r = client.post("/api/m/print/doodle", json={"image": _doodle_data_url()})
+        r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
         assert r.status_code == 429
         assert r.get_json()["kind"] == "user_cap"
     finally:

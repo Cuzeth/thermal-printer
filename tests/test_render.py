@@ -119,8 +119,9 @@ def test_symbols_and_hieroglyph_route_without_crashing():
 
 
 def test_styled_heading_markup_renders():
-    """`:script: text` is the name-style directive used by /m/. Each style
-    should produce output at least as tall as a plain subheading."""
+    """`:script: text` is the name-style directive used by the friends
+    page. Each style should produce output at least as tall as a plain
+    subheading."""
     base = _render("hi")
     for style in ("script", "serif", "gothic", "mono", "caps"):
         img = _render(f":{style}: from alice")

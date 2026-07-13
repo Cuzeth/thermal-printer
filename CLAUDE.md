@@ -1,19 +1,19 @@
 # CLAUDE.md
 
 Hobby project: a web GUI for an 80mm USB thermal receipt printer on a
-Raspberry Pi, plus a public "send me a receipt" page for friends. Both
-doors go through one Cloudflare Tunnel: friends at print.cuzeth.com
-(`/m/`), the owner console at console.cuzeth.com behind Cloudflare
-Access. No Tailscale anywhere. Tone of the codebase: lean and playful,
-not enterprise. Prefer the smallest change that keeps the comments
-honest.
+Raspberry Pi, plus a public "send me a receipt" page for friends.
+Everything hangs off one Cloudflare Tunnel hostname, print.cuzeth.com:
+friends at `/`, the owner console at `/admin` behind a TOTP login
+(`TOTP_SECRET` in .env — no accounts, no Cloudflare Access, no
+Tailscale). Tone of the codebase: lean and playful, not enterprise.
+Prefer the smallest change that keeps the comments honest.
 
 ## Run / test
 
 ```sh
 source .venv/bin/activate
-DEV_BYPASS_ACCESS=true COOKIE_SECURE=false python3 app.py    # dev server :5005
-python -m pytest -q                                          # full suite, ~2s
+DEV_BYPASS_ADMIN=true COOKIE_SECURE=false python3 app.py     # dev server :5005
+python -m pytest -q                                          # full suite, ~3s
 DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.py
 ```
 
@@ -27,26 +27,25 @@ DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.
 
 - **Single gunicorn worker.** The systemd unit runs `--workers 1
   --threads 4`. The USB lock (`printer.py:_lock`), the friend print queue
-  (`app.py:_PRINT_QUEUE`), the in-flight caps, and the login rate-limit
-  buckets all live in process memory. Adding workers silently breaks all
-  of them.
-- **Bind 127.0.0.1 only.** Private routes trust the `Cf-Access-*`
-  headers (`auth/access.py`); that is only safe because nothing but
-  cloudflared can reach the port. cloudflared forwards client headers
-  verbatim, so three walls guard against forged identity headers: the
-  console ingress requires a connector-validated Access JWT and the
-  friend ingress path-allowlists only `/m` + friend API paths
-  (`deploy/cloudflared-config.yml`), an edge Transform Rule strips
-  `Cf-Access-*` from friend-host requests, and `auth/access.py` pins the
-  authenticated email to `OWNER_EMAIL` — don't weaken any of them. Never
-  bind 0.0.0.0, never set `DEV_BYPASS_ACCESS` or `FLASK_DEBUG` in
-  anything deploy-shaped (the Werkzeug debugger on an internet-exposed
-  app is RCE).
+  (`app.py:_PRINT_QUEUE`), the in-flight caps, the login rate-limit
+  buckets, and the TOTP replay guard (`auth/admin.py:_last_used_step`)
+  all live in process memory. Adding workers silently breaks all of them.
+- **The whole app faces the anonymous internet; the TOTP gate is the
+  wall.** There is no edge auth anymore — `/admin` and `/api/admin/*`
+  are defended entirely by `auth/admin.py`: per-IP + global failure
+  lockouts and a single-use-per-timestep replay guard. Don't loosen
+  those, and every new admin route must carry `@require_admin`. Never
+  set `DEV_BYPASS_ADMIN` or `FLASK_DEBUG` in anything deploy-shaped
+  (the Werkzeug debugger on an internet-exposed app is RCE).
+- **Bind 127.0.0.1 only.** cloudflared must be the only way in: the
+  rate limiters resolve the client address from the last
+  `X-Forwarded-For` hop (`auth/ratelimit.py:client_ip`), which is only
+  trustworthy when Cloudflare's edge appended it. Never bind 0.0.0.0.
 - **Render constants are hardware-validated.** Font sizes and spacing in
   `features/render.py` look wrong in PIL previews but print correctly on
   the real 80mm printer. Do not retune them from previews.
 - **In-memory rate limits reset on restart — by design.** Documented
-  tradeoff (`auth/blueprint.py:29`); don't add persistence or Redis.
+  tradeoff (`auth/ratelimit.py` docstring); don't add persistence or Redis.
 - **`IMAGE_FRAGMENT_HEIGHT` (config.py) is a buffer-overrun workaround**
   for cheap printers — see the comment there before touching image
   chunking.
@@ -57,8 +56,8 @@ DRY_RUN=true ADMIN_TOKEN=t DATA_DIR=/tmp/tp-smoke python scripts/test_auth_flow.
   `"kind": <"input"|"printer"|"server"|...>`. Owner POST routes wrap
   handlers in `_safe()` (`app.py`); friend routes return the same shape
   inline.
-- Route gating: private console = `@require_access` + `@require_owner`;
-  admin = `@require_access` + `@require_admin`; friend routes =
+- Route gating: owner/admin routes (`/api/admin/*`) = `@require_admin`
+  (TOTP session or Bearer `ADMIN_TOKEN`); friend routes =
   `@require_allowed` (session). Every new route must pick one deliberately.
 - Comments explain *why*, in full sentences; load-bearing decisions get a
   paragraph. Match that voice. Tests carry contract-stating docstrings and

@@ -2,23 +2,22 @@
 
 Target hardware: a **Raspberry Pi Zero 2W** (but any Pi works) running
 **Raspberry Pi OS Lite (64-bit)**. The printer plugs into the Pi over
-USB; one Cloudflare Tunnel carries everything. Friends reach `/m/` at
-`https://print.cuzeth.com`; you reach the console at
-`https://console.cuzeth.com` from any browser, anywhere, after passing
-Cloudflare Access (a one-time email code — no VPN, no client software).
+USB; one Cloudflare Tunnel carries everything at
+`https://print.cuzeth.com`. Friends land on the front page; you unlock
+the console at `/admin` with a 6-digit code from your authenticator
+app (no VPN, no client software, no Cloudflare dashboard ceremony).
 No port forwarding anywhere — the tunnel is an outbound-only connection
 from the Pi, so this works from an apartment with untouchable router
 settings.
 
 End state:
 
-- Main GUI (`/`) and private API — at `https://console.cuzeth.com`,
-  behind Cloudflare Access. cloudflared itself rejects requests without
-  a valid Access login, so anonymous internet never reaches these routes;
-  the app additionally pins the authenticated email to `OWNER_EMAIL`.
-- Friends page (`/m/`) and its API — public at
-  `https://print.cuzeth.com` via an ingress rule that allowlists only
-  the friend paths.
+- Friends page (`/`) and its API — public at `https://print.cuzeth.com`.
+- Owner console (`/admin`) and its API (`/api/admin/*`) — same
+  hostname, gated by the app itself: a TOTP login (secret in `.env`,
+  enrolled in your authenticator app) with rate-limited attempts and
+  single-use codes. `/api/admin/*` also accepts the Bearer
+  `ADMIN_TOKEN` for curl.
 - Runs as two `systemd` services (`thermal-printer`, `cloudflared`).
   Survives reboots. Logs with `journalctl`.
 
@@ -164,27 +163,30 @@ cd ~/thermal-printer
 cp .env.example .env
 ```
 
-Generate the two required secrets:
+Generate the three required secrets:
 
 ```sh
 python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
 python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
+.venv/bin/python scripts/gen_totp.py
 ```
 
 Paste each full line into `.env`, replacing the blank placeholders.
-Also set `OWNER_EMAIL` to the address your Cloudflare Access policy
-will admit (step 8.4) — the app pins the authenticated identity to it,
-and with it unset the console fails closed and every private route
-403s. The rest of `.env.example` is just documented defaults — leave
-them alone unless you know you need to override something.
+`gen_totp.py` prints a QR code — scan it with any authenticator app
+(Google Authenticator, Apple Passwords, Aegis, 1Password, ...) **before
+you close the terminal**, then paste its `TOTP_SECRET=` line into
+`.env`. That app entry is now the key to your console; the 6-digit
+code it shows is what `/admin` asks for. The rest of `.env.example` is
+just documented defaults — leave them alone unless you know you need
+to override something.
 
-> You don't need to memorize `ADMIN_TOKEN`. The main GUI reads it from
-> the env and inlines it in the page automatically. Keep it secret —
-> anyone with it has full console access.
+> `ADMIN_TOKEN` is for scripts (`curl -H "Authorization: Bearer ..."`
+> against `/api/admin/*`) — the browser console never needs it. Keep
+> both secrets secret; either one is full console access.
 
 You **don't** need to set `COOKIE_SECURE` — it defaults to `true`,
-which is correct for the Pi (both hostnames are HTTPS). Only set it to
-`false` for local HTTP dev on your Mac.
+which is correct for the Pi (print.cuzeth.com is HTTPS). Only set it
+to `false` for local HTTP dev on your Mac.
 
 ---
 
@@ -221,21 +223,12 @@ shows the traceback. Most common issue: `.env` has a typo or a missing
 
 ---
 
-## 8 · Cloudflare Tunnel (both doors)
+## 8 · Cloudflare Tunnel (the only door)
 
 Everything is served by `cloudflared` — an outbound-only connector to
-Cloudflare's edge that proxies allowed requests to `127.0.0.1:5005`.
-The repo's ingress config carries two hostnames: `print.cuzeth.com`
-(friends, path-allowlisted) and `console.cuzeth.com` (you, gated by
-Cloudflare Access — set up in 8.4).
-
-One thing to internalize before wiring it up: **cloudflared forwards
-client headers verbatim.** After Access authenticates you, Cloudflare
-attaches `Cf-Access-*` identity headers — and a public visitor on the
-friend hostname could forge those same headers. Three walls stop that,
-and you're about to build two of them (the third, an `OWNER_EMAIL` pin,
-already lives in `auth/access.py`): the ingress rules in the config
-file, and an edge rule stripping the headers from friend traffic.
+Cloudflare's edge that proxies requests to `127.0.0.1:5005`. One
+hostname, no edge auth, no path allowlist: the app defends itself
+(friend sessions, the TOTP login, and rate limits all live in Flask).
 
 Prerequisite: `cuzeth.com` is on Cloudflare (free plan) — the tunnel
 can only route hostnames whose DNS Cloudflare controls.
@@ -263,40 +256,20 @@ cloudflared tunnel create thermal-printer
 `create` prints a tunnel UUID and writes a credentials file to
 `~/.cloudflared/<UUID>.json`. Note both.
 
-**8.3 · Point DNS at the tunnel** (creates proxied CNAMEs for both
-hostnames):
+**8.3 · Point DNS at the tunnel** (creates a proxied CNAME):
 
 ```sh
 cloudflared tunnel route dns thermal-printer print.cuzeth.com
-cloudflared tunnel route dns thermal-printer console.cuzeth.com
 ```
 
-**8.4 · Create the Access application** (this is what replaces the
-tailnet). In [one.dash.cloudflare.com](https://one.dash.cloudflare.com):
-
-1. First visit only: pick a **team name** when Zero Trust prompts you
-   (the free plan covers 50 users; you need 1). Note the slug — it's
-   `TEAM_NAME` in the config.
-2. **Access** → **Applications** → **Add an application** →
-   **Self-hosted**. Domain: `console.cuzeth.com` (whole hostname, no
-   path). Session duration: your call — 1 week is a sane default.
-3. Add a policy: Action **Allow**, Include → **Emails** → your email.
-   Nobody else, nothing clever.
-4. Leave the default **One-time PIN** login method on — that's the
-   emailed code. (You can add Google/GitHub SSO later if typing codes
-   gets old.)
-5. On the application's overview, copy the **Application Audience
-   (AUD) tag** — it's `ACCESS_APP_AUD` in the config.
-
-**8.5 · Install the repo's ingress config.** The file in the repo is
-the source of truth — both its path allowlist and its `access` block
-are load-bearing (see the comments inside it):
+**8.4 · Install the repo's ingress config.** The file in the repo is
+the source of truth:
 
 ```sh
 sudo mkdir -p /etc/cloudflared
 sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
 sudo nano /etc/cloudflared/config.yml
-# replace TUNNEL_ID (both places), TEAM_NAME, and ACCESS_APP_AUD
+# replace TUNNEL_ID (both places)
 ```
 
 If your username isn't `pi`, also fix the home dir in
@@ -308,24 +281,10 @@ sudo systemctl start cloudflared
 sudo systemctl status cloudflared      # "active (running)"
 ```
 
-**8.6 · Strip identity headers from friend traffic at the edge.** In
-the Cloudflare dashboard: `cuzeth.com` zone → **Rules** → **Transform
-Rules** → **Modify Request Header** → create rule:
+That's the whole edge setup — no Zero Trust dashboard, no Access
+application, no Transform Rules.
 
-- Name: `strip access identity from friend host`
-- When: Custom filter expression → Hostname equals `print.cuzeth.com`
-- Then: **Remove** header `Cf-Access-Jwt-Assertion`, **Remove** header
-  `Cf-Access-Authenticated-User-Email`
-
-(If you still have the old `strip tailscale identity` rule from the
-Funnel era, delete it — the app no longer reads that header.)
-
-This is wall two. No Access application covers the friend hostname, so
-forged `Cf-Access-*` headers would otherwise ride through to Flask on
-allowlisted paths — this rule kills them at the edge, and even if both
-walls fail, `auth/access.py` only opens for `OWNER_EMAIL` anyway.
-
-**Migrating a Pi that's already running the old Tailscale Funnel
+**Migrating a Pi that's still running the old Tailscale Funnel
 setup?** Don't improvise from this section — follow
 [MIGRATION.md](MIGRATION.md), the start-to-finish cutover runbook
 (teardown order, backups, verification, rollback).
@@ -341,40 +300,36 @@ setup?** Don't improvise from this section — follow
    ```
 
 2. **Console** (any device, any network — this is the point):
-   - `https://console.cuzeth.com/` → Cloudflare Access login screen →
-     enter your email → type the emailed code → full GUI loads.
-   - Wrong email (or a friend trying it) → Access refuses at the edge;
-     Flask never hears about it.
+   - `https://print.cuzeth.com/admin` → the code prompt → type the
+     6 digits from your authenticator app → full GUI loads.
+   - Wrong code → "wrong code"; ten wrong codes → locked out for 15
+     minutes (restarting the service clears it early).
 
 3. **Public** (phone on cellular):
-   - `https://print.cuzeth.com/m/` → friends page loads with CSS/JS.
-   - `https://print.cuzeth.com/api/ping` → `{"ok": true}` (health check is allowlisted).
-   - `https://print.cuzeth.com/` → **404** (not in the tunnel's path allowlist — the console isn't just gated there, it's unreachable).
-   - `https://print.cuzeth.com/api/print/text` → **404** (same).
-   - `https://console.cuzeth.com/api/ping` in a fresh private window →
-     Access login screen, not JSON (the whole hostname is gated).
+   - `https://print.cuzeth.com/` → friends page loads with CSS/JS.
+   - `https://print.cuzeth.com/api/ping` → `{"ok": true}`.
+   - `https://print.cuzeth.com/m/` → redirects to `/` (old bookmarks
+     survive).
 
-4. **The header-forgery drill** (same public device) — all three walls
-   at once:
+4. **The anonymous-console drill** (same public device):
    ```sh
-   curl -si -H "Cf-Access-Authenticated-User-Email: you@example.com" https://print.cuzeth.com/ | head -1
-   # HTTP/2 404  ← the allowlist answered; Flask never saw it. And had it
-   # gotten through, the edge rule strips Cf-Access-* from friend traffic
-   # and auth/access.py demands the connector's JWT marker anyway.
+   curl -si https://print.cuzeth.com/api/admin/users | head -1
+   # HTTP/2 401  ← every /api/admin route demands the TOTP session or
+   # the Bearer token; the login page at /admin is all a stranger gets.
    ```
 
 ---
 
 ## 10 · Use it
 
-1. Open `https://print.cuzeth.com/m/` on your phone, tap **Create an
+1. Open `https://print.cuzeth.com/` on your phone, tap **Create an
    account**, username + password (8+ chars), submit.
-2. On your laptop, open `https://console.cuzeth.com/` → **Admin** tab →
-   see yourself in **Pending** → **Approve**.
+2. On your laptop, open `https://print.cuzeth.com/admin` → enter your
+   code → **Admin** tab → see yourself in **Pending** → **Approve**.
 3. Back on the phone → tap **Check again** → state flips to ALLOWED.
 4. Type a message → **Print it** → paper comes out.
 
-Share `https://print.cuzeth.com/m/` with whoever you want to let in.
+Share `https://print.cuzeth.com/` with whoever you want to let in.
 
 ---
 
@@ -409,8 +364,7 @@ setup) — re-sync the config from the repo and restart:
 
 ```sh
 sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
-sudo nano /etc/cloudflared/config.yml    # re-fill TUNNEL_ID (both places),
-                                         # TEAM_NAME, ACCESS_APP_AUD
+sudo nano /etc/cloudflared/config.yml    # re-fill TUNNEL_ID (both places)
 sudo systemctl restart cloudflared
 ```
 
@@ -431,12 +385,13 @@ cd ~/thermal-printer && git pull && sudo systemctl restart thermal-printer
 | `systemctl status` shows `failed` with `FileNotFoundError: .env` | `.env` missing or at wrong path. `EnvironmentFile=` in the unit must point at `/home/pi/thermal-printer/.env`. |
 | print.cuzeth.com returns 502 | The app isn't running (`sudo systemctl status thermal-printer`) — the tunnel is up but has nothing to proxy to. |
 | print.cuzeth.com shows a Cloudflare error page (530 / error 1033) | The tunnel itself is down. `sudo systemctl status cloudflared`, then `journalctl -u cloudflared -n 50`. Usual causes: TUNNEL_ID placeholder left in `/etc/cloudflared/config.yml`, or the credentials-file path is wrong. |
-| console.cuzeth.com returns a bare 401 with no login screen | cloudflared's `access` block is rejecting before Access can even ask you to log in — `TEAM_NAME`/`ACCESS_APP_AUD` placeholders still in `/etc/cloudflared/config.yml`, or the AUD doesn't match the Access application. Re-copy the AUD tag from the app's overview page. |
-| Console loads the Access login, you get in, but every page/API call 403s | Flask's email pin is rejecting you: `OWNER_EMAIL` unset in `.env` (fails closed by design) or doesn't match the address you authenticated with. Fix `.env`, `sudo systemctl restart thermal-printer`. |
+| `/admin` says "wrong code" but the code is straight from the app | Clock skew. TOTP compares clocks; the login tolerates ±30s and the Pi normally NTP-syncs, but check `timedatectl` on the Pi ("System clock synchronized: yes") and make sure your phone's clock is on automatic. |
+| `/admin` login answers 503 "TOTP_SECRET is not set" | Fresh `.env` without the secret. Run `.venv/bin/python scripts/gen_totp.py`, scan the QR, paste the `TOTP_SECRET=` line into `.env`, restart the service. |
+| `/admin` says "too many failed attempts" and you're the one locked out | The TOTP lockout tripped (10/15min per IP, 30 global — someone may be poking at it). Wait 15 minutes or `sudo systemctl restart thermal-printer`. The Bearer `ADMIN_TOKEN` keeps working against `/api/admin/*` during a lockout. |
+| `/admin` says "code already used" | Codes are single-use by design. Wait ~30s for the next one. |
 | Friend messages print as rows of boxes / blank where CJK, Arabic, braille, or music symbols should be | Missing font glyphs on the Pi. Install the full set: `sudo apt-get install -y fonts-dejavu fonts-noto-cjk fonts-noto-core && sudo systemctl restart thermal-printer`. The renderer picks fonts per character; `fonts-noto-cjk` covers CJK, `fonts-noto-core` covers Arabic + Noto Sans Symbols(2) for music/math/misc, and the full `fonts-dejavu` (not `-core`) covers braille. |
 | Arabic prints but reads left-to-right | `arabic-reshaper` / `python-bidi` weren't installed. `.venv/bin/pip install -r requirements.txt && sudo systemctl restart thermal-printer`. The renderer detects RTL runs and applies UAX #9 before drawing; without those libs it falls back to logical-order output. |
-| `/` is reachable at print.cuzeth.com | The tunnel's path allowlist got widened — diff `/etc/cloudflared/config.yml` against `deploy/cloudflared-config.yml` and restart `cloudflared`. Also verify the Transform Rule (strip `Cf-Access-*` on the friend host) still exists in the Cloudflare dashboard, and that gunicorn binds to `127.0.0.1` (`ss -tlnp \| grep 5005`). |
-| Login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
+| Friend login stuck at `429 too many failed attempts` | Rate limit tripped. `sudo systemctl restart thermal-printer` clears it, or wait 15 minutes. |
 | `register` 500s with "no column named password_hash" | Old `data/app.db` from a pre-password schema. `init()` doesn't migrate that far back — move it aside (`mv data/app.db data/app.db.bak`) and restart; a fresh DB is created on boot. |
 | Friends can sign in but every print/action says "not signed in" | Session cookie not sticking. On the Pi this shouldn't happen (`COOKIE_SECURE` defaults to `true` and print.cuzeth.com is HTTPS). In local dev, run `COOKIE_SECURE=false python3 app.py`. |
 | Hostname `thermal-printer.local` doesn't resolve on Mac | mDNS flaky on some networks. Find the Pi's IP another way — `ping thermal-printer.local` from a phone app, an ARP scan (`arp -a`), or plug in a screen and run `hostname -I` — and SSH to that. |
@@ -494,7 +449,7 @@ cd ~/thermal-printer && git pull && \
 
 # re-sync the tunnel ingress from the repo
 sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
-sudo nano /etc/cloudflared/config.yml   # re-fill TUNNEL_ID, TEAM_NAME, ACCESS_APP_AUD
+sudo nano /etc/cloudflared/config.yml   # re-fill TUNNEL_ID (both places)
 sudo systemctl restart cloudflared
 ```
 

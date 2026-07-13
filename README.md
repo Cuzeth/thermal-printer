@@ -19,7 +19,7 @@
 
 ## What's inside
 
-**Main console** — `/` · private at <https://console.cuzeth.com>, behind Cloudflare Access.
+**Main console** — `/admin` · at <https://print.cuzeth.com/admin>, unlocked with a 6-digit TOTP code from your authenticator app.
 
 | Tab | What it does |
 |---|---|
@@ -32,17 +32,18 @@
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
 | **Admin** | Approve / block / delete friends, review recent prints. |
 
-**Friends page** — `/m/` · public at <https://print.cuzeth.com>, via Cloudflare Tunnel.
+**Friends page** — `/` · public at <https://print.cuzeth.com>, via Cloudflare Tunnel.
 
 Friends register with a username + password, sit pending until you approve them from the Admin tab, then send you messages that print immediately with their name attached. Supports the same markup vocabulary as the composer.
 
-**Security model:** one Cloudflare Tunnel fronts `127.0.0.1:5005` with two hostnames. `console.cuzeth.com` serves the whole app, but cloudflared validates a Cloudflare Access JWT on every request — unauthenticated visitors die at the connector, and the Access policy admits only the owner's email (login via one-time code or SSO). `print.cuzeth.com` serves friends anonymously, so its ingress allowlists only `/m`, `/api/m/*`, `/static/*`, and `/api/ping` ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)). Since cloudflared forwards client headers verbatim, forged `Cf-Access-*` identity headers are kept out by three walls: the friend-host path allowlist, an edge Transform Rule stripping `Cf-Access-*` from friend-host requests, and the app pinning the authenticated email to `OWNER_EMAIL` (`auth/access.py`). Flask must bind to `127.0.0.1` so nothing bypasses the tunnel.
+**Security model:** one Cloudflare Tunnel, one hostname, and the app defends itself. `print.cuzeth.com` fronts `127.0.0.1:5005` with no edge auth ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)); friends get signed-cookie sessions, and the owner unlocks `/admin` with an RFC 6238 TOTP code (`auth/totp.py`, secret in `.env`, enrolled in any authenticator app). Admin sessions expire after 12 hours; each code is single-use (replay guard), and the login carries per-IP *and* global failure lockouts because 6-digit codes are a small space (`auth/admin.py`). `/api/admin/*` also accepts `Bearer ADMIN_TOKEN` for curl and the smoke tests. Flask must bind to `127.0.0.1` so the tunnel is the only way in — the rate limiters trust the last `X-Forwarded-For` hop, which only Cloudflare should be appending.
 
 Abuse limits (all in-memory, reset on restart):
 - friend prints go through a FIFO queue (50 jobs max, 3 in-flight per user)
 - 10 failed logins / 15 min per username
 - 30 failed logins / 15 min per IP
 - 5 signups / hour per IP
+- TOTP login: 10 failures / 15 min per IP, 30 globally
 
 ---
 
@@ -51,20 +52,20 @@ Abuse limits (all in-memory, reset on restart):
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-DEV_BYPASS_ACCESS=true COOKIE_SECURE=false python3 app.py
+DEV_BYPASS_ADMIN=true COOKIE_SECURE=false python3 app.py
 ```
 
-Open <http://localhost:5005>. The startup banner prints a dev `ADMIN_TOKEN` — the main GUI inlines it automatically, so you don't need to copy it.
+Open <http://localhost:5005/admin> for the console, <http://localhost:5005> for the friends page.
 
 Both env vars are load-bearing in local dev:
-- `DEV_BYPASS_ACCESS=true` — skips the Cloudflare Access header check so private routes (`/`, `/api/*`) don't return 403.
-- `COOKIE_SECURE=false` — the default is `true` (both prod doors are HTTPS), and without it over plain HTTP the browser silently drops the session cookie and every `/m/*` request fails as "not signed in."
+- `DEV_BYPASS_ADMIN=true` — skips the TOTP login so `/admin` and `/api/admin/*` open without a code.
+- `COOKIE_SECURE=false` — the default is `true` (prod is HTTPS), and without it over plain HTTP the browser silently drops the session cookie and every friend request fails as "not signed in."
 
-For a local friends demo, open <http://localhost:5005/m/>, click **Create an account**, pick any username + password (8+ chars), then approve yourself from the Admin tab in the main GUI.
+For a local friends demo, open <http://localhost:5005>, click **Create an account**, pick any username + password (8+ chars), then approve yourself from the Admin tab in the console.
 
 Set `DRY_RUN=true` to skip USB and dump ESC/POS bytes to `./data/last_print.bin` instead. Useful for iterating on layouts without burning paper.
 
-Set `FLASK_DEBUG=1` **locally only** if you want the Werkzeug reloader. Never on the Pi — `/m/*` is public at print.cuzeth.com and the debugger page is RCE.
+Set `FLASK_DEBUG=1` **locally only** if you want the Werkzeug reloader. Never on the Pi — the app is public at print.cuzeth.com and the debugger page is RCE.
 
 ---
 
@@ -74,17 +75,18 @@ Short version:
 
 1. Flash Raspberry Pi OS Lite (64-bit), set hostname `thermal-printer`, enable SSH.
 2. `bash deploy/setup.sh` — installs system deps, creates a venv, pip-installs, drops the udev rule and systemd unit.
-3. `cp .env.example .env` and fill in `SECRET_KEY` + `ADMIN_TOKEN`. Commands to generate them:
+3. `cp .env.example .env` and fill in `SECRET_KEY`, `ADMIN_TOKEN`, and `TOTP_SECRET`. Commands to generate them:
    ```sh
    python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
    python3 -c "import secrets; print('ADMIN_TOKEN=' + secrets.token_urlsafe(32))"
+   python3 scripts/gen_totp.py    # prints a QR to scan + the TOTP_SECRET line
    ```
-4. Set up the Cloudflare Tunnel — `cloudflared` install, tunnel creation, DNS routes for both hostnames, the Access application for console.cuzeth.com, and the header-strip Transform Rule are step-by-step in [DEPLOY.md](DEPLOY.md). Set `OWNER_EMAIL` in `.env` to the address your Access policy admits.
+4. Set up the Cloudflare Tunnel — `cloudflared` install, tunnel creation, and the DNS route for print.cuzeth.com are step-by-step in [DEPLOY.md](DEPLOY.md). No Access application, no Transform Rules — auth lives in the app.
 5. `sudo systemctl start thermal-printer && journalctl -u thermal-printer -f`.
 
-The systemd unit runs gunicorn with `--workers 1 --threads 4` — single-worker is load-bearing because the USB lock and the `/api/m/print` queue both live in process-local memory.
+The systemd unit runs gunicorn with `--workers 1 --threads 4` — single-worker is load-bearing because the USB lock and the friend print queue both live in process-local memory.
 
-Full step-by-step (udev, tunnel + Access wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
+Full step-by-step (udev, tunnel wiring, troubleshooting) lives in [DEPLOY.md](DEPLOY.md).
 
 ---
 
@@ -95,10 +97,10 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 | Variable | Required? | Default | Notes |
 |---|---|---|---|
 | `SECRET_KEY` | yes (prod) | random per boot | Flask session signing. Persist to keep sessions across restarts. |
-| `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer gate for `/api/admin/*` and every private console route. |
-| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only cloudflared may reach the app, because the console gate trusts the `Cf-Access-*` identity headers. |
-| `OWNER_EMAIL` | yes (prod) | (empty) | The email Cloudflare Access must have authenticated for private routes to open. Empty = console fails closed (every private route 403s). |
-| `DEV_BYPASS_ACCESS` | no | `false` | Skips the Cloudflare Access header check. Set `true` for local dev; **never** on the Pi. |
+| `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer alternative to the TOTP session for `/api/admin/*` — used by curl and the smoke tests. |
+| `TOTP_SECRET` | yes (prod) | (empty) | Base32 secret behind the `/admin` login. Generate + enroll with `python3 scripts/gen_totp.py`. Empty = TOTP login fails closed (Bearer still works). |
+| `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only cloudflared may reach the app, because the rate limiters trust the last `X-Forwarded-For` hop. |
+| `DEV_BYPASS_ADMIN` | no | `false` | Skips the TOTP login entirely. Set `true` for local dev; **never** on the Pi. |
 | `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (both hostnames are HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
 | `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
@@ -126,8 +128,8 @@ CI runs both on push + PR (see [.github/workflows/ci.yml](.github/workflows/ci.y
 
 - **Backend** · Python 3.12 · Flask · gunicorn · python-escpos · Pillow · SQLite (WAL)
 - **Frontend** · vanilla JS, no build step
-- **Auth** · werkzeug scrypt for passwords, signed-cookie sessions for friends, bearer token for owner
-- **Hosting** · Raspberry Pi · one Cloudflare Tunnel, two hostnames: print.cuzeth.com (public friends page) and console.cuzeth.com (owner console behind Cloudflare Access)
+- **Auth** · werkzeug scrypt for passwords, signed-cookie sessions for friends, stdlib RFC 6238 TOTP for the owner (bearer token for scripts)
+- **Hosting** · Raspberry Pi · one Cloudflare Tunnel, one hostname: print.cuzeth.com (friends at `/`, console at `/admin`)
 
 ---
 
@@ -151,28 +153,32 @@ features/
   text.py               plain-text composer (ROM-font path)
   widgets.py            weather / HN / on-this-day / dice / todo / …
 auth/
-  access.py             require_access decorator (Cloudflare Access identity gate)
+  totp.py               stdlib RFC 6238 TOTP (the /admin login)
+  admin.py              /api/admin/auth/{login,logout} + lockouts + replay guard
+  ratelimit.py          shared in-memory sliding-window buckets
   db.py                 SQLite schema + CRUD (users, messages)
-  session.py            require_allowed / require_admin / require_owner
-  blueprint.py          /api/m/auth/{register,login,logout} + /me
+  session.py            require_allowed / require_admin + session helpers
+  blueprint.py          /api/auth/{register,login,logout} + /me
 templates/
-  index.html            main GUI (tabs)
-  friends.html          public friends page
+  index.html            main GUI (tabs), served at /admin
+  admin_login.html      the TOTP code prompt
+  friends.html          public friends page, served at /
 static/
   app.js / style.css    main GUI
   friends.js / .css     friends page
-tests/                  pytest: render / widgets / image / routes / security / queue
+tests/                  pytest: render / widgets / image / routes / security / totp / queue
 scripts/
   test_auth_flow.py     Flask-test-client auth smoke
+  gen_totp.py           mint TOTP_SECRET + QR for authenticator enrollment
 deploy/
   thermal-printer.service   systemd unit (gunicorn, workers=1)
   99-thermal-printer.rules  udev rule (USB access for non-root)
-  cloudflared-config.yml    Cloudflare Tunnel ingress (public path allowlist)
+  cloudflared-config.yml    Cloudflare Tunnel ingress (one hostname)
   setup.sh                  idempotent Pi bootstrapper
 docs/banner.svg         the receipt up top
 .github/workflows/ci.yml    pytest + auth smoke on push/PR
 DEPLOY.md               Raspberry Pi run-book
-MIGRATION.md            one-time cutover: Tailscale Funnel -> Cloudflare
+MIGRATION.md            one-time cutover: Tailscale Funnel -> Cloudflare + TOTP
 .env.example            what to fill into .env on the Pi
 ```
 

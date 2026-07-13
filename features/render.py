@@ -383,7 +383,7 @@ BLOCK_GAP = 10
 
 # Styled subheading markup: `:style: text` on its own line renders the text
 # as a centered subheading in the picked display font. Used by friends'
-# name-style preference on /m/.
+# name-style preference on the friends page.
 STYLE_LINE_RE = re.compile(r"^:([a-z]+):\s*(.*)$")
 
 # `style key` -> (font kind, size, transform). Keep the set small: adding a

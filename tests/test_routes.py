@@ -1,5 +1,6 @@
-"""HTTP-surface tests — owner auth gate and basic routing. Everything runs
-in DRY_RUN so no USB is touched."""
+"""HTTP-surface tests — admin auth gate and basic routing. Everything runs
+in DRY_RUN so no USB is touched. These exercise the Bearer-token path;
+the TOTP session path lives in test_security.py."""
 
 from __future__ import annotations
 
@@ -28,30 +29,31 @@ def test_ping_is_public(client):
 
 
 def test_private_route_requires_bearer(client):
-    r = client.post("/api/print/now", json={})
+    r = client.post("/api/admin/print/now", json={})
     assert r.status_code == 401
     assert r.get_json()["error"] == "auth required"
 
 
 def test_private_route_rejects_wrong_bearer(client):
-    r = client.post("/api/print/now", json={}, headers={"Authorization": "Bearer nope"})
+    r = client.post("/api/admin/print/now", json={}, headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401
 
 
 def test_private_route_accepts_owner_bearer(client, auth):
-    r = client.post("/api/print/now", json={}, headers=auth)
+    r = client.post("/api/admin/print/now", json={}, headers=auth)
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
 
 
-def test_admin_and_owner_share_the_same_token(client, auth):
-    # Admin routes still work with the same bearer — today they share it.
+def test_friend_management_accepts_the_same_token(client, auth):
+    # One ADMIN_TOKEN covers every /api/admin route — print, hardware,
+    # and friend management alike.
     r = client.get("/api/admin/users", headers=auth)
     assert r.status_code == 200
 
 
 def test_preview_rich_returns_segments(client, auth):
-    r = client.post("/api/preview/rich", json={"body": "# HI\n!!!\ngoodbye"}, headers=auth)
+    r = client.post("/api/admin/preview/rich", json={"body": "# HI\n!!!\ngoodbye"}, headers=auth)
     assert r.status_code == 200
     segs = r.get_json()["segments"]
     assert len(segs) == 2
@@ -62,20 +64,20 @@ def test_preview_rich_returns_segments(client, auth):
 def test_hw_raw_rejects_oversized_payload(client, auth):
     # Build a hex blob that parses to > 4096 bytes.
     payload = " ".join(["20"] * 5000)
-    r = client.post("/api/hw/raw", json={"bytes": payload}, headers=auth)
+    r = client.post("/api/admin/hw/raw", json={"bytes": payload}, headers=auth)
     assert r.status_code == 400
     assert "max is 4096" in r.get_json()["error"]
 
 
 def test_hw_raw_accepts_small_payload(client, auth):
-    r = client.post("/api/hw/raw", json={"bytes": "1b 40"}, headers=auth)
+    r = client.post("/api/admin/hw/raw", json={"bytes": "1b 40"}, headers=auth)
     assert r.status_code == 200
     assert r.get_json()["sent"] == 2
 
 
 def test_oversized_body_returns_json_413(client, auth):
     data = {"file": (io.BytesIO(b"\0" * (17 * 1024 * 1024)), "big.png")}
-    r = client.post("/api/image/preview", data=data, headers=auth,
+    r = client.post("/api/admin/image/preview", data=data, headers=auth,
                      content_type="multipart/form-data")
     assert r.status_code == 413
     body = r.get_json()
@@ -85,7 +87,7 @@ def test_oversized_body_returns_json_413(client, auth):
 
 def test_image_preview_rejects_garbage_upload(client, auth):
     data = {"file": (io.BytesIO(b"not an image"), "x.png")}
-    r = client.post("/api/image/preview", data=data, headers=auth,
+    r = client.post("/api/admin/image/preview", data=data, headers=auth,
                      content_type="multipart/form-data")
     assert r.status_code == 400
     assert r.get_json()["kind"] == "input"
@@ -93,17 +95,17 @@ def test_image_preview_rejects_garbage_upload(client, auth):
 
 def test_friend_print_requires_session(client):
     # No session cookie → 401.
-    r = client.post("/api/m/print", json={"body": "hi"})
+    r = client.post("/api/print", json={"body": "hi"})
     assert r.status_code == 401
 
 
 def test_friend_history_requires_session(client):
-    r = client.get("/api/m/history")
+    r = client.get("/api/history")
     assert r.status_code == 401
 
 
 def test_friend_printer_status_requires_session(client):
-    r = client.get("/api/m/printer")
+    r = client.get("/api/printer")
     assert r.status_code == 401
 
 
@@ -117,7 +119,7 @@ def test_friend_printer_status_shape(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.get("/api/m/printer")
+    r = client.get("/api/printer")
     assert r.status_code == 200
     body = r.get_json()
     assert body["ok"] is True
@@ -133,7 +135,7 @@ def test_friend_history_rejects_pending_user(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.get("/api/m/history")
+    r = client.get("/api/history")
     assert r.status_code == 403
 
 
@@ -153,7 +155,7 @@ def test_friend_history_returns_own_messages_only(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = alice["id"]
 
-    r = client.get("/api/m/history")
+    r = client.get("/api/history")
     assert r.status_code == 200
     msgs = r.get_json()["messages"]
     bodies = [m["body"] for m in msgs]
@@ -178,10 +180,10 @@ def test_friend_history_limit_is_clamped(client):
         s[sess.SESSION_USER_KEY] = user["id"]
 
     # Non-numeric → handled gracefully.
-    r = client.get("/api/m/history?limit=banana")
+    r = client.get("/api/history?limit=banana")
     assert r.status_code == 200
     # Too big → capped at 200 (no crash, returns JSON).
-    r = client.get("/api/m/history?limit=999999")
+    r = client.get("/api/history?limit=999999")
     assert r.status_code == 200
 
 
@@ -194,11 +196,11 @@ def test_friend_settings_updates_name_style(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/settings", json={"name_style": "script"})
+    r = client.post("/api/settings", json={"name_style": "script"})
     assert r.status_code == 200
     assert r.get_json()["user"]["name_style"] == "script"
 
-    r = client.get("/api/m/me")
+    r = client.get("/api/me")
     assert r.get_json()["user"]["name_style"] == "script"
 
 
@@ -210,7 +212,7 @@ def test_friend_settings_rejects_unknown_style(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/settings", json={"name_style": "fancy"})
+    r = client.post("/api/settings", json={"name_style": "fancy"})
     assert r.status_code == 400
 
 
@@ -223,7 +225,7 @@ def test_friend_settings_requires_approval(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/settings", json={"name_style": "script"})
+    r = client.post("/api/settings", json={"name_style": "script"})
     assert r.status_code == 403
 
 
@@ -237,7 +239,7 @@ def test_friend_preview_honors_anonymous_flag(client):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/preview", json={"body": "hi", "anonymous": True})
+    r = client.post("/api/preview", json={"body": "hi", "anonymous": True})
     assert r.status_code == 200
     segs = r.get_json()["segments"]
     # Any non-empty body produces at least one preview image.
@@ -257,10 +259,10 @@ def test_admin_password_reset_flow(client, auth):
 
     auth_bp_mod._failures.clear()
     auth_bp_mod._ip_failures.clear()
-    r = client.post("/api/m/auth/login",
+    r = client.post("/api/auth/login",
                     json={"username": "pwreset_alice", "password": "oldpassword1"})
     assert r.status_code == 401
-    r = client.post("/api/m/auth/login",
+    r = client.post("/api/auth/login",
                     json={"username": "pwreset_alice", "password": "newpassword1"})
     assert r.status_code == 200
 
@@ -306,7 +308,7 @@ def test_friend_print_queues_even_when_printer_offline(client, monkeypatch):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.post("/api/m/print", json={"body": "hello"})
+    r = client.post("/api/print", json={"body": "hello"})
     assert r.status_code == 200
     body = r.get_json()
     assert body["ok"] is True
@@ -340,7 +342,7 @@ def test_admin_approve_flow(client, auth):
 
 def test_admin_revoke_blocks_access(client, auth):
     """Revoke sets status 'blocked' and a blocked friend's session stops
-    working (403 on /m/)."""
+    working (403 on friend routes)."""
     from auth import db as auth_db, session as sess
 
     user = auth_db.create_pending_user("adm_revoke", "hunter2hunter")
@@ -354,7 +356,7 @@ def test_admin_revoke_blocks_access(client, auth):
     with client.session_transaction() as s:
         s[sess.SESSION_USER_KEY] = user["id"]
 
-    r = client.get("/api/m/history")
+    r = client.get("/api/history")
     assert r.status_code == 403
 
 

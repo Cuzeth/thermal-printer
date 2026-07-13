@@ -1,20 +1,26 @@
-# Migrating from Tailscale Funnel to Cloudflare — one-time cutover
+# Migrating from Tailscale Funnel to Cloudflare + the TOTP login — one-time cutover
 
 This is the runbook for moving an already-running Pi from the old world
-(entire app funneled at `https://thermal-printer.<tailnet>.ts.net/`) to
-the new one (friends at `https://print.cuzeth.com`, owner console at
-`https://console.cuzeth.com` behind Cloudflare Access, no Tailscale).
+(entire app funneled at `https://thermal-printer.<tailnet>.ts.net/`)
+straight to the current one: everything at `https://print.cuzeth.com` —
+friends on the front page, owner console at `/admin` behind a 6-digit
+TOTP code. No Tailscale, no Cloudflare Access, no Zero Trust dashboard;
+one tunnel, one hostname, and the app defends itself.
+
+(The repo briefly had an intermediate design — two hostnames with the
+console behind Cloudflare Access. It was never deployed. If your Pi is
+still on the Funnel, that world never existed for you; this runbook
+skips it entirely.)
 
 What to expect:
 
-- Friends are offline from step 2 until step 9. That's fine — it's a
+- Friends are offline from step 2 until step 7. That's fine — it's a
   receipt printer, not a pacemaker.
 - Nothing about the printer, the database, or friend accounts changes.
-  Friends keep their usernames and history; they just sign in once more
-  on the new domain (session cookies don't follow domains).
-- Budget about an hour, most of it clicking around the Cloudflare
-  dashboard. The one genuinely slow thing (step 0) can take a day or
-  two, so do it ahead of time.
+  Friends keep their usernames and history; they sign in once more on
+  the new domain (session cookies don't follow domains).
+- Budget about an hour. The one genuinely slow thing (step 0) can take
+  a day or two, so do it ahead of time.
 
 For a from-scratch install (new Pi, no history), ignore this file and
 follow [DEPLOY.md](DEPLOY.md). Troubleshooting for every step lives in
@@ -30,13 +36,8 @@ plan), then switch the nameservers at your registrar to the pair
 Cloudflare assigns you. Propagation can take up to a day or two —
 everything else in this runbook waits on it, nothing else does.
 
-While you wait, merge the migration branch and push, so the Pi has
-something to pull:
-
-```sh
-# on your Mac
-git checkout main && git merge cloudflare-domain && git push
-```
+While you wait, make sure this change is merged to `main` and pushed,
+so the Pi has something to pull.
 
 ---
 
@@ -47,13 +48,21 @@ ssh pi@thermal-printer.local
 ```
 
 **Do not do this migration over a Tailscale SSH session.** Step 2 tears
-down Tailscale's proxy and step 10 may remove Tailscale entirely; if
+down Tailscale's proxy and step 8 may remove Tailscale entirely; if
 your SSH connection rides the tailnet, you'll saw off the branch you're
 sitting on. `.local` mDNS from the same Wi-Fi is the safe path.
 
+Before touching anything, note the commit the Pi is currently running —
+it's your rollback target:
+
+```sh
+cd ~/thermal-printer
+git rev-parse --short HEAD    # write this down
+```
+
 ---
 
-## 2 · Take the old doors down
+## 2 · Take the old door down
 
 ```sh
 sudo tailscale funnel --https=443 off   # stop serving the internet
@@ -85,26 +94,31 @@ cd ~/thermal-printer
 git pull
 ```
 
-No new Python dependencies in this migration — skip pip. If you want
-the paranoid version anyway: `.venv/bin/pip install -r requirements.txt`
-is harmless.
+No new Python dependencies — skip pip. (The TOTP implementation is
+stdlib; the QR in the setup script reuses the `qrcode` you already
+have.) If you want the paranoid version anyway:
+`.venv/bin/pip install -r requirements.txt` is harmless.
 
 ---
 
-## 5 · Update `.env`
+## 5 · Mint the TOTP secret and update `.env`
 
-Open `.env` and:
+```sh
+.venv/bin/python scripts/gen_totp.py
+```
 
-1. **Add** `OWNER_EMAIL=` set to the email address you'll log into
-   Cloudflare Access with (step 7). The app pins the authenticated
-   identity to this; with it unset, every private route 403s — the
-   console fails closed, by design.
+Scan the QR it prints with your authenticator app (Google
+Authenticator, Apple Passwords, Aegis, 1Password, ...) **before
+closing the terminal** — that app entry is now the key to your
+console. Then edit `.env`:
+
+1. **Add** the `TOTP_SECRET=...` line the script printed.
 2. **Delete** any `DEV_BYPASS_TAILNET` line if one exists. The variable
-   is gone. Its replacement, `DEV_BYPASS_ACCESS`, must never appear in
-   this file.
+   is long gone. Today's dev bypass, `DEV_BYPASS_ADMIN`, must never
+   appear in this file either.
 
-Don't start the service yet — the new gate has nothing to let through
-until Cloudflare is wired up.
+`SECRET_KEY` and `ADMIN_TOKEN` stay exactly as they are. Don't start
+the service yet — there's no door for it until the tunnel is up.
 
 ---
 
@@ -130,94 +144,48 @@ cloudflared tunnel create thermal-printer
 ```
 
 Note the tunnel UUID it prints (also the filename of
-`~/.cloudflared/<UUID>.json`). Then point both hostnames at the tunnel:
+`~/.cloudflared/<UUID>.json`). Then point the one hostname at it:
 
 ```sh
 cloudflared tunnel route dns thermal-printer print.cuzeth.com
-cloudflared tunnel route dns thermal-printer console.cuzeth.com
 ```
 
----
-
-## 7 · Create the Access application
-
-This is what replaces the tailnet. In
-[one.dash.cloudflare.com](https://one.dash.cloudflare.com):
-
-1. First visit only: pick a **team name** when Zero Trust prompts you
-   (Free plan, 50 users, you need 1). Note the slug.
-2. **Access** → **Applications** → **Add an application** →
-   **Self-hosted**. Domain: `console.cuzeth.com` — whole hostname, no
-   path. Session duration: 1 week is a sane default.
-3. Add a policy: Action **Allow**, Include → **Emails** → the same
-   address you put in `OWNER_EMAIL`. Nobody else.
-4. Leave the default **One-time PIN** login method on (that's the
-   emailed code; SSO can come later).
-5. On the application's overview, copy the **Application Audience
-   (AUD) tag**.
-
-You now hold three values: tunnel UUID, team slug, AUD tag.
-
----
-
-## 8 · Install the ingress config and start the tunnel
-
-The repo file is the source of truth — its friend-path allowlist and
-its console `access` block are both load-bearing (comments inside
-explain why):
+Install the repo's ingress config and run cloudflared as a service:
 
 ```sh
 sudo mkdir -p /etc/cloudflared
 sudo cp ~/thermal-printer/deploy/cloudflared-config.yml /etc/cloudflared/config.yml
-sudo nano /etc/cloudflared/config.yml
-# fill in: TUNNEL_ID (both places), TEAM_NAME, ACCESS_APP_AUD
-```
-
-Run it as a service:
-
-```sh
+sudo nano /etc/cloudflared/config.yml   # fill in TUNNEL_ID (both places)
 sudo cloudflared --config /etc/cloudflared/config.yml service install
 sudo systemctl start cloudflared
-sudo systemctl status cloudflared       # "active (running)"
+sudo systemctl status cloudflared      # "active (running)"
 ```
 
-Then the edge header rule. In the Cloudflare dashboard: `cuzeth.com`
-zone → **Rules** → **Transform Rules** → **Modify Request Header** →
-create rule:
-
-- Name: `strip access identity from friend host`
-- When: Custom filter expression → Hostname equals `print.cuzeth.com`
-- Then: **Remove** header `Cf-Access-Jwt-Assertion`, **Remove** header
-  `Cf-Access-Authenticated-User-Email`
-
-Without this rule, a visitor on the friend hostname could send forged
-`Cf-Access-*` headers and Flask would see them; the rule kills them at
-the edge (and even then, `auth/access.py` only opens for the
-connector-validated `OWNER_EMAIL`).
+That's the whole Cloudflare setup — one DNS record, one config file.
+No Access application, no Zero Trust team, no Transform Rules.
 
 ---
 
-## 9 · Start the app and verify everything
+## 7 · Start the app and verify everything
 
 ```sh
 sudo systemctl start thermal-printer
 curl http://localhost:5005/api/ping     # {"ok": true, ...}
 ```
 
-Now the full drill, mirroring DEPLOY.md step 9:
+Now the full drill:
 
-1. **Console** (any device, any network):
-   `https://console.cuzeth.com/` → Access login screen → emailed code →
-   full GUI loads. If you get in but everything 403s, `OWNER_EMAIL`
-   doesn't match — fix `.env` and restart.
-2. **Friends** (phone on cellular):
-   - `https://print.cuzeth.com/m/` → friends page with CSS/JS.
-   - `https://print.cuzeth.com/` → **404**.
-   - `https://print.cuzeth.com/api/ping` → `{"ok": true}`.
-3. **Forgery drill** (same phone):
+1. **Friends** (phone on cellular): `https://print.cuzeth.com/` →
+   friends page loads with CSS/JS;
+   `https://print.cuzeth.com/api/ping` → `{"ok": true}`.
+2. **Console** (any device, any network — this is the point):
+   `https://print.cuzeth.com/admin` → code prompt → the 6 digits from
+   your authenticator → full GUI loads. Print something.
+3. **Stranger's view** (same phone):
    ```sh
-   curl -si -H "Cf-Access-Authenticated-User-Email: you@example.com" https://print.cuzeth.com/ | head -1
-   # HTTP/2 404
+   curl -si https://print.cuzeth.com/api/admin/users | head -1
+   # HTTP/2 401  ← every /api/admin route demands the TOTP session or
+   # the Bearer token; the login page at /admin is all they get.
    ```
 4. **Old world is dead**: `https://thermal-printer.<tailnet>.ts.net/`
    fails to connect at all.
@@ -226,7 +194,7 @@ Now the full drill, mirroring DEPLOY.md step 9:
 
 ---
 
-## 10 · Retire Tailscale
+## 8 · Retire Tailscale
 
 The app no longer reads anything Tailscale-shaped; the proxy config is
 already wiped (step 2). If the only reason Tailscale was on the Pi was
@@ -242,11 +210,11 @@ setup conflicts with it.
 
 ---
 
-## 11 · Tell the friends
+## 9 · Tell the friends
 
-Send everyone the new URL: `https://print.cuzeth.com/m/`. Same
-username, same password, same history — they just have to sign in
-again, because the old domain's session cookie can't follow them.
+Send everyone the new URL: `https://print.cuzeth.com/`. Same username,
+same password, same history — they just have to sign in again, because
+the old domain's session cookie can't follow them.
 
 Done. You can delete this file once the paper is flowing — the
 steady-state runbook is [DEPLOY.md](DEPLOY.md).
@@ -255,12 +223,12 @@ steady-state runbook is [DEPLOY.md](DEPLOY.md).
 
 ## If it goes sideways: rollback
 
-The last pre-migration commit is `b344193`. To go back to the old
-world at any point:
+To go back to the old world at any point, check out the commit you
+wrote down in step 1:
 
 ```sh
 cd ~/thermal-printer
-git checkout b344193
+git checkout <that commit>
 sudo systemctl restart thermal-printer
 sudo systemctl stop cloudflared         # if it got as far as starting
 sudo tailscale funnel --bg 5005         # reopen the old door

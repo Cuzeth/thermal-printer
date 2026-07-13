@@ -57,14 +57,15 @@ function toast(msg, kind = "ok") {
 
 // ---------- api helper ----------
 
-// The owner token doubles as the admin token. It's inlined in the page body
-// by Flask and added to every request the main console makes.
-const OWNER_TOKEN = document.body.dataset.adminToken || "";
-const AUTH_HEADER = { Authorization: `Bearer ${OWNER_TOKEN}` };
-
+// Auth rides on the admin session cookie set by the TOTP login — no
+// tokens in the page. A 401 means the session expired; reloading gets
+// the login form back (the server gates /admin itself).
 async function apiFetch(url, init = {}) {
-  const headers = { ...AUTH_HEADER, ...(init.headers || {}) };
-  const r = await fetch(url, { ...init, headers });
+  const r = await fetch(url, init);
+  if (r.status === 401) {
+    location.reload();
+    return new Promise(() => {}); // never resolves — the reload wins
+  }
   const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
   if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
@@ -137,10 +138,10 @@ async function refreshComposePreview() {
   const rich = $("#compose-rich").checked;
   try {
     if (rich) {
-      const { segments } = await postJSON("/api/preview/rich", { body });
+      const { segments } = await postJSON("/api/admin/preview/rich", { body });
       showPreviewImage(segments);
     } else {
-      const { preview } = await postJSON("/api/preview", { body });
+      const { preview } = await postJSON("/api/admin/preview", { body });
       showPreviewText(preview);
     }
   } catch (e) {
@@ -159,7 +160,7 @@ $("#compose-preview").addEventListener("click", refreshComposePreview);
 $("#compose-rich").addEventListener("change", refreshComposePreview);
 $("#compose-print").addEventListener("click", (e) => {
   guard(async () => {
-    await postJSON("/api/print/text", {
+    await postJSON("/api/admin/print/text", {
       body: $("#compose-body").value,
       cut: $("#compose-cut").checked,
       rich: $("#compose-rich").checked,
@@ -225,7 +226,7 @@ async function refreshImagePreview() {
   if (!state.imageFile) return;
   const fd = buildImageForm();
   try {
-    const { data_url } = await postForm("/api/image/preview", fd);
+    const { data_url } = await postForm("/api/admin/image/preview", fd);
     showPreviewImage(data_url);
   } catch (e) {
     toast(e.message, "err");
@@ -248,7 +249,7 @@ function buildImageForm() {
 $("#image-print").addEventListener("click", (e) => {
   if (!state.imageFile) return;
   guard(async () => {
-    await postForm("/api/print/image", buildImageForm());
+    await postForm("/api/admin/print/image", buildImageForm());
   }, "printed", e.currentTarget);
 });
 
@@ -276,46 +277,46 @@ $$("button[data-widget]").forEach((b) => {
     const kind = b.dataset.widget;
     guard(async () => {
       if (kind === "weather") {
-        await postJSON("/api/print/weather", {
+        await postJSON("/api/admin/print/weather", {
           location: $("#w-loc").value,
           days: Number(b.dataset.days || 1),
         });
       } else if (kind === "dice") {
-        await postJSON("/api/print/dice", {
+        await postJSON("/api/admin/print/dice", {
           count: Number($("#w-dice-count").value),
           sides: Number($("#w-dice-sides").value),
           mode: b.dataset.mode || "standard",
         });
       } else if (kind === "ascii") {
-        await postJSON("/api/print/ascii", { name: $("#w-ascii").value });
+        await postJSON("/api/admin/print/ascii", { name: $("#w-ascii").value });
       } else if (kind === "briefing") {
-        await postJSON("/api/print/briefing", {
+        await postJSON("/api/admin/print/briefing", {
           location: $("#w-brief-loc").value,
         });
       } else if (kind === "hn") {
-        await postJSON("/api/print/hn", {
+        await postJSON("/api/admin/print/hn", {
           count: Number($("#w-hn-count").value),
         });
       } else if (kind === "onthisday") {
-        await postJSON("/api/print/onthisday", {
+        await postJSON("/api/admin/print/onthisday", {
           count: Number($("#w-otd-count").value),
         });
       } else if (kind === "calendar") {
-        await postJSON("/api/print/calendar", {
+        await postJSON("/api/admin/print/calendar", {
           year: Number($("#w-cal-year").value) || null,
           month: Number($("#w-cal-month").value) || null,
         });
       } else if (kind === "countdown") {
-        await postJSON("/api/print/countdown", {
+        await postJSON("/api/admin/print/countdown", {
           label: $("#w-cd-label").value,
           date: $("#w-cd-date").value,
         });
       } else if (kind === "habits") {
         const habits = $("#w-habits").value.split("\n")
           .map((s) => s.trim()).filter(Boolean);
-        await postJSON("/api/print/habits", { habits });
+        await postJSON("/api/admin/print/habits", { habits });
       } else {
-        await postJSON(`/api/print/${kind}`, {});
+        await postJSON(`/api/admin/print/${kind}`, {});
       }
     }, kind === "briefing" ? "briefing printed" : "printed", b);
   });
@@ -329,12 +330,12 @@ $$("button[data-lab]").forEach((b) => {
     guard(async () => {
       if (kind === "todo") {
         const items = $("#todo-items").value.split("\n");
-        await postJSON("/api/print/todo", {
+        await postJSON("/api/admin/print/todo", {
           title: $("#todo-title").value,
           items,
         });
       } else if (kind === "label") {
-        await postJSON("/api/print/label", {
+        await postJSON("/api/admin/print/label", {
           text: $("#label-text").value,
           big: $("#label-big").checked,
         });
@@ -344,7 +345,7 @@ $$("button[data-lab]").forEach((b) => {
           qty: Number($(".r-qty", row).value) || 1,
           price: Number($(".r-price", row).value) || 0,
         })).filter((i) => i.name.trim());
-        await postJSON("/api/print/receipt", {
+        await postJSON("/api/admin/print/receipt", {
           store: $("#r-store").value,
           items,
           tax_rate: Number($("#r-tax").value) || 0,
@@ -411,7 +412,7 @@ qrCtrl.ec.addEventListener("change", debouncedQr);
 $("#qr-refresh").addEventListener("click", refreshQrPreview);
 $("#qr-print").addEventListener("click", (e) => {
   guard(async () => {
-    await postJSON("/api/print/qr", {
+    await postJSON("/api/admin/print/qr", {
       data: qrCtrl.data.value,
       ec: qrCtrl.ec.value,
       size: Number(qrCtrl.size.value),
@@ -427,7 +428,7 @@ function debouncedQr() {
 async function refreshQrPreview() {
   if (!qrCtrl.data.value.trim()) return;
   try {
-    const { data_url } = await postJSON("/api/code/qr/preview", {
+    const { data_url } = await postJSON("/api/admin/code/qr/preview", {
       data: qrCtrl.data.value,
       ec: qrCtrl.ec.value,
       size: Number(qrCtrl.size.value),
@@ -461,7 +462,7 @@ const bcCtrl = {
 $("#bc-refresh").addEventListener("click", refreshBcPreview);
 $("#bc-print").addEventListener("click", (e) => {
   guard(async () => {
-    await postJSON("/api/print/barcode", buildBcBody());
+    await postJSON("/api/admin/print/barcode", buildBcBody());
   }, "barcode printed", e.currentTarget);
 });
 
@@ -483,7 +484,7 @@ function buildBcBody() {
 async function refreshBcPreview() {
   if (!bcCtrl.data.value.trim()) return;
   try {
-    const { data_url } = await postJSON("/api/code/barcode/preview", buildBcBody());
+    const { data_url } = await postJSON("/api/admin/code/barcode/preview", buildBcBody());
     showPreviewImage(data_url);
   } catch (e) {
     toast(e.message, "err");
@@ -497,28 +498,28 @@ $$("button[data-hw]").forEach((b) => {
     const kind = b.dataset.hw;
     guard(async () => {
       if (kind === "cash_drawer") {
-        await postJSON("/api/hw/cash_drawer", { pin: Number(b.dataset.pin) });
+        await postJSON("/api/admin/hw/cash_drawer", { pin: Number(b.dataset.pin) });
       } else if (kind === "beep") {
-        await postJSON("/api/hw/beep", {
+        await postJSON("/api/admin/hw/beep", {
           count: Number($("#hw-beep-count").value),
           duration_units: Number($("#hw-beep-dur").value),
         });
       } else if (kind === "feed") {
-        await postJSON("/api/hw/feed", { lines: Number($("#hw-feed").value) });
+        await postJSON("/api/admin/hw/feed", { lines: Number($("#hw-feed").value) });
       } else if (kind === "cut") {
-        await postJSON("/api/hw/cut", {
+        await postJSON("/api/admin/hw/cut", {
           partial: b.dataset.partial === "true",
         });
       } else if (kind === "density") {
-        await postJSON("/api/hw/density", { level: Number($("#hw-dens").value) });
+        await postJSON("/api/admin/hw/density", { level: Number($("#hw-dens").value) });
       } else if (kind === "codepage") {
-        await postJSON("/api/hw/codepage", { n: Number($("#hw-cp").value) });
+        await postJSON("/api/admin/hw/codepage", { n: Number($("#hw-cp").value) });
       } else if (kind === "reset") {
-        await postJSON("/api/hw/reset", {});
+        await postJSON("/api/admin/hw/reset", {});
       } else if (kind === "self_test") {
-        await postJSON("/api/hw/self_test", {});
+        await postJSON("/api/admin/hw/self_test", {});
       } else if (kind === "status") {
-        const j = await postJSON("/api/hw/status", {});
+        const j = await postJSON("/api/admin/hw/status", {});
         renderStatus(j.statuses);
         return; // custom toast
       }
@@ -565,7 +566,7 @@ async function loadCodePages() {
   if (cpLoaded) return;
   cpLoaded = true;
   try {
-    const r = await getJSON("/api/hw/codepages");
+    const r = await getJSON("/api/admin/hw/codepages");
     const sel = $("#hw-cp");
     while (sel.firstChild) sel.removeChild(sel.firstChild);
     r.pages.forEach((pg) => {
@@ -584,7 +585,7 @@ async function loadLedProtocols() {
   if (ledLoaded) return;
   ledLoaded = true;
   try {
-    const r = await getJSON("/api/hw/led/protocols");
+    const r = await getJSON("/api/admin/hw/led/protocols");
     const sel = $("#led-protocol");
     while (sel.firstChild) sel.removeChild(sel.firstChild);
     r.protocols.forEach((p) => {
@@ -616,7 +617,7 @@ async function refreshLedPreview() {
   if (!$("#led-protocol").value) return;
   const { r, g, b } = hexColorToRgb($("#led-color").value);
   try {
-    const j = await postJSON("/api/hw/led/preview", {
+    const j = await postJSON("/api/admin/hw/led/preview", {
       protocol: $("#led-protocol").value,
       r, g, b,
     });
@@ -642,7 +643,7 @@ $$(".led-preset").forEach((b) => {
 $("#led-send")?.addEventListener("click", (e) => {
   const { r, g, b } = hexColorToRgb($("#led-color").value);
   guard(async () => {
-    const j = await postJSON("/api/hw/led", {
+    const j = await postJSON("/api/admin/hw/led", {
       protocol: $("#led-protocol").value,
       r, g, b,
       blink: $("#led-blink").checked,
@@ -655,7 +656,7 @@ $("#led-send")?.addEventListener("click", (e) => {
 
 $("#console-send").addEventListener("click", (e) => {
   guard(async () => {
-    const r = await postJSON("/api/hw/raw", { bytes: $("#console-input").value });
+    const r = await postJSON("/api/admin/hw/raw", { bytes: $("#console-input").value });
     $("#console-sent").textContent = `sent ${r.sent} bytes`;
   }, "bytes sent", e.currentTarget);
 });
@@ -665,7 +666,7 @@ async function loadCheatSheet() {
   if (cheatLoaded) return;
   cheatLoaded = true;
   try {
-    const r = await getJSON("/api/hw/cheatsheet");
+    const r = await getJSON("/api/admin/hw/cheatsheet");
     const tbody = $("#cheat-body");
     while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
     r.entries.forEach((e) => {
@@ -697,9 +698,13 @@ async function loadCheatSheet() {
 
 // ---------- admin tab ----------
 
-// Admin + owner share the same bearer today — apiFetch attaches it for us.
 const adminGET = (url) => apiFetch(url, { method: "GET" });
 const adminPOST = (url) => apiFetch(url, { method: "POST" });
+
+$("#signout").addEventListener("click", async () => {
+  await adminPOST("/api/admin/auth/logout").catch(() => {});
+  location.reload();
+});
 
 function fmtWhen(iso) {
   if (!iso) return "";
@@ -754,7 +759,7 @@ function userRow(u, opts) {
     }));
   }
 
-  // No self-service reset on /m/ — this is the only recovery path for a
+  // No self-service reset on the friends page — this is the only recovery path for a
   // friend who forgot their password. Custom handler (not adminButton) so
   // a cancelled prompt doesn't toast a bogus success.
   const resetBtn = document.createElement("button");
