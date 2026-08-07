@@ -28,6 +28,29 @@ def test_ping_is_public(client):
     assert r.get_json()["ok"] is True
 
 
+def test_signed_out_admin_page_does_not_render_signout(client):
+    r = client.get("/admin")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'id="login-form"' in html
+    assert 'id="signout"' not in html
+
+
+def test_signed_in_admin_console_scopes_signout_to_owner_shell(client, auth):
+    r = client.get("/admin", headers=auth)
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert html.count('id="signout"') == 1
+    assert 'class="account-actions"' in html
+    assert 'id="preview-panel"' in html
+
+
+def test_friend_guest_page_hides_the_account_actions(client):
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="who" aria-label="Signed-in account" hidden' in html
+    assert html.count('id="logout"') == 1
+
+
 def test_private_route_requires_bearer(client):
     r = client.post("/api/admin/print/now", json={})
     assert r.status_code == 401

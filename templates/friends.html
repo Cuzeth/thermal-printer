@@ -12,12 +12,12 @@
 
 <header class="top friends-top">
   <div class="brand">
-    <span class="logo">▚▚</span>
+    <span class="logo" aria-hidden="true">▚▚</span>
     <span class="title">SEND CUZETH A RECEIPT</span>
   </div>
-  <div class="who" id="who" hidden>
+  <div class="who" id="who" aria-label="Signed-in account" hidden>
     <span class="who-name"></span>
-    <button class="ghost tiny" id="logout">sign out</button>
+    <button type="button" class="ghost tiny signout" id="logout">sign out</button>
   </div>
 </header>
 
@@ -105,7 +105,6 @@
           pattern="[a-zA-Z0-9_\-]{1,20}"
           autocomplete="username"
           required
-          autofocus
         />
       </label>
       <label>
@@ -156,12 +155,13 @@
       </div>
     </details>
 
-    <div class="mode-switch" id="mode-switch">
-      <button type="button" class="mode-tab active" id="mode-write">write</button>
-      <button type="button" class="mode-tab" id="mode-draw">draw</button>
+    <div class="mode-switch" id="mode-switch" role="tablist" aria-label="Receipt type">
+      <button type="button" class="mode-tab active" id="mode-write" role="tab" aria-selected="true" aria-controls="msg-form">write</button>
+      <button type="button" class="mode-tab" id="mode-draw" role="tab" aria-selected="false" aria-controls="doodle-panel">draw</button>
     </div>
 
-    <form id="msg-form">
+    <form id="msg-form" role="tabpanel" aria-labelledby="mode-write">
+      <label class="sr-only" for="msg-body">Receipt message</label>
       <textarea
         id="msg-body"
         rows="6"
@@ -180,8 +180,11 @@
       </label>
 
       <div class="preview-block">
-        <div class="preview-label">preview</div>
-        <div class="preview-paper" id="preview-paper">
+        <div class="preview-label-row">
+          <div class="preview-label">print preview</div>
+          <span class="preview-progress" id="preview-progress" data-state="idle">live</span>
+        </div>
+        <div class="preview-paper" id="preview-paper" aria-live="polite" aria-busy="false">
           <p class="preview-placeholder">start typing to see how it'll print…</p>
         </div>
       </div>
@@ -191,7 +194,7 @@
       </div>
     </form>
 
-    <div id="doodle-panel" hidden>
+    <div id="doodle-panel" role="tabpanel" aria-labelledby="mode-draw" hidden>
       <canvas id="doodle-canvas" width="576" height="576"></canvas>
       <p class="hint">draw with your finger or mouse. it prints exactly this, in black and white.</p>
       <label class="anon-toggle">

@@ -5,42 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Thermal Printer Console</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-  <!-- One tiny page, so its styles and script live inline instead of
-       adding two more static files for a single input box. -->
-  <style>
-    .login-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; }
-    .login-card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-      padding: 28px 32px; width: min(340px, 90vw); text-align: center;
-    }
-    .login-card .logo { display: block; margin-bottom: 6px; }
-    .login-card h1 { font-size: 15px; letter-spacing: 2px; margin: 0 0 4px; }
-    .login-card p { color: var(--dim); font-size: 12px; margin: 0 0 18px; }
-    #code {
-      width: 100%; background: var(--bg-2); color: var(--ink);
-      border: 1px solid var(--line); border-radius: 6px; padding: 10px;
-      font: inherit; font-size: 22px; letter-spacing: 8px; text-align: center;
-    }
-    #code:focus { outline: none; border-color: var(--accent); }
-    #login-btn {
-      width: 100%; margin-top: 12px; padding: 10px; font: inherit; cursor: pointer;
-      background: var(--accent); color: var(--paper-ink); border: 0; border-radius: 6px;
-      font-weight: 700; letter-spacing: 1px;
-    }
-    #login-btn:disabled { opacity: .5; cursor: default; }
-    #login-err { color: var(--danger); font-size: 12px; min-height: 18px; margin-top: 10px; }
-  </style>
 </head>
-<body>
+<body class="admin-login">
   <div class="login-wrap">
     <form class="login-card" id="login-form">
-      <span class="logo">&#9626;&#9626;</span>
+      <span class="logo" aria-hidden="true">&#9626;&#9626;</span>
+      <span class="login-eyebrow">Owner access</span>
       <h1>THERMAL // CONSOLE</h1>
-      <p>Enter the current code from your authenticator app.</p>
+      <p id="code-help">Enter the current six-digit code from your authenticator app.</p>
+      <label class="sr-only" for="code">Authenticator code</label>
       <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
-             pattern="[0-9]*" maxlength="6" placeholder="000000" autofocus />
-      <button id="login-btn" type="submit">Unlock</button>
+             pattern="[0-9]*" maxlength="6" placeholder="000000" aria-describedby="code-help login-err" autofocus />
+      <button id="login-btn" class="primary" type="submit">Unlock console</button>
       <div id="login-err" role="alert"></div>
+      <div class="login-security"><span aria-hidden="true">●</span> Private owner session · expires after 12 hours</div>
     </form>
   </div>
 

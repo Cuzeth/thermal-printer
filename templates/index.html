@@ -10,9 +10,11 @@
 
 <header class="top">
   <div class="brand">
-    <span class="logo">▚▚</span>
-    <span class="title">THERMAL // CONSOLE</span>
-    <span class="sub">{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}DRY RUN{% else %}LIVE{% endif %}</span>
+    <span class="logo" aria-hidden="true">▚▚</span>
+    <span class="brand-copy">
+      <span class="title">THERMAL // CONSOLE</span>
+      <span class="sub"><span class="status-dot {{ 'status-dot-dry' if dry_run else '' }}" aria-hidden="true"></span>{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}dry run{% else %}live mode{% endif %}</span>
+    </span>
   </div>
   <nav class="tabs" role="tablist" aria-label="Console sections">
     <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0">Compose</button>
@@ -24,7 +26,10 @@
     <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">Console</button>
     <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">Admin</button>
   </nav>
-  <button class="ghost tiny" id="signout" title="End the admin session">Sign out</button>
+  <div class="account-actions">
+    <span class="session-label">Owner session</span>
+    <button type="button" class="ghost tiny signout" id="signout" title="End the owner session">Sign out</button>
+  </div>
 </header>
 
 <main>
@@ -40,6 +45,7 @@
         <code>---</code>, <code>===</code>, <code>!!!</code> (cut here).
         Inline: <code>**bold**</code>, <code>__underline__</code>, <code>~big~</code>.
       </p>
+      <label class="sr-only" for="compose-body">Receipt contents</label>
       <textarea id="compose-body" rows="18" spellcheck="false"># HELLO WORLD
 ===
 
@@ -76,10 +82,10 @@ thanks for reading</textarea>
       <h2>Image printer</h2>
       <p class="help">Drop an image, tune it, print it. Floyd-Steinberg dithering by default.</p>
 
-      <div id="drop" class="drop">
+      <div id="drop" class="drop" role="button" tabindex="0" aria-controls="image-file" aria-label="Choose or drop an image to print">
         <input type="file" id="image-file" accept="image/*" hidden />
         <div class="drop-inner">
-          <div class="drop-icon">⬚</div>
+          <div class="drop-icon" aria-hidden="true">⬚</div>
           <div><strong>Click or drop an image</strong></div>
           <div class="muted">PNG · JPG · GIF · WEBP</div>
         </div>
@@ -556,11 +562,17 @@ ship the thing</textarea>
   </section>
 
   <!-- right: receipt preview -->
-  <aside class="panel preview">
-    <div class="paper" id="paper-frame">
-      <pre id="preview-out"></pre>
+  <aside class="panel preview" id="preview-panel" aria-labelledby="preview-title">
+    <div class="preview-head">
+      <div>
+        <span class="preview-kicker">Output</span>
+        <h2 id="preview-title">Compose preview</h2>
+      </div>
+      <span class="preview-state" id="preview-state" data-state="loading">Rendering…</span>
+    </div>
+    <div class="paper" id="paper-frame" aria-live="polite" aria-busy="true">
+      <pre id="preview-out">Preparing preview…</pre>
       <div id="preview-image-wrap" class="imgwrap" hidden>
-        <img id="preview-image" alt="preview" />
       </div>
       <div class="tear"></div>
     </div>

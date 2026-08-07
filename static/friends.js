@@ -18,12 +18,13 @@ function toast(msg, kind = "ok") {
   }, 2800);
 }
 
-async function postJSON(url, data) {
+async function postJSON(url, data, options = {}) {
   const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(data || {}),
+    signal: options.signal,
   });
   const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
   if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
@@ -42,6 +43,8 @@ function show(state) {
     const el = document.querySelector(`[data-state="${s}"]`);
     if (el) el.hidden = s !== state;
   });
+  if (state === "register") requestAnimationFrame(() => $("#reg-username")?.focus());
+  if (state === "login") requestAnimationFrame(() => $("#login-username")?.focus());
 }
 
 let me = null;
@@ -127,6 +130,7 @@ function renderStylePicker(current) {
     btn.type = "button";
     btn.className = "style-chip style-" + s.key + (s.key === current ? " active" : "");
     btn.dataset.style = s.key;
+    btn.setAttribute("aria-pressed", s.key === current ? "true" : "false");
     const label = document.createElement("span");
     label.className = "style-chip-label";
     label.textContent = s.label;
@@ -163,11 +167,21 @@ async function refreshMe() {
 
 let previewTimer = null;
 let previewSeq = 0;
+let previewAbort = null;
 const PREVIEW_DEBOUNCE_MS = 250;
 
 function schedulePreview() {
   clearTimeout(previewTimer);
+  setPreviewProgress("Waiting…", "pending");
   previewTimer = setTimeout(updatePreview, PREVIEW_DEBOUNCE_MS);
+}
+
+function setPreviewProgress(label, state = "idle") {
+  const el = $("#preview-progress");
+  if (!el) return;
+  el.textContent = label;
+  el.dataset.state = state;
+  $("#preview-paper")?.setAttribute("aria-busy", state === "loading" ? "true" : "false");
 }
 
 function setPreviewPlaceholder(msg, kind = "placeholder") {
@@ -175,6 +189,7 @@ function setPreviewPlaceholder(msg, kind = "placeholder") {
   p.className = `preview-${kind}`;
   p.textContent = msg;
   $("#preview-paper").replaceChildren(p);
+  setPreviewProgress(kind === "error" ? "Failed" : "Live", kind === "error" ? "error" : "idle");
 }
 
 async function updatePreview() {
@@ -182,11 +197,15 @@ async function updatePreview() {
   const anonymous = !!$("#msg-anon")?.checked;
   const seq = ++previewSeq;
   if (!body.trim()) {
+    previewAbort?.abort();
     setPreviewPlaceholder("start typing to see how it'll print…");
     return;
   }
+  previewAbort?.abort();
+  previewAbort = new AbortController();
+  setPreviewProgress("Rendering…", "loading");
   try {
-    const j = await postJSON("/api/preview", { body, anonymous });
+    const j = await postJSON("/api/preview", { body, anonymous }, { signal: previewAbort.signal });
     if (seq !== previewSeq) return; // stale — user kept typing
     const segments = j.segments || [];
     if (segments.length === 0) {
@@ -197,8 +216,9 @@ async function updatePreview() {
     segments.forEach((url, i) => {
       const img = document.createElement("img");
       img.src = url;
-      img.alt = "preview";
+      img.alt = segments.length > 1 ? `Receipt preview segment ${i + 1} of ${segments.length}` : "Receipt preview";
       img.className = "preview-img";
+      img.decoding = "async";
       nodes.push(img);
       if (i < segments.length - 1) {
         const cut = document.createElement("div");
@@ -207,7 +227,9 @@ async function updatePreview() {
       }
     });
     $("#preview-paper").replaceChildren(...nodes);
+    setPreviewProgress("Up to date", "ready");
   } catch (err) {
+    if (err.name === "AbortError") return;
     if (seq !== previewSeq) return;
     setPreviewPlaceholder("preview failed: " + err.message, "error");
   }
@@ -259,6 +281,9 @@ function historyItem(msg) {
     li.classList.add("history-doodle-row");
     return li;
   }
+  li.tabIndex = 0;
+  li.setAttribute("role", "button");
+  li.setAttribute("aria-label", `Load receipt from ${fmtWhen(msg.printed_at)} into the composer`);
   // Click-to-restore: drops the body back into the composer so the friend
   // can tweak + reprint without retyping. No auto-submit.
   li.addEventListener("click", () => {
@@ -268,6 +293,12 @@ function historyItem(msg) {
     ta.focus();
     schedulePreview();
     ta.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  li.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      li.click();
+    }
   });
   return li;
 }
@@ -300,10 +331,10 @@ async function loadHistory() {
 // refresh history so the new row (with its canonical server timestamp)
 // shows up.
 function celebrateQueued(j) {
-  const flash = document.createElement("div");
-  flash.className = "printed-flash";
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 600);
+  const card = document.querySelector('[data-state="allowed"]');
+  card?.classList.remove("print-confirmed");
+  requestAnimationFrame(() => card?.classList.add("print-confirmed"));
+  setTimeout(() => card?.classList.remove("print-confirmed"), 700);
   const ahead = Number(j.ahead) || 0;
   toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
   loadHistory().catch((err) => console.warn("history refresh failed:", err));
@@ -458,6 +489,8 @@ function setMode(mode) {
   $("#doodle-panel").hidden = !isDraw;
   $("#mode-write").classList.toggle("active", !isDraw);
   $("#mode-draw").classList.toggle("active", isDraw);
+  $("#mode-write").setAttribute("aria-selected", isDraw ? "false" : "true");
+  $("#mode-draw").setAttribute("aria-selected", isDraw ? "true" : "false");
   if (isDraw) initDoodleCanvas();
 }
 

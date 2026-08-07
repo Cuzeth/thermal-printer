@@ -5,29 +5,42 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 const state = {
   imageFile: null,
-  lastPreview: null,
+  activePane: "compose",
+  previewSeq: 0,
+  previewOwner: null,
 };
 
 // ---------- tabs ----------
 
 function activateTab(t, { focus = false } = {}) {
   const pane = t.dataset.tab;
+  state.activePane = pane;
   $$(".tab").forEach((x) => {
     const on = x === t;
     x.classList.toggle("active", on);
     x.setAttribute("aria-selected", on ? "true" : "false");
     x.tabIndex = on ? 0 : -1;
   });
-  $$(".tabpane").forEach((p) => p.classList.toggle("active", p.dataset.pane === pane));
+  $$(".tabpane").forEach((p) => {
+    const on = p.dataset.pane === pane;
+    p.classList.toggle("active", on);
+    p.setAttribute("aria-hidden", on ? "false" : "true");
+  });
   if (focus) t.focus();
-  if (pane !== "image") hidePreviewImage();
-  if (pane === "compose") refreshComposePreview();
+  configurePreviewForPane(pane);
   if (pane === "hardware") { loadCodePages(); loadLedProtocols(); }
   if (pane === "console") loadCheatSheet();
   if (pane === "admin") refreshAdmin();
 }
 
 $$(".tab").forEach((t) => t.addEventListener("click", () => activateTab(t)));
+
+// The compact help markers work for keyboard and screen-reader users too.
+$$(".tip").forEach((tip) => {
+  tip.tabIndex = 0;
+  tip.setAttribute("role", "note");
+  tip.setAttribute("aria-label", tip.dataset.tip || "More information");
+});
 
 // Arrow-key navigation per WAI-ARIA tabs pattern.
 $(".tabs").addEventListener("keydown", (e) => {
@@ -91,32 +104,84 @@ async function guard(fn, okMsg = "sent to printer", btn = null) {
   // Prints are synchronous server-side (a briefing can take 15s+), so
   // disable the trigger while in flight — otherwise the natural move
   // (click again) queues a duplicate behind the USB lock.
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("is-busy");
+    btn.setAttribute("aria-busy", "true");
+  }
   try {
     await fn();
     toast(okMsg, "ok");
   } catch (e) {
     toast(e.message, "err");
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("is-busy");
+      btn.removeAttribute("aria-busy");
+    }
   }
 }
 
 // ---------- preview ----------
 
+const PREVIEW_TITLES = {
+  compose: "Compose preview",
+  image: "Image preview",
+  codes: "Code preview",
+};
+
+function setPreviewStatus(label, kind = "idle") {
+  const status = $("#preview-state");
+  status.textContent = label;
+  status.dataset.state = kind;
+  const panel = $("#preview-panel");
+  const busy = kind === "loading";
+  panel.setAttribute("aria-busy", busy ? "true" : "false");
+  $("#paper-frame").setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+function beginPreview(owner, title = PREVIEW_TITLES[owner]) {
+  if (state.activePane !== owner) return null;
+  const token = ++state.previewSeq;
+  state.previewOwner = owner;
+  const panel = $("#preview-panel");
+  panel.hidden = false;
+  $("#preview-title").textContent = title;
+  setPreviewStatus("Rendering…", "loading");
+  return token;
+}
+
+function previewIsCurrent(owner, token) {
+  return state.activePane === owner && state.previewOwner === owner && state.previewSeq === token;
+}
+
+function finishPreview(owner, token, label = "Up to date", kind = "ready") {
+  if (!previewIsCurrent(owner, token)) return false;
+  setPreviewStatus(label, kind);
+  return true;
+}
+
+function clearPreviewImage() {
+  const wrap = $("#preview-image-wrap");
+  wrap.hidden = true;
+  wrap.replaceChildren();
+}
+
 function showPreviewText(text) {
   $("#preview-out").textContent = text;
-  hidePreviewImage();
+  clearPreviewImage();
 }
 function showPreviewImage(url) {
   const wrap = $("#preview-image-wrap");
   // Replace children: one <img> per segment, separated by tear-lines.
-  while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+  wrap.replaceChildren();
   const urls = Array.isArray(url) ? url : [url];
   urls.forEach((u, i) => {
     const img = document.createElement("img");
     img.src = u;
-    img.alt = "preview";
+    img.alt = urls.length > 1 ? `Receipt preview segment ${i + 1} of ${urls.length}` : "Receipt preview";
+    img.decoding = "async";
     wrap.appendChild(img);
     if (i < urls.length - 1) {
       const sep = document.createElement("div");
@@ -127,25 +192,52 @@ function showPreviewImage(url) {
   wrap.hidden = false;
   $("#preview-out").textContent = "";
 }
-function hidePreviewImage() {
-  const wrap = $("#preview-image-wrap");
-  wrap.hidden = true;
-  while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+
+function showPreviewPlaceholder(message) {
+  showPreviewText(message);
+}
+
+function configurePreviewForPane(pane) {
+  // Invalidate any response still in flight from the previous pane.
+  state.previewSeq += 1;
+  state.previewOwner = null;
+  const panel = $("#preview-panel");
+  if (!PREVIEW_TITLES[pane]) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  $("#preview-title").textContent = PREVIEW_TITLES[pane];
+  setPreviewStatus("Waiting", "idle");
+  if (pane === "compose") refreshComposePreview();
+  if (pane === "image") {
+    if (state.imageFile) refreshImagePreview();
+    else showPreviewPlaceholder("Choose an image to preview it here.");
+  }
+  if (pane === "codes") showPreviewPlaceholder("Choose QR or barcode settings, then preview the code here.");
 }
 
 async function refreshComposePreview() {
+  const owner = "compose";
+  const token = beginPreview(owner, "Compose preview");
+  if (token === null) return;
   const body = $("#compose-body").value;
   const rich = $("#compose-rich").checked;
   try {
     if (rich) {
       const { segments } = await postJSON("/api/admin/preview/rich", { body });
+      if (!previewIsCurrent(owner, token)) return;
       showPreviewImage(segments);
     } else {
       const { preview } = await postJSON("/api/admin/preview", { body });
+      if (!previewIsCurrent(owner, token)) return;
       showPreviewText(preview);
     }
+    finishPreview(owner, token);
   } catch (e) {
-    showPreviewText("(preview failed: " + e.message + ")");
+    if (!previewIsCurrent(owner, token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview(owner, token, "Failed", "error");
   }
 }
 
@@ -175,6 +267,12 @@ const drop = $("#drop");
 const fileInput = $("#image-file");
 
 drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fileInput.click();
+  }
+});
 ["dragenter", "dragover"].forEach((evt) =>
   drop.addEventListener(evt, (e) => {
     e.preventDefault();
@@ -224,12 +322,19 @@ function debouncedPreview() {
 
 async function refreshImagePreview() {
   if (!state.imageFile) return;
+  const owner = "image";
+  const token = beginPreview(owner, "Image preview");
+  if (token === null) return;
   const fd = buildImageForm();
   try {
     const { data_url } = await postForm("/api/admin/image/preview", fd);
+    if (!previewIsCurrent(owner, token)) return;
     showPreviewImage(data_url);
+    finishPreview(owner, token);
   } catch (e) {
-    toast(e.message, "err");
+    if (!previewIsCurrent(owner, token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview(owner, token, "Failed", "error");
   }
 }
 
@@ -426,7 +531,14 @@ function debouncedQr() {
   qrT = setTimeout(refreshQrPreview, 200);
 }
 async function refreshQrPreview() {
-  if (!qrCtrl.data.value.trim()) return;
+  const owner = "codes";
+  const token = beginPreview(owner, "QR code preview");
+  if (token === null) return;
+  if (!qrCtrl.data.value.trim()) {
+    showPreviewText("Enter QR content to preview it here.");
+    finishPreview(owner, token, "Waiting", "idle");
+    return;
+  }
   try {
     const { data_url } = await postJSON("/api/admin/code/qr/preview", {
       data: qrCtrl.data.value,
@@ -434,9 +546,13 @@ async function refreshQrPreview() {
       size: Number(qrCtrl.size.value),
       box_size: 10,
     });
+    if (!previewIsCurrent(owner, token)) return;
     showPreviewImage(data_url);
+    finishPreview(owner, token);
   } catch (e) {
-    toast(e.message, "err");
+    if (!previewIsCurrent(owner, token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview(owner, token, "Failed", "error");
   }
 }
 
@@ -482,12 +598,23 @@ function buildBcBody() {
   };
 }
 async function refreshBcPreview() {
-  if (!bcCtrl.data.value.trim()) return;
+  const owner = "codes";
+  const token = beginPreview(owner, "Barcode preview");
+  if (token === null) return;
+  if (!bcCtrl.data.value.trim()) {
+    showPreviewText("Enter barcode data to preview it here.");
+    finishPreview(owner, token, "Waiting", "idle");
+    return;
+  }
   try {
     const { data_url } = await postJSON("/api/admin/code/barcode/preview", buildBcBody());
+    if (!previewIsCurrent(owner, token)) return;
     showPreviewImage(data_url);
+    finishPreview(owner, token);
   } catch (e) {
-    toast(e.message, "err");
+    if (!previewIsCurrent(owner, token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview(owner, token, "Failed", "error");
   }
 }
 
