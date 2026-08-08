@@ -284,16 +284,116 @@ def print_image():
 
 # ---------- widget routes ----------
 
+def _widget_body(kind: str, data: dict) -> str:
+    """Build a widget receipt body without touching USB."""
+    if kind == "weather":
+        loc = (data.get("location") or "").strip()
+        if not loc:
+            raise ValueError("location is required")
+        return widgets.weather(loc, days=int(data.get("days", 1)))
+    if kind == "dice":
+        return widgets.roll_dice(
+            count=int(data.get("count", 2)),
+            sides=int(data.get("sides", 6)),
+            mode=str(data.get("mode", "standard")),
+        )
+    if kind == "hn":
+        return widgets.hacker_news(count=int(data.get("count", 5)))
+    if kind == "onthisday":
+        return widgets.on_this_day(count=int(data.get("count", 4)))
+    if kind == "calendar":
+        year, month = data.get("year"), data.get("month")
+        return widgets.calendar_month(
+            year=int(year) if year else None,
+            month=int(month) if month else None,
+        )
+    if kind == "countdown":
+        return widgets.countdown(
+            label=str(data.get("label", "")),
+            target_iso=str(data.get("date", "")),
+        )
+    if kind == "habits":
+        habits = data.get("habits") or []
+        if not isinstance(habits, list):
+            raise ValueError("habits must be a list")
+        return widgets.habit_tracker(
+            habits=[str(h) for h in habits],
+            days=int(data.get("days", 7)),
+        )
+    if kind == "advice":
+        return widgets.advice()
+    if kind == "briefing":
+        location = (data.get("location") or "").strip()
+        # One tall image is safe in the browser; printing still uses smaller
+        # transfers to stay within the thermal printer's raster buffer.
+        return widgets.morning_briefing(location=location)
+    if kind == "ascii":
+        return widgets.ascii_art(str(data.get("name", "")))
+    if kind == "now":
+        return widgets.now_card()
+    raise ValueError(f"unknown widget: {kind}")
+
+
+def _lab_body(kind: str, data: dict) -> str:
+    """Build a lab receipt body with shared validation for preview and print."""
+    if kind == "todo":
+        title = (data.get("title") or "").strip()
+        items = data.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError("items must be a list")
+        if not any((item or "").strip() for item in items):
+            raise ValueError("At least one non-empty item is required.")
+        return widgets.todo(title, [str(item) for item in items])
+    if kind == "receipt":
+        items = data.get("items") or []
+        if not items:
+            raise ValueError("At least one item is required.")
+        return widgets.receipt(
+            store=data.get("store", ""),
+            items=items,
+            tax_rate=float(data.get("tax_rate", 0.0) or 0.0),
+            note=data.get("note", ""),
+        )
+    if kind == "label":
+        return widgets.label(
+            text=data.get("text", ""),
+            big=bool(data.get("big", True)),
+        )
+    raise ValueError(f"unknown lab: {kind}")
+
+
+def _preview_markup(body: str) -> dict:
+    img = render_feat.render_markup(body)
+    return {
+        "data_url": image_feat.to_png_data_url(img),
+        "width": img.width,
+        "height": img.height,
+    }
+
+
+@app.post("/api/admin/preview/widget/<kind>")
+@require_admin
+def preview_widget(kind: str):
+    def run():
+        data = request.get_json(silent=True) or {}
+        return _preview_markup(_widget_body(kind, data))
+    return _safe(run)
+
+
+@app.post("/api/admin/preview/lab/<kind>")
+@require_admin
+def preview_lab(kind: str):
+    def run():
+        data = request.get_json(silent=True) or {}
+        return _preview_markup(_lab_body(kind, data))
+    return _safe(run)
+
 @app.post("/api/admin/print/weather")
 @require_admin
 def print_weather():
     def run():
         data = request.get_json(silent=True) or {}
-        loc = (data.get("location") or "").strip()
-        if not loc:
-            raise ValueError("location is required")
-        days = int(data.get("days", 1))
-        _print_body(widgets.weather(loc, days=days))
+        _print_body(_widget_body("weather", data))
         return {}
     return _safe(run)
 
@@ -303,11 +403,7 @@ def print_weather():
 def print_dice():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.roll_dice(
-            count=int(data.get("count", 2)),
-            sides=int(data.get("sides", 6)),
-            mode=str(data.get("mode", "standard")),
-        ))
+        _print_body(_widget_body("dice", data))
         return {}
     return _safe(run)
 
@@ -317,7 +413,7 @@ def print_dice():
 def print_hn():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.hacker_news(count=int(data.get("count", 5))))
+        _print_body(_widget_body("hn", data))
         return {}
     return _safe(run)
 
@@ -327,7 +423,7 @@ def print_hn():
 def print_on_this_day():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.on_this_day(count=int(data.get("count", 4))))
+        _print_body(_widget_body("onthisday", data))
         return {}
     return _safe(run)
 
@@ -337,12 +433,7 @@ def print_on_this_day():
 def print_calendar():
     def run():
         data = request.get_json(silent=True) or {}
-        year = data.get("year")
-        month = data.get("month")
-        _print_body(widgets.calendar_month(
-            year=int(year) if year else None,
-            month=int(month) if month else None,
-        ))
+        _print_body(_widget_body("calendar", data))
         return {}
     return _safe(run)
 
@@ -352,10 +443,7 @@ def print_calendar():
 def print_countdown():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.countdown(
-            label=str(data.get("label", "")),
-            target_iso=str(data.get("date", "")),
-        ))
+        _print_body(_widget_body("countdown", data))
         return {}
     return _safe(run)
 
@@ -365,13 +453,7 @@ def print_countdown():
 def print_habits():
     def run():
         data = request.get_json(silent=True) or {}
-        items = data.get("habits") or []
-        if not isinstance(items, list):
-            raise ValueError("habits must be a list")
-        _print_body(widgets.habit_tracker(
-            habits=[str(h) for h in items],
-            days=int(data.get("days", 7)),
-        ))
+        _print_body(_widget_body("habits", data))
         return {}
     return _safe(run)
 
@@ -380,7 +462,7 @@ def print_habits():
 @require_admin
 def print_advice():
     def run():
-        _print_body(widgets.advice())
+        _print_body(_widget_body("advice", {}))
         return {}
     return _safe(run)
 
@@ -405,13 +487,7 @@ def print_briefing():
 def print_todo():
     def run():
         data = request.get_json(silent=True) or {}
-        title = (data.get("title") or "").strip()
-        items = data.get("items") or []
-        if not isinstance(items, list):
-            raise ValueError("items must be a list")
-        if not any((i or "").strip() for i in items):
-            raise ValueError("At least one non-empty item is required.")
-        _print_body(widgets.todo(title, [str(i) for i in items]))
+        _print_body(_lab_body("todo", data))
         return {}
     return _safe(run)
 
@@ -421,15 +497,7 @@ def print_todo():
 def print_receipt():
     def run():
         data = request.get_json(silent=True) or {}
-        items = data.get("items") or []
-        if not items:
-            raise ValueError("At least one item is required.")
-        _print_body(widgets.receipt(
-            store=data.get("store", ""),
-            items=items,
-            tax_rate=float(data.get("tax_rate", 0.0) or 0.0),
-            note=data.get("note", ""),
-        ))
+        _print_body(_lab_body("receipt", data))
         return {}
     return _safe(run)
 
@@ -439,10 +507,7 @@ def print_receipt():
 def print_label():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.label(
-            text=data.get("text", ""),
-            big=bool(data.get("big", True)),
-        ))
+        _print_body(_lab_body("label", data))
         return {}
     return _safe(run)
 
@@ -452,7 +517,7 @@ def print_label():
 def print_ascii():
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(widgets.ascii_art(data.get("name", "")))
+        _print_body(_widget_body("ascii", data))
         return {}
     return _safe(run)
 
@@ -461,7 +526,7 @@ def print_ascii():
 @require_admin
 def print_now():
     def run():
-        _print_body(widgets.now_card())
+        _print_body(_widget_body("now", {}))
         return {}
     return _safe(run)
 

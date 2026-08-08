@@ -84,6 +84,93 @@ def test_preview_rich_returns_segments(client, auth):
         assert s.startswith("data:image/png;base64,")
 
 
+def test_widget_preview_uses_raster_render_pipeline(client, auth):
+    r = client.post(
+        "/api/admin/preview/widget/calendar",
+        json={"year": 2026, "month": 8},
+        headers=auth,
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["data_url"].startswith("data:image/png;base64,")
+    assert body["width"] == config.PRINTER_PIXEL_WIDTH
+    assert body["height"] > 0
+
+
+def test_every_widget_kind_has_a_preview_route(client, auth, monkeypatch):
+    for formatter in (
+        "weather", "roll_dice", "hacker_news", "on_this_day",
+        "calendar_month", "countdown", "habit_tracker", "advice",
+        "morning_briefing", "ascii_art", "now_card",
+    ):
+        monkeypatch.setattr(
+            app_module.widgets,
+            formatter,
+            lambda *args, **kwargs: "# PREVIEW\n===\n> test",
+        )
+
+    cases = {
+        "weather": {"location": "New York", "days": 1},
+        "dice": {"count": 2, "sides": 6, "mode": "standard"},
+        "hn": {"count": 3},
+        "onthisday": {"count": 3},
+        "calendar": {"year": 2026, "month": 8},
+        "countdown": {"label": "launch", "date": "2026-08-20"},
+        "habits": {"habits": ["water"]},
+        "advice": {},
+        "briefing": {"location": "New York"},
+        "ascii": {"name": "cat"},
+        "now": {},
+    }
+    for kind, payload in cases.items():
+        r = client.post(f"/api/admin/preview/widget/{kind}", json=payload, headers=auth)
+        assert r.status_code == 200, kind
+        assert r.get_json()["data_url"].startswith("data:image/png;base64,"), kind
+
+
+def test_lab_preview_uses_same_validation_as_print(client, auth):
+    bad = client.post(
+        "/api/admin/preview/lab/todo",
+        json={"title": "TODAY", "items": ["", "  "]},
+        headers=auth,
+    )
+    assert bad.status_code == 400
+    assert "non-empty item" in bad.get_json()["error"]
+
+    good = client.post(
+        "/api/admin/preview/lab/todo",
+        json={"title": "TODAY", "items": ["water basil"]},
+        headers=auth,
+    )
+    assert good.status_code == 200
+    assert good.get_json()["data_url"].startswith("data:image/png;base64,")
+
+    for kind, payload in {
+        "label": {"text": "FRAGILE", "big": True},
+        "receipt": {
+            "store": "TEST SHOP",
+            "items": [{"name": "coffee", "qty": 1, "price": 4.25}],
+            "tax_rate": 0,
+            "note": "",
+        },
+    }.items():
+        r = client.post(f"/api/admin/preview/lab/{kind}", json=payload, headers=auth)
+        assert r.status_code == 200, kind
+        assert r.get_json()["data_url"].startswith("data:image/png;base64,"), kind
+
+
+def test_widget_and_lab_previews_require_admin(client):
+    assert client.post("/api/admin/preview/widget/now", json={}).status_code == 401
+    assert client.post("/api/admin/preview/lab/label", json={"text": "HI"}).status_code == 401
+
+
+def test_unknown_preview_kind_is_rejected(client, auth):
+    r = client.post("/api/admin/preview/widget/nope", json={}, headers=auth)
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "unknown widget: nope"
+
+
 def test_hw_raw_rejects_oversized_payload(client, auth):
     # Build a hex blob that parses to > 4096 bytes.
     payload = " ".join(["20"] * 5000)

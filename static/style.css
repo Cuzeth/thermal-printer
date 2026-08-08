@@ -387,6 +387,17 @@ button.ghost {
   margin-top: 6px;
 }
 
+/* Every card ends with the same pair: content-sized Preview, then the
+   primary print button taking whatever width is left. */
+.action-pair {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.action-pair button { width: 100%; margin-top: 0; padding-inline: 10px; }
+
 /* Category section titles break the grid into scannable groups. */
 .wid-section {
   margin: 22px 0 6px 0;
@@ -453,6 +464,7 @@ button.ghost {
 .hero-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 .hero-actions button { padding: 11px 22px; }
 
@@ -544,6 +556,7 @@ details[open] > summary::before { content: "▾ "; }
   font-size: 9px;
   letter-spacing: .9px;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--dim);
   background: rgb(255 255 255 / .04);
   box-shadow: 0 0 0 1px rgb(255 255 255 / .07);
@@ -621,6 +634,9 @@ details[open] > summary::before { content: "▾ "; }
   outline-offset: -1px;
   display: block;
   margin: 0 auto;
+}
+.imgwrap img.preview-result {
+  animation: preview-result-in 220ms ease-out both;
 }
 .imgwrap .segcut {
   height: 14px;
@@ -737,6 +753,10 @@ details[open] > summary::before { content: "▾ "; }
 @keyframes preview-progress {
   from { translate: 0 0; }
   to { translate: 210% 0; }
+}
+@keyframes preview-result-in {
+  from { opacity: 0; translate: 0 8px; filter: blur(3px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
 }
 
 /* ---------- badges ---------- */

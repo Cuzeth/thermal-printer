@@ -140,6 +140,7 @@ thanks for reading</textarea>
             <input type="text" id="w-brief-loc" placeholder="city, airport, or zip" value="{{ default_location }}" />
           </label>
           <div class="hero-actions">
+            <button type="button" data-preview-widget="briefing" class="ghost">Preview</button>
             <button data-widget="briefing" class="primary">Print briefing</button>
           </div>
         </div>
@@ -150,10 +151,16 @@ thanks for reading</textarea>
         <article class="wid">
           <h3>Weather <span class="chip chip-live">live</span></h3>
           <p>Current conditions or a 3-day forecast via wttr.in.</p>
-          <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" />
-          <div class="row mini">
-            <button data-widget="weather" data-days="1" class="primary">Now</button>
-            <button data-widget="weather" data-days="3" class="ghost">3-day forecast</button>
+          <label>Location <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" /></label>
+          <label>Report
+            <select id="w-days">
+              <option value="1" selected>right now</option>
+              <option value="3">3-day forecast</option>
+            </select>
+          </label>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="weather" class="ghost">Preview</button>
+            <button data-widget="weather" class="primary">Print weather</button>
           </div>
         </article>
 
@@ -165,7 +172,10 @@ thanks for reading</textarea>
             <label>Month <input type="number" id="w-cal-month" min="1" max="12" placeholder="1-12" /></label>
           </div>
           <p class="muted tiny">leave blank for this month</p>
-          <button data-widget="calendar" class="primary">Print calendar</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="calendar" class="ghost">Preview</button>
+            <button data-widget="calendar" class="primary">Print calendar</button>
+          </div>
         </article>
 
         <article class="wid">
@@ -173,7 +183,10 @@ thanks for reading</textarea>
           <p>Days until (or since) any date.</p>
           <label>Label <input type="text" id="w-cd-label" placeholder="e.g. birthday" value="the big day" /></label>
           <label>Date <input type="date" id="w-cd-date" /></label>
-          <button data-widget="countdown" class="primary">Print countdown</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="countdown" class="ghost">Preview</button>
+            <button data-widget="countdown" class="primary">Print countdown</button>
+          </div>
         </article>
 
         <article class="wid">
@@ -185,7 +198,10 @@ move 20 min
 read
 sleep by 11</textarea>
           </label>
-          <button data-widget="habits" class="primary">Print tracker</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="habits" class="ghost">Preview</button>
+            <button data-widget="habits" class="primary">Print tracker</button>
+          </div>
         </article>
       </div>
 
@@ -197,7 +213,10 @@ sleep by 11</textarea>
           <label>How many <span class="v" id="w-hn-v">5</span>
             <input type="range" id="w-hn-count" min="1" max="10" step="1" value="5" />
           </label>
-          <button data-widget="hn" class="primary">Print top stories</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="hn" class="ghost">Preview</button>
+            <button data-widget="hn" class="primary">Print top stories</button>
+          </div>
         </article>
 
         <article class="wid">
@@ -206,13 +225,19 @@ sleep by 11</textarea>
           <label>How many <span class="v" id="w-otd-v">4</span>
             <input type="range" id="w-otd-count" min="1" max="8" step="1" value="4" />
           </label>
-          <button data-widget="onthisday" class="primary">Print events</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="onthisday" class="ghost">Preview</button>
+            <button data-widget="onthisday" class="primary">Print events</button>
+          </div>
         </article>
 
         <article class="wid">
           <h3>Advice <span class="chip chip-live">live</span></h3>
           <p>A small piece of advice from adviceslip.com.</p>
-          <button data-widget="advice" class="primary">Print advice</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="advice" class="ghost" title="Previews one slip; printing fetches a fresh one">Preview</button>
+            <button data-widget="advice" class="primary">Print advice</button>
+          </div>
         </article>
       </div>
 
@@ -222,10 +247,9 @@ sleep by 11</textarea>
           <h3>Dice <span class="chip chip-offline">offline</span></h3>
           <p>Standard rolls or common presets.</p>
           <div class="row mini">
-            <input type="number" id="w-dice-count" value="2" min="1" max="20" />
+            <input type="number" id="w-dice-count" value="2" min="1" max="20" aria-label="Number of dice" />
             <span>d</span>
-            <input type="number" id="w-dice-sides" value="6" min="2" max="100" />
-            <button data-widget="dice" data-mode="standard" class="primary">Roll</button>
+            <input type="number" id="w-dice-sides" value="6" min="2" max="100" aria-label="Sides per die" />
           </div>
           <div class="chip-row">
             <button data-widget="dice" data-mode="coin" class="ghost tiny">Coin flip</button>
@@ -233,12 +257,19 @@ sleep by 11</textarea>
             <button data-widget="dice" data-mode="advantage" class="ghost tiny">Advantage</button>
             <button data-widget="dice" data-mode="disadvantage" class="ghost tiny">Disadv.</button>
           </div>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="dice" class="ghost" title="Generates a sample; printing rolls again">Preview</button>
+            <button data-widget="dice" data-mode="standard" class="primary">Roll</button>
+          </div>
         </article>
 
         <article class="wid">
           <h3>Now <span class="chip chip-offline">offline</span></h3>
           <p>A timestamp card with week number, day-of-year, and year-progress bar.</p>
-          <button data-widget="now" class="primary">Print now</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="now" class="ghost">Preview</button>
+            <button data-widget="now" class="primary">Print now</button>
+          </div>
         </article>
 
         <article class="wid">
@@ -258,7 +289,10 @@ sleep by 11</textarea>
             <option value="flower">flower</option>
             <option value="snail">snail</option>
           </select>
-          <button data-widget="ascii" class="primary">Print art</button>
+          <div class="action-pair">
+            <button type="button" data-preview-widget="ascii" class="ghost">Preview</button>
+            <button data-widget="ascii" class="primary">Print art</button>
+          </div>
         </article>
       </div>
     </div>
@@ -276,14 +310,20 @@ water the basil
 reply to emails
 ship the thing</textarea>
         </label>
-        <button data-lab="todo" class="primary">Print todo</button>
+        <div class="row">
+          <button type="button" data-preview-lab="todo" class="ghost">Preview</button>
+          <button data-lab="todo" class="primary">Print todo</button>
+        </div>
       </details>
 
       <details>
         <summary><h3 class="inline">Label maker</h3></summary>
         <label>Label text <input id="label-text" type="text" value="FRAGILE" /></label>
         <label class="chk"><input type="checkbox" id="label-big" checked /> chunky</label>
-        <button data-lab="label" class="primary">Print label</button>
+        <div class="row">
+          <button type="button" data-preview-lab="label" class="ghost">Preview</button>
+          <button data-lab="label" class="primary">Print label</button>
+        </div>
       </details>
 
       <details>
@@ -308,7 +348,10 @@ ship the thing</textarea>
           <label>Tax rate % <input id="r-tax" type="number" value="8.75" step="0.01" min="0" /></label>
           <label>Note <input id="r-note" type="text" placeholder="optional" /></label>
         </div>
-        <button data-lab="receipt" class="primary">Print receipt</button>
+        <div class="row">
+          <button type="button" data-preview-lab="receipt" class="ghost">Preview</button>
+          <button data-lab="receipt" class="primary">Print receipt</button>
+        </div>
       </details>
     </div>
 

@@ -8,6 +8,8 @@ const state = {
   activePane: "compose",
   previewSeq: 0,
   previewOwner: null,
+  previewKind: null,
+  previewTrigger: null,
 };
 
 // ---------- tabs ----------
@@ -84,11 +86,12 @@ async function apiFetch(url, init = {}) {
   return j;
 }
 
-async function postJSON(url, data) {
+async function postJSON(url, data, options = {}) {
   return apiFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data || {}),
+    signal: options.signal,
   });
 }
 
@@ -100,26 +103,26 @@ async function getJSON(url) {
   return apiFetch(url, { method: "GET" });
 }
 
+function setButtonBusy(btn, busy) {
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.classList.toggle("is-busy", busy);
+  if (busy) btn.setAttribute("aria-busy", "true");
+  else btn.removeAttribute("aria-busy");
+}
+
 async function guard(fn, okMsg = "sent to printer", btn = null) {
   // Prints are synchronous server-side (a briefing can take 15s+), so
   // disable the trigger while in flight — otherwise the natural move
   // (click again) queues a duplicate behind the USB lock.
-  if (btn) {
-    btn.disabled = true;
-    btn.classList.add("is-busy");
-    btn.setAttribute("aria-busy", "true");
-  }
+  setButtonBusy(btn, true);
   try {
     await fn();
     toast(okMsg, "ok");
   } catch (e) {
     toast(e.message, "err");
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.classList.remove("is-busy");
-      btn.removeAttribute("aria-busy");
-    }
+    setButtonBusy(btn, false);
   }
 }
 
@@ -129,6 +132,8 @@ const PREVIEW_TITLES = {
   compose: "Compose preview",
   image: "Image preview",
   codes: "Code preview",
+  widgets: "Widget preview",
+  labs: "Lab preview",
 };
 
 function setPreviewStatus(label, kind = "idle") {
@@ -182,6 +187,7 @@ function showPreviewImage(url) {
     img.src = u;
     img.alt = urls.length > 1 ? `Receipt preview segment ${i + 1} of ${urls.length}` : "Receipt preview";
     img.decoding = "async";
+    img.className = "preview-result";
     wrap.appendChild(img);
     if (i < urls.length - 1) {
       const sep = document.createElement("div");
@@ -201,6 +207,8 @@ function configurePreviewForPane(pane) {
   // Invalidate any response still in flight from the previous pane.
   state.previewSeq += 1;
   state.previewOwner = null;
+  state.previewKind = null;
+  state.previewTrigger = null;
   const panel = $("#preview-panel");
   if (!PREVIEW_TITLES[pane]) {
     panel.hidden = true;
@@ -215,6 +223,8 @@ function configurePreviewForPane(pane) {
     else showPreviewPlaceholder("Choose an image to preview it here.");
   }
   if (pane === "codes") showPreviewPlaceholder("Choose QR or barcode settings, then preview the code here.");
+  if (pane === "widgets") showPreviewPlaceholder("Choose a widget and preview its receipt before printing.");
+  if (pane === "labs") showPreviewPlaceholder("Open a lab and preview the finished receipt here.");
 }
 
 async function refreshComposePreview() {
@@ -377,86 +387,149 @@ $("#image-print").addEventListener("click", (e) => {
   if (s && v) s.addEventListener("input", () => (v.textContent = s.value));
 });
 
+function widgetPayload(kind, source) {
+  if (kind === "weather") {
+    return { location: $("#w-loc").value, days: Number($("#w-days").value) || 1 };
+  }
+  if (kind === "dice") {
+    return {
+      count: Number($("#w-dice-count").value),
+      sides: Number($("#w-dice-sides").value),
+      mode: source.dataset.mode || "standard",
+    };
+  }
+  if (kind === "ascii") return { name: $("#w-ascii").value };
+  if (kind === "briefing") return { location: $("#w-brief-loc").value };
+  if (kind === "hn") return { count: Number($("#w-hn-count").value) };
+  if (kind === "onthisday") return { count: Number($("#w-otd-count").value) };
+  if (kind === "calendar") {
+    return {
+      year: Number($("#w-cal-year").value) || null,
+      month: Number($("#w-cal-month").value) || null,
+    };
+  }
+  if (kind === "countdown") {
+    return { label: $("#w-cd-label").value, date: $("#w-cd-date").value };
+  }
+  if (kind === "habits") {
+    return {
+      habits: $("#w-habits").value.split("\n").map((s) => s.trim()).filter(Boolean),
+    };
+  }
+  return {};
+}
+
+function previewName(button, fallback) {
+  const heading = button.closest(".wid, details")?.querySelector("h3");
+  const name = heading?.childNodes[0]?.textContent?.trim();
+  return name || fallback;
+}
+
+// Honest status labels: random widgets re-roll on print, live ones
+// re-fetch, and "now" re-stamps the clock — only the deterministic
+// cards print exactly what the preview shows ("Up to date").
+const PREVIEW_FRESHNESS = {
+  dice: "Sample",
+  advice: "Sample",
+  weather: "Live snapshot",
+  briefing: "Live snapshot",
+  hn: "Live snapshot",
+  onthisday: "Live snapshot",
+  now: "Snapshot",
+};
+
+async function previewWidget(button) {
+  const kind = button.dataset.previewWidget;
+  const token = beginPreview("widgets", `${previewName(button, kind)} preview`);
+  if (token === null) return;
+  state.previewKind = kind;
+  state.previewTrigger = button;
+  setButtonBusy(button, true);
+  try {
+    const { data_url } = await postJSON(
+      `/api/admin/preview/widget/${kind}`,
+      widgetPayload(kind, button),
+    );
+    if (!previewIsCurrent("widgets", token)) return;
+    showPreviewImage(data_url);
+    finishPreview("widgets", token, PREVIEW_FRESHNESS[kind] || "Up to date");
+  } catch (e) {
+    if (!previewIsCurrent("widgets", token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview("widgets", token, "Failed", "error");
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+$$("button[data-preview-widget]").forEach((button) => {
+  button.addEventListener("click", () => previewWidget(button));
+});
+
 $$("button[data-widget]").forEach((b) => {
   b.addEventListener("click", () => {
     const kind = b.dataset.widget;
     guard(async () => {
-      if (kind === "weather") {
-        await postJSON("/api/admin/print/weather", {
-          location: $("#w-loc").value,
-          days: Number(b.dataset.days || 1),
-        });
-      } else if (kind === "dice") {
-        await postJSON("/api/admin/print/dice", {
-          count: Number($("#w-dice-count").value),
-          sides: Number($("#w-dice-sides").value),
-          mode: b.dataset.mode || "standard",
-        });
-      } else if (kind === "ascii") {
-        await postJSON("/api/admin/print/ascii", { name: $("#w-ascii").value });
-      } else if (kind === "briefing") {
-        await postJSON("/api/admin/print/briefing", {
-          location: $("#w-brief-loc").value,
-        });
-      } else if (kind === "hn") {
-        await postJSON("/api/admin/print/hn", {
-          count: Number($("#w-hn-count").value),
-        });
-      } else if (kind === "onthisday") {
-        await postJSON("/api/admin/print/onthisday", {
-          count: Number($("#w-otd-count").value),
-        });
-      } else if (kind === "calendar") {
-        await postJSON("/api/admin/print/calendar", {
-          year: Number($("#w-cal-year").value) || null,
-          month: Number($("#w-cal-month").value) || null,
-        });
-      } else if (kind === "countdown") {
-        await postJSON("/api/admin/print/countdown", {
-          label: $("#w-cd-label").value,
-          date: $("#w-cd-date").value,
-        });
-      } else if (kind === "habits") {
-        const habits = $("#w-habits").value.split("\n")
-          .map((s) => s.trim()).filter(Boolean);
-        await postJSON("/api/admin/print/habits", { habits });
-      } else {
-        await postJSON(`/api/admin/print/${kind}`, {});
-      }
+      await postJSON(`/api/admin/print/${kind}`, widgetPayload(kind, b));
     }, kind === "briefing" ? "briefing printed" : "printed", b);
   });
 });
 
 // ---------- labs ----------
 
+function labPayload(kind) {
+  if (kind === "todo") {
+    return { title: $("#todo-title").value, items: $("#todo-items").value.split("\n") };
+  }
+  if (kind === "label") {
+    return { text: $("#label-text").value, big: $("#label-big").checked };
+  }
+  if (kind === "receipt") {
+    const items = $$(".ritem").map((row) => ({
+      name: $(".r-name", row).value,
+      qty: Number($(".r-qty", row).value) || 1,
+      price: Number($(".r-price", row).value) || 0,
+    })).filter((item) => item.name.trim());
+    return {
+      store: $("#r-store").value,
+      items,
+      tax_rate: Number($("#r-tax").value) || 0,
+      note: $("#r-note").value,
+    };
+  }
+  return {};
+}
+
+async function previewLab(button) {
+  const kind = button.dataset.previewLab;
+  const token = beginPreview("labs", `${previewName(button, kind)} preview`);
+  if (token === null) return;
+  state.previewKind = kind;
+  state.previewTrigger = button;
+  setButtonBusy(button, true);
+  try {
+    const { data_url } = await postJSON(`/api/admin/preview/lab/${kind}`, labPayload(kind));
+    if (!previewIsCurrent("labs", token)) return;
+    showPreviewImage(data_url);
+    finishPreview("labs", token);
+  } catch (e) {
+    if (!previewIsCurrent("labs", token)) return;
+    showPreviewText("Preview unavailable\n\n" + e.message);
+    finishPreview("labs", token, "Failed", "error");
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+$$("button[data-preview-lab]").forEach((button) => {
+  button.addEventListener("click", () => previewLab(button));
+});
+
 $$("button[data-lab]").forEach((b) => {
   b.addEventListener("click", () => {
     const kind = b.dataset.lab;
     guard(async () => {
-      if (kind === "todo") {
-        const items = $("#todo-items").value.split("\n");
-        await postJSON("/api/admin/print/todo", {
-          title: $("#todo-title").value,
-          items,
-        });
-      } else if (kind === "label") {
-        await postJSON("/api/admin/print/label", {
-          text: $("#label-text").value,
-          big: $("#label-big").checked,
-        });
-      } else if (kind === "receipt") {
-        const items = $$(".ritem").map((row) => ({
-          name: $(".r-name", row).value,
-          qty: Number($(".r-qty", row).value) || 1,
-          price: Number($(".r-price", row).value) || 0,
-        })).filter((i) => i.name.trim());
-        await postJSON("/api/admin/print/receipt", {
-          store: $("#r-store").value,
-          items,
-          tax_rate: Number($("#r-tax").value) || 0,
-          note: $("#r-note").value,
-        });
-      }
+      await postJSON(`/api/admin/print/${kind}`, labPayload(kind));
     }, "printed", b);
   });
 });
@@ -490,14 +563,43 @@ function makeReceiptRow() {
   return row;
 }
 
-$("#r-add").addEventListener("click", () => {
+$("#r-add").addEventListener("click", (e) => {
   $("#r-items").appendChild(makeReceiptRow());
+  scheduleToolPreview("labs", e.currentTarget);
 });
 $("#r-items").addEventListener("click", (e) => {
   if (e.target.classList.contains("r-del")) {
     const rows = $$(".ritem");
-    if (rows.length > 1) e.target.closest(".ritem").remove();
+    if (rows.length > 1) {
+      e.target.closest(".ritem").remove();
+      // The clicked delete button is already detached, so it would fail the
+      // containment check — hand over the list container instead.
+      scheduleToolPreview("labs", $("#r-items"));
+    }
   }
+});
+
+// Once the user asks for an offline preview, keep that one receipt in sync
+// as its fields change. Network-backed widgets stay manual to avoid turning
+// every keystroke into an external API request on the Pi.
+const AUTO_PREVIEW_WIDGETS = new Set(["calendar", "countdown", "habits", "ascii"]);
+let toolPreviewT;
+function scheduleToolPreview(owner, origin) {
+  if (state.previewOwner !== owner || !state.previewTrigger) return;
+  if (owner === "widgets" && !AUTO_PREVIEW_WIDGETS.has(state.previewKind)) return;
+  // Only edits inside the previewed card count — typing in a neighboring
+  // widget shouldn't re-render this one.
+  if (origin && !state.previewTrigger.closest(".wid, details")?.contains(origin)) return;
+  clearTimeout(toolPreviewT);
+  toolPreviewT = setTimeout(() => {
+    if (owner === "widgets") previewWidget(state.previewTrigger);
+    if (owner === "labs") previewLab(state.previewTrigger);
+  }, 420);
+}
+
+["input", "change"].forEach((eventName) => {
+  $("#pane-widgets").addEventListener(eventName, (e) => scheduleToolPreview("widgets", e.target));
+  $("#pane-labs").addEventListener(eventName, (e) => scheduleToolPreview("labs", e.target));
 });
 
 // ---------- codes (QR + barcodes) ----------
