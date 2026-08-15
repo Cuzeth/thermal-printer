@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A little receipt on a dark tile, same palette as style.css:
+       tile between --bg and --panel, paper --paper, print lines in
+       --paper-ink with a --accent header. The torn zigzag bottom is what
+       makes it read as "receipt" at 16px, so keep the teeth chunky. -->
+  <rect width="64" height="64" rx="14" fill="#12141b"/>
+  <path fill="#f5efd8" d="M18 9h28v38l-3.5 6-3.5-6-3.5 6-3.5-6-3.5 6-3.5-6-3.5 6-3.5-6z"/>
+  <rect x="22" y="14" width="20" height="4" rx="1" fill="#f7b42c"/>
+  <rect x="22" y="22" width="20" height="3" rx="1" fill="#1a1915"/>
+  <rect x="22" y="28" width="14" height="3" rx="1" fill="#1a1915"/>
+  <rect x="22" y="34" width="20" height="3" rx="1" fill="#1a1915"/>
+  <rect x="22" y="40" width="9" height="3" rx="1" fill="#1a1915"/>
+  <rect x="36" y="40" width="6" height="3" rx="1" fill="#f7b42c"/>
+</svg>

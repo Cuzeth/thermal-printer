@@ -17,7 +17,7 @@ import traceback
 from datetime import datetime, time as dt_time, timedelta
 from typing import Any, Callable
 
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 import config
@@ -85,6 +85,20 @@ def friends_index():
 def legacy_friends_redirect():
     # Friends' bookmarks predate the /m -> / move; don't 404 them.
     return redirect("/", code=301)
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    # Browsers probe this exact root path regardless of <link> tags.
+    # Deliberately ungated, same as /static/*.
+    return send_from_directory(app.static_folder, "favicon.ico")
+
+
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def apple_touch_icon():
+    # iOS probes these root paths too when someone shares or pins the page.
+    return send_from_directory(app.static_folder, "apple-touch-icon.png")
 
 
 @app.route("/admin")
