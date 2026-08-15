@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Thermal Printer Console</title>
+  <title>thermal printer</title>
   <meta name="theme-color" content="#090a0d" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png" sizes="32x32" />
@@ -20,19 +20,19 @@
       <span class="sub"><span class="status-dot {{ 'status-dot-dry' if dry_run else '' }}" aria-hidden="true"></span>{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}dry run{% else %}live mode{% endif %}</span>
     </span>
   </div>
-  <nav class="tabs" role="tablist" aria-label="Console sections">
-    <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0">Compose</button>
-    <button class="tab"        data-tab="image"    role="tab" id="tab-image"    aria-controls="pane-image"    aria-selected="false" tabindex="-1">Image</button>
-    <button class="tab"        data-tab="codes"    role="tab" id="tab-codes"    aria-controls="pane-codes"    aria-selected="false" tabindex="-1">Codes</button>
-    <button class="tab"        data-tab="widgets"  role="tab" id="tab-widgets"  aria-controls="pane-widgets"  aria-selected="false" tabindex="-1">Widgets</button>
-    <button class="tab"        data-tab="labs"     role="tab" id="tab-labs"     aria-controls="pane-labs"     aria-selected="false" tabindex="-1">Labs</button>
-    <button class="tab"        data-tab="hardware" role="tab" id="tab-hardware" aria-controls="pane-hardware" aria-selected="false" tabindex="-1">Hardware</button>
-    <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">Console</button>
-    <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">Admin</button>
+  <nav class="tabs" role="tablist" aria-label="console sections">
+    <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0">compose</button>
+    <button class="tab"        data-tab="image"    role="tab" id="tab-image"    aria-controls="pane-image"    aria-selected="false" tabindex="-1">image</button>
+    <button class="tab"        data-tab="codes"    role="tab" id="tab-codes"    aria-controls="pane-codes"    aria-selected="false" tabindex="-1">codes</button>
+    <button class="tab"        data-tab="widgets"  role="tab" id="tab-widgets"  aria-controls="pane-widgets"  aria-selected="false" tabindex="-1">widgets</button>
+    <button class="tab"        data-tab="labs"     role="tab" id="tab-labs"     aria-controls="pane-labs"     aria-selected="false" tabindex="-1">labs</button>
+    <button class="tab"        data-tab="hardware" role="tab" id="tab-hardware" aria-controls="pane-hardware" aria-selected="false" tabindex="-1">hardware</button>
+    <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">console</button>
+    <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">admin</button>
   </nav>
   <div class="account-actions">
-    <span class="session-label">Owner session</span>
-    <button type="button" class="ghost tiny signout" id="signout" title="End the owner session">Sign out</button>
+    <span class="session-label">signed in</span>
+    <button type="button" class="ghost tiny signout" id="signout" title="sign out">sign out</button>
   </div>
 </header>
 
@@ -42,243 +42,239 @@
 
     <!-- Compose tab -->
     <div class="tabpane active" data-pane="compose" role="tabpanel" id="pane-compose" aria-labelledby="tab-compose" tabindex="0">
-      <h2>Rich text composer</h2>
+      <h2>text</h2>
       <p class="help">
-        Markup: <code># Heading</code>, <code>## Sub</code>, <code>&gt; centered</code>,
+        formatting: <code># heading</code>, <code>## subheading</code>, <code>&gt; centered</code>,
         <code>- bullet</code>, <code>[ ] todo</code>, <code>[x] done</code>,
         <code>---</code>, <code>===</code>, <code>!!!</code> (cut here).
-        Inline: <code>**bold**</code>, <code>*italic*</code>, <code>__underline__</code>, <code>~big~</code>.
+        inline: <code>**bold**</code>, <code>*italic*</code>, <code>__underline__</code>, <code>~big~</code>
       </p>
-      <label class="sr-only" for="compose-body">Receipt contents</label>
-      <textarea id="compose-body" rows="18" spellcheck="false"># HELLO WORLD
+      <label class="sr-only" for="compose-body">print contents</label>
+      <textarea id="compose-body" rows="18" spellcheck="false"># TEST PRINT
 ===
 
-> a note from the printer
-> {{ '' }}to whom it may concern
+> yep, the printer works
 
-This is **bold**, *italic*, and __underline__
-and ~BIG~ text.
+**bold**, *italic*, __underline__, and ~BIG~
 
 - first thing
 - second thing
-- third thing
 
 [ ] task one
-[ ] task two
-[x] task three
+[x] task two
 
 ---
 
-thanks for reading</textarea>
+that's it</textarea>
 
       <div class="row">
         <label class="chk"><input type="checkbox" id="compose-rich" checked /> pretty font (render as image)</label>
         <label class="chk"><input type="checkbox" id="compose-cut" checked /> cut paper after print</label>
       </div>
       <div class="row">
-        <button id="compose-preview" class="ghost">Refresh preview</button>
-        <button id="compose-print" class="primary">Print</button>
+        <button id="compose-preview" class="ghost">refresh preview</button>
+        <button id="compose-print" class="primary">print</button>
       </div>
     </div>
 
     <!-- Image tab -->
     <div class="tabpane" data-pane="image" role="tabpanel" id="pane-image" aria-labelledby="tab-image" tabindex="0">
-      <h2>Image printer</h2>
-      <p class="help">Drop an image, tune it, print it. Floyd-Steinberg dithering by default.</p>
+      <h2>image</h2>
+      <p class="help">photos use Floyd-Steinberg dithering by default.</p>
 
-      <div id="drop" class="drop" role="button" tabindex="0" aria-controls="image-file" aria-label="Choose or drop an image to print">
+      <div id="drop" class="drop" role="button" tabindex="0" aria-controls="image-file" aria-label="choose or drop an image">
         <input type="file" id="image-file" accept="image/*" hidden />
         <div class="drop-inner">
           <div class="drop-icon" aria-hidden="true">⬚</div>
-          <div><strong>Click or drop an image</strong></div>
+          <div><strong>click or drop an image</strong></div>
           <div class="muted">PNG · JPG · GIF · WEBP</div>
         </div>
       </div>
 
       <div class="grid2">
-        <label>Mode
+        <label>mode
           <select id="img-mode">
-            <option value="dither" selected>Dither (Floyd-Steinberg)</option>
-            <option value="threshold">Threshold</option>
-            <option value="grayscale">Grayscale</option>
+            <option value="dither" selected>dither (Floyd-Steinberg)</option>
+            <option value="threshold">threshold</option>
+            <option value="grayscale">grayscale</option>
           </select>
         </label>
-        <label>Width (px)
+        <label>width (px)
           <input type="number" id="img-width" value="{{ pixel_width }}" min="64" max="{{ pixel_width }}" step="8" />
         </label>
-        <label>Contrast <span class="v" id="img-contrast-v">1.0</span>
+        <label>contrast <span class="v" id="img-contrast-v">1.0</span>
           <input type="range" id="img-contrast" min="0.3" max="3.0" step="0.05" value="1.0" />
         </label>
-        <label>Brightness <span class="v" id="img-brightness-v">1.0</span>
+        <label>brightness <span class="v" id="img-brightness-v">1.0</span>
           <input type="range" id="img-brightness" min="0.3" max="3.0" step="0.05" value="1.0" />
         </label>
-        <label>Threshold <span class="v" id="img-threshold-v">128</span>
+        <label>threshold <span class="v" id="img-threshold-v">128</span>
           <input type="range" id="img-threshold" min="0" max="255" step="1" value="128" />
         </label>
         <label class="chk"><input type="checkbox" id="img-invert" /> invert</label>
       </div>
 
-      <label>Caption (optional)
+      <label>caption (optional)
         <input type="text" id="img-caption" placeholder="printed under the image" />
       </label>
 
       <div class="row">
-        <button id="image-refresh" class="ghost">Refresh preview</button>
-        <button id="image-print" class="primary" disabled>Print</button>
+        <button id="image-refresh" class="ghost">refresh preview</button>
+        <button id="image-print" class="primary" disabled>print</button>
       </div>
     </div>
 
     <!-- Widgets tab -->
     <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
-      <h2>Widgets</h2>
-      <p class="help">One-click prints. Some pull live data; the rest work offline.</p>
+      <h2>widgets</h2>
+      <p class="help">live widgets need internet.</p>
 
       <!-- Hero: morning briefing combines several live widgets into one scroll. -->
       <article class="wid wid-wide wid-hero">
         <div class="wid-head">
-          <h3>Morning briefing <span class="chip chip-hero">combo</span></h3>
-          <p>Weather + top Hacker News + on-this-day history, printed as one long tear-off scroll. Perfect with coffee.</p>
+          <h3>morning briefing <span class="chip chip-hero">combo</span></h3>
+          <p>weather, Hacker News, and on this day</p>
         </div>
         <div class="grid2">
-          <label>Location
+          <label>location
             <input type="text" id="w-brief-loc" placeholder="city, airport, or zip" value="{{ default_location }}" />
           </label>
           <div class="hero-actions">
-            <button type="button" data-preview-widget="briefing" class="ghost">Preview</button>
-            <button data-widget="briefing" class="primary">Print briefing</button>
+            <button type="button" data-preview-widget="briefing" class="ghost">preview</button>
+            <button data-widget="briefing" class="primary">print briefing</button>
           </div>
         </div>
       </article>
 
-      <h3 class="wid-section">Daily</h3>
+      <h3 class="wid-section">daily</h3>
       <div class="widgets">
         <article class="wid">
-          <h3>Weather <span class="chip chip-live">live</span></h3>
-          <p>Current conditions or a 3-day forecast via wttr.in.</p>
-          <label>Location <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" /></label>
-          <label>Report
+          <h3>weather <span class="chip chip-live">live</span></h3>
+          <p>current conditions or three-day forecast</p>
+          <label>location <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" /></label>
+          <label>report
             <select id="w-days">
               <option value="1" selected>right now</option>
               <option value="3">3-day forecast</option>
             </select>
           </label>
           <div class="action-pair">
-            <button type="button" data-preview-widget="weather" class="ghost">Preview</button>
-            <button data-widget="weather" class="primary">Print weather</button>
+            <button type="button" data-preview-widget="weather" class="ghost">preview</button>
+            <button data-widget="weather" class="primary">print weather</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Calendar <span class="chip chip-offline">offline</span></h3>
-          <p>A printable month grid with today bracketed.</p>
+          <h3>calendar <span class="chip chip-offline">offline</span></h3>
+          <p>month grid with today marked</p>
           <div class="grid2">
-            <label>Year <input type="number" id="w-cal-year" min="1900" max="2100" /></label>
-            <label>Month <input type="number" id="w-cal-month" min="1" max="12" placeholder="1-12" /></label>
+            <label>year <input type="number" id="w-cal-year" min="1900" max="2100" /></label>
+            <label>month <input type="number" id="w-cal-month" min="1" max="12" placeholder="1-12" /></label>
           </div>
           <p class="muted tiny">leave blank for this month</p>
           <div class="action-pair">
-            <button type="button" data-preview-widget="calendar" class="ghost">Preview</button>
-            <button data-widget="calendar" class="primary">Print calendar</button>
+            <button type="button" data-preview-widget="calendar" class="ghost">preview</button>
+            <button data-widget="calendar" class="primary">print calendar</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Countdown <span class="chip chip-offline">offline</span></h3>
-          <p>Days until (or since) any date.</p>
-          <label>Label <input type="text" id="w-cd-label" placeholder="e.g. birthday" value="the big day" /></label>
-          <label>Date <input type="date" id="w-cd-date" /></label>
+          <h3>countdown <span class="chip chip-offline">offline</span></h3>
+          <p>days before or after a date</p>
+          <label>label <input type="text" id="w-cd-label" placeholder="birthday" value="event" /></label>
+          <label>date <input type="date" id="w-cd-date" /></label>
           <div class="action-pair">
-            <button type="button" data-preview-widget="countdown" class="ghost">Preview</button>
-            <button data-widget="countdown" class="primary">Print countdown</button>
+            <button type="button" data-preview-widget="countdown" class="ghost">preview</button>
+            <button data-widget="countdown" class="primary">print countdown</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Habit tracker <span class="chip chip-offline">offline</span></h3>
-          <p>Weekly grid — one row per habit, one dot per day.</p>
-          <label>Habits (one per line)
+          <h3>habit tracker <span class="chip chip-offline">offline</span></h3>
+          <p>one row per habit</p>
+          <label>habits (one per line)
             <textarea id="w-habits" rows="4">drink water
 move 20 min
 read
 sleep by 11</textarea>
           </label>
           <div class="action-pair">
-            <button type="button" data-preview-widget="habits" class="ghost">Preview</button>
-            <button data-widget="habits" class="primary">Print tracker</button>
+            <button type="button" data-preview-widget="habits" class="ghost">preview</button>
+            <button data-widget="habits" class="primary">print tracker</button>
           </div>
         </article>
       </div>
 
-      <h3 class="wid-section">News &amp; learning</h3>
+      <h3 class="wid-section">news</h3>
       <div class="widgets">
         <article class="wid">
           <h3>Hacker News <span class="chip chip-live">live</span></h3>
-          <p>Top stories from news.ycombinator.com — titles, score, domain.</p>
-          <label>How many <span class="v" id="w-hn-v">5</span>
+          <p>top stories</p>
+          <label>count <span class="v" id="w-hn-v">5</span>
             <input type="range" id="w-hn-count" min="1" max="10" step="1" value="5" />
           </label>
           <div class="action-pair">
-            <button type="button" data-preview-widget="hn" class="ghost">Preview</button>
-            <button data-widget="hn" class="primary">Print top stories</button>
+            <button type="button" data-preview-widget="hn" class="ghost">preview</button>
+            <button data-widget="hn" class="primary">print stories</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>On this day <span class="chip chip-live">live</span></h3>
-          <p>Wikipedia's historical events for today's date.</p>
-          <label>How many <span class="v" id="w-otd-v">4</span>
+          <h3>on this day <span class="chip chip-live">live</span></h3>
+          <p>Wikipedia events for today</p>
+          <label>count <span class="v" id="w-otd-v">4</span>
             <input type="range" id="w-otd-count" min="1" max="8" step="1" value="4" />
           </label>
           <div class="action-pair">
-            <button type="button" data-preview-widget="onthisday" class="ghost">Preview</button>
-            <button data-widget="onthisday" class="primary">Print events</button>
+            <button type="button" data-preview-widget="onthisday" class="ghost">preview</button>
+            <button data-widget="onthisday" class="primary">print events</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Advice <span class="chip chip-live">live</span></h3>
-          <p>A small piece of advice from adviceslip.com.</p>
+          <h3>advice <span class="chip chip-live">live</span></h3>
+          <p>one random line</p>
           <div class="action-pair">
-            <button type="button" data-preview-widget="advice" class="ghost" title="Previews one slip; printing fetches a fresh one">Preview</button>
-            <button data-widget="advice" class="primary">Print advice</button>
+            <button type="button" data-preview-widget="advice" class="ghost" title="preview and print use different lines">preview</button>
+            <button data-widget="advice" class="primary">print advice</button>
           </div>
         </article>
       </div>
 
-      <h3 class="wid-section">Fun &amp; tools</h3>
+      <h3 class="wid-section">tools</h3>
       <div class="widgets">
         <article class="wid">
-          <h3>Dice <span class="chip chip-offline">offline</span></h3>
-          <p>Standard rolls or common presets.</p>
+          <h3>dice <span class="chip chip-offline">offline</span></h3>
+          <p>custom roll or preset</p>
           <div class="row mini">
-            <input type="number" id="w-dice-count" value="2" min="1" max="20" aria-label="Number of dice" />
+            <input type="number" id="w-dice-count" value="2" min="1" max="20" aria-label="number of dice" />
             <span>d</span>
-            <input type="number" id="w-dice-sides" value="6" min="2" max="100" aria-label="Sides per die" />
+            <input type="number" id="w-dice-sides" value="6" min="2" max="100" aria-label="sides per die" />
           </div>
           <div class="chip-row">
-            <button data-widget="dice" data-mode="coin" class="ghost tiny">Coin flip</button>
+            <button data-widget="dice" data-mode="coin" class="ghost tiny">coin flip</button>
             <button data-widget="dice" data-mode="d20" class="ghost tiny">d20</button>
-            <button data-widget="dice" data-mode="advantage" class="ghost tiny">Advantage</button>
-            <button data-widget="dice" data-mode="disadvantage" class="ghost tiny">Disadv.</button>
+            <button data-widget="dice" data-mode="advantage" class="ghost tiny">advantage</button>
+            <button data-widget="dice" data-mode="disadvantage" class="ghost tiny">disadv.</button>
           </div>
           <div class="action-pair">
-            <button type="button" data-preview-widget="dice" class="ghost" title="Generates a sample; printing rolls again">Preview</button>
-            <button data-widget="dice" data-mode="standard" class="primary">Roll</button>
+            <button type="button" data-preview-widget="dice" class="ghost" title="preview and print use different rolls">preview</button>
+            <button data-widget="dice" data-mode="standard" class="primary">roll</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Now <span class="chip chip-offline">offline</span></h3>
-          <p>A timestamp card with week number, day-of-year, and year-progress bar.</p>
+          <h3>now <span class="chip chip-offline">offline</span></h3>
+          <p>time, week, day, and year progress</p>
           <div class="action-pair">
-            <button type="button" data-preview-widget="now" class="ghost">Preview</button>
-            <button data-widget="now" class="primary">Print now</button>
+            <button type="button" data-preview-widget="now" class="ghost">preview</button>
+            <button data-widget="now" class="primary">print now</button>
           </div>
         </article>
 
         <article class="wid">
           <h3>ASCII art <span class="chip chip-offline">offline</span></h3>
-          <p>Retro printable art for the fridge door.</p>
+          <p>text drawings</p>
           <select id="w-ascii">
             <option value="cat">cat</option>
             <option value="dog">dog</option>
@@ -294,8 +290,8 @@ sleep by 11</textarea>
             <option value="snail">snail</option>
           </select>
           <div class="action-pair">
-            <button type="button" data-preview-widget="ascii" class="ghost">Preview</button>
-            <button data-widget="ascii" class="primary">Print art</button>
+            <button type="button" data-preview-widget="ascii" class="ghost">preview</button>
+            <button data-widget="ascii" class="primary">print art</button>
           </div>
         </article>
       </div>
@@ -303,36 +299,36 @@ sleep by 11</textarea>
 
     <!-- Labs tab -->
     <div class="tabpane" data-pane="labs" role="tabpanel" id="pane-labs" aria-labelledby="tab-labs" tabindex="0">
-      <h2>Labs</h2>
+      <h2>labs</h2>
 
       <details open>
-        <summary><h3 class="inline">✓ Todo list</h3></summary>
-        <label>Title <input id="todo-title" type="text" value="TODAY" /></label>
-        <label>Items (one per line)
+        <summary><h3 class="inline">todo list</h3></summary>
+        <label>title <input id="todo-title" type="text" value="TODAY" /></label>
+        <label>items (one per line)
           <textarea id="todo-items" rows="6">pick up milk
 water the basil
 reply to emails
-ship the thing</textarea>
+mail package</textarea>
         </label>
         <div class="row">
-          <button type="button" data-preview-lab="todo" class="ghost">Preview</button>
-          <button data-lab="todo" class="primary">Print todo</button>
+          <button type="button" data-preview-lab="todo" class="ghost">preview</button>
+          <button data-lab="todo" class="primary">print todo</button>
         </div>
       </details>
 
       <details>
-        <summary><h3 class="inline">Label maker</h3></summary>
-        <label>Label text <input id="label-text" type="text" value="FRAGILE" /></label>
+        <summary><h3 class="inline">label maker</h3></summary>
+        <label>label text <input id="label-text" type="text" value="FRAGILE" /></label>
         <label class="chk"><input type="checkbox" id="label-big" checked /> chunky</label>
         <div class="row">
-          <button type="button" data-preview-lab="label" class="ghost">Preview</button>
-          <button data-lab="label" class="primary">Print label</button>
+          <button type="button" data-preview-lab="label" class="ghost">preview</button>
+          <button data-lab="label" class="primary">print label</button>
         </div>
       </details>
 
       <details>
-        <summary><h3 class="inline">Fake receipt</h3></summary>
-        <label>Store name <input id="r-store" type="text" value="MOM'S DELI" /></label>
+        <summary><h3 class="inline">fake receipt</h3></summary>
+        <label>store name <input id="r-store" type="text" value="MOM'S DELI" /></label>
         <div id="r-items">
           <div class="ritem">
             <input class="r-name" placeholder="item" value="bagel" />
@@ -349,47 +345,47 @@ ship the thing</textarea>
         </div>
         <button id="r-add" class="ghost">+ add item</button>
         <div class="grid2">
-          <label>Tax rate % <input id="r-tax" type="number" value="8.75" step="0.01" min="0" /></label>
-          <label>Note <input id="r-note" type="text" placeholder="optional" /></label>
+          <label>tax rate % <input id="r-tax" type="number" value="8.75" step="0.01" min="0" /></label>
+          <label>note <input id="r-note" type="text" placeholder="optional" /></label>
         </div>
         <div class="row">
-          <button type="button" data-preview-lab="receipt" class="ghost">Preview</button>
-          <button data-lab="receipt" class="primary">Print receipt</button>
+          <button type="button" data-preview-lab="receipt" class="ghost">preview</button>
+          <button data-lab="receipt" class="primary">print receipt</button>
         </div>
       </details>
     </div>
 
     <!-- Codes tab -->
     <div class="tabpane" data-pane="codes" role="tabpanel" id="pane-codes" aria-labelledby="tab-codes" tabindex="0">
-      <h2>QR & Barcodes</h2>
-      <p class="help">Previews are rendered locally; prints are sent as native ESC/POS commands (sharper).</p>
+      <h2>QR + barcodes</h2>
+      <p class="help">prints use native ESC/POS.</p>
 
       <details open>
         <summary><h3 class="inline">QR code</h3></summary>
-        <label>Data <input type="text" id="qr-data" value="https://github.com" /></label>
+        <label>data <input type="text" id="qr-data" value="https://github.com" /></label>
         <div class="grid2">
-          <label>Error correction
+          <label>error correction
             <select id="qr-ec">
-              <option value="L">L — low (~7%)</option>
-              <option value="M" selected>M — medium (~15%)</option>
-              <option value="Q">Q — quartile (~25%)</option>
-              <option value="H">H — high (~30%)</option>
+              <option value="L">L / low / ~7%</option>
+              <option value="M" selected>M / medium / ~15%</option>
+              <option value="Q">Q / quartile / ~25%</option>
+              <option value="H">H / high / ~30%</option>
             </select>
           </label>
-          <label>Module size <span class="v" id="qr-size-v">8</span>
+          <label>module size <span class="v" id="qr-size-v">8</span>
             <input type="range" id="qr-size" min="1" max="16" step="1" value="8" />
           </label>
         </div>
         <div class="row">
-          <button id="qr-refresh" class="ghost">Preview</button>
-          <button id="qr-print" class="primary">Print QR</button>
+          <button id="qr-refresh" class="ghost">preview</button>
+          <button id="qr-print" class="primary">print QR</button>
         </div>
       </details>
 
       <details>
         <summary><h3 class="inline">▯▮▯  1D barcode</h3></summary>
         <div class="grid2">
-          <label>Type
+          <label>type
             <select id="bc-kind">
               <option>CODE128</option>
               <option>CODE39</option>
@@ -400,18 +396,18 @@ ship the thing</textarea>
               <option>CODABAR</option>
             </select>
           </label>
-          <label>Data <input type="text" id="bc-data" value="HELLO123" /></label>
+          <label>data <input type="text" id="bc-data" value="HELLO123" /></label>
         </div>
         <div class="grid2">
-          <label>Width <span class="v" id="bc-width-v">3</span>
+          <label>width <span class="v" id="bc-width-v">3</span>
             <input type="range" id="bc-width" min="2" max="6" step="1" value="3" />
           </label>
-          <label>Height <span class="v" id="bc-height-v">80</span>
+          <label>height <span class="v" id="bc-height-v">80</span>
             <input type="range" id="bc-height" min="20" max="200" step="5" value="80" />
           </label>
         </div>
         <div class="grid2">
-          <label>Readable text
+          <label>readable text
             <select id="bc-hri">
               <option>OFF</option>
               <option>ABOVE</option>
@@ -427,92 +423,92 @@ ship the thing</textarea>
           </label>
         </div>
         <div class="row">
-          <button id="bc-refresh" class="ghost">Preview</button>
-          <button id="bc-print" class="primary">Print barcode</button>
+          <button id="bc-refresh" class="ghost">preview</button>
+          <button id="bc-print" class="primary">print barcode</button>
         </div>
       </details>
     </div>
 
     <!-- Hardware tab -->
     <div class="tabpane" data-pane="hardware" role="tabpanel" id="pane-hardware" aria-labelledby="tab-hardware" tabindex="0">
-      <h2>Hardware control</h2>
-      <p class="help">Direct printer commands. Buzzer, density, code-page, and self-test aren't supported on every model — try them and see.</p>
+      <h2>hardware</h2>
+      <p class="help">some commands may not work on this printer.</p>
 
       <div class="widgets">
         <article class="wid">
-          <h3>Cash drawer <span class="tip" data-tip="Sends an electrical pulse through the RJ11 cash-drawer jack to pop the drawer. Most modern drawers wire to pin 2; pin 5 is an older alternative — try pin 5 only if pin 2 does nothing.">?</span></h3>
-          <p>Pop open the till.</p>
+          <h3>cash drawer <span class="tip" data-tip="sends a pulse through the RJ11 jack. most drawers use pin 2. try pin 5 if needed.">?</span></h3>
+          <p>drawer-open pulse</p>
           <div class="row mini">
-            <button data-hw="cash_drawer" data-pin="2" class="primary">Kick pin 2</button>
-            <button data-hw="cash_drawer" data-pin="5" class="ghost">Kick pin 5</button>
+            <button data-hw="cash_drawer" data-pin="2" class="primary">pin 2</button>
+            <button data-hw="cash_drawer" data-pin="5" class="ghost">pin 5</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Beep <span class="tip" data-tip="Fires the printer's built-in buzzer. 'count' is how many beeps in a row (1-9). 'dur' is each beep's length in 100ms units (so 3 = 300ms). Not every model has a buzzer wired up.">?</span></h3>
+          <h3>beep <span class="tip" data-tip="count sets the number of beeps. duration uses 100ms units. some printers have no buzzer.">?</span></h3>
           <div class="row mini">
             <label>× <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
             <label>dur <input type="number" id="hw-beep-dur" value="3" min="1" max="9" /></label>
           </div>
-          <button data-hw="beep" class="primary">Beep</button>
+          <button data-hw="beep" class="primary">beep</button>
         </article>
 
         <article class="wid">
-          <h3>Feed <span class="tip" data-tip="Advance the paper by N blank lines without printing or cutting. Handy to push a receipt past the tear bar so you can grab it.">?</span></h3>
-          <label>Lines <span class="v" id="hw-feed-v">3</span>
+          <h3>feed <span class="tip" data-tip="advances the paper without printing or cutting.">?</span></h3>
+          <label>lines <span class="v" id="hw-feed-v">3</span>
             <input type="range" id="hw-feed" min="1" max="20" step="1" value="3" />
           </label>
-          <button data-hw="feed" class="primary">Feed</button>
+          <button data-hw="feed" class="primary">feed</button>
         </article>
 
         <article class="wid">
-          <h3>Cut <span class="tip" data-tip="Full cut slices all the way across. Partial leaves a tiny paper bridge so the receipt dangles — common in kitchens where orders should hang until someone tears them off.">?</span></h3>
+          <h3>cut <span class="tip" data-tip="full cuts across the roll. partial leaves a paper bridge.">?</span></h3>
           <div class="row mini">
-            <button data-hw="cut" data-partial="false" class="primary">Full cut</button>
-            <button data-hw="cut" data-partial="true" class="ghost">Partial</button>
+            <button data-hw="cut" data-partial="false" class="primary">full</button>
+            <button data-hw="cut" data-partial="true" class="ghost">partial</button>
           </div>
         </article>
 
         <article class="wid">
-          <h3>Density <span class="tip" data-tip="Print darkness, 0 = lightest and 15 = darkest. Higher = darker text but slower printing and more heat on the print head. Bump it up if your receipts look faded; drop it if they're too dark or the head is running hot. Some printers ignore this command.">?</span></h3>
-          <label>Level <span class="v" id="hw-dens-v">8</span>
+          <h3>density <span class="tip" data-tip="0 is lightest. 15 is darkest. higher values heat the print head more. some printers ignore this.">?</span></h3>
+          <label>level <span class="v" id="hw-dens-v">8</span>
             <input type="range" id="hw-dens" min="0" max="15" step="1" value="8" />
           </label>
-          <button data-hw="density" class="primary">Apply</button>
+          <button data-hw="density" class="primary">apply</button>
         </article>
 
         <article class="wid">
-          <h3>Code page <span class="tip" data-tip="Character encoding the printer's built-in ROM font uses for bytes 128-255 (symbols, accented letters, etc.). Only affects text mode — ignored when 'pretty font' is on in the composer, because that path renders text as an image. Pick the page matching the language you print most: CP437 (USA/Latin), CP850 (Western Europe), CP858 (Euro symbol), WPC1252 (Windows Latin-1).">?</span></h3>
+          <h3>code page <span class="tip" data-tip="sets the built-in font encoding. only affects text mode. CP437: US/Latin. CP850: Western Europe. CP858: euro. WPC1252: Windows Latin-1.">?</span></h3>
           <select id="hw-cp"></select>
-          <button data-hw="codepage" class="primary">Apply</button>
+          <button data-hw="codepage" class="primary">apply</button>
         </article>
 
         <article class="wid">
-          <h3>♻ Reset <span class="tip" data-tip="Sends ESC @ — restores every printer setting to factory defaults: alignment, font size, density, code page, line spacing, underline, inverse. Safe anytime; the next print re-applies whatever it needs.">?</span></h3>
-          <p>Restore defaults.</p>
-          <button data-hw="reset" class="ghost">Reset printer</button>
+          <h3>reset <span class="tip" data-tip="ESC @ resets alignment, font size, density, code page, line spacing, underline, and inverse mode.">?</span></h3>
+          <p>restore defaults</p>
+          <button data-hw="reset" class="ghost">reset printer</button>
         </article>
 
         <article class="wid">
-          <h3>Self-test <span class="tip" data-tip="Triggers the printer's built-in diagnostic print: usually firmware version, DIP-switch settings, and a character test. If nothing prints, your unit probably only runs self-test via the physical paper-feed button at power-on.">?</span></h3>
-          <p>Built-in diagnostic page.</p>
-          <button data-hw="self_test" class="ghost">Run self-test</button>
+          <h3>self-test <span class="tip" data-tip="starts the built-in diagnostic print. if nothing happens, hold the feed button during power-on.">?</span></h3>
+          <p>diagnostic print</p>
+          <button data-hw="self_test" class="ghost">run self-test</button>
         </article>
 
         <article class="wid wid-wide">
-          <h3>Status <span class="tip" data-tip="Reads four real-time status bytes from the printer: general status, offline cause, error cause, and paper sensor. Shows up as flags like 'cover_open', 'paper_ended', 'cutter_error'. Needs a readable IN endpoint (USB/serial usually fine; network printers sometimes don't).">?</span></h3>
-          <p>Ask the printer how it's doing.</p>
-          <button data-hw="status" class="primary">Query status</button>
+          <h3>status <span class="tip" data-tip="reads general, offline, error, and paper-sensor bytes. requires a readable IN endpoint.">?</span></h3>
+          <p>current printer status</p>
+          <button data-hw="status" class="primary">read status</button>
           <pre id="hw-status-out" class="status-box">no reading yet</pre>
         </article>
 
         <article class="wid wid-wide">
-          <h3>RGB LED <span class="tip" data-tip="The Milestone P80E advertises customizable RGB alert lighting, but the exact command isn't publicly documented. Pick a color, choose a protocol guess, and click Send — if one works, you've found your model's dialect. If none do, grab Milestone's SDK and paste the raw bytes in the Console tab.">?</span> <span class="badge">experimental</span></h3>
-          <p>Vendor-specific — try each protocol to find the one your unit accepts.</p>
+          <h3>RGB LED <span class="tip" data-tip="the P80E LED command is undocumented. try each protocol or send SDK bytes from the console.">?</span> <span class="badge">experimental</span></h3>
+          <p>undocumented vendor command</p>
 
           <div class="led-grid">
             <div>
-              <label>Color</label>
+              <label>color</label>
               <input type="color" id="led-color" value="#ff8a3d" />
               <div class="row mini" style="margin-top:8px; flex-wrap:wrap;">
                 <button class="ghost led-preset" data-color="#000000">off</button>
@@ -526,12 +522,12 @@ ship the thing</textarea>
               </div>
             </div>
             <div>
-              <label>Protocol guess</label>
+              <label>protocol</label>
               <select id="led-protocol"></select>
               <p id="led-protocol-note" class="muted" style="margin-top:6px;"></p>
               <label class="chk" style="margin-top:10px;"><input type="checkbox" id="led-blink" /> blink once after set</label>
               <div class="row">
-                <button id="led-send" class="primary">Send</button>
+                <button id="led-send" class="primary">send</button>
                 <code id="led-bytes" class="mono dim"></code>
               </div>
             </div>
@@ -542,11 +538,10 @@ ship the thing</textarea>
 
     <!-- Console tab -->
     <div class="tabpane" data-pane="console" role="tabpanel" id="pane-console" aria-labelledby="tab-console" tabindex="0">
-      <h2>Raw ESC/POS console</h2>
+      <h2>raw ESC/POS</h2>
       <p class="help">
-        Send arbitrary bytes. Format: hex tokens (<code>1b 40 48 69</code>) or
-        Python escapes (<code>\x1b@Hi\n</code>, <code>\e</code> also = ESC).
-        <strong style="color:var(--danger)">Malformed commands can confuse the printer; power-cycle if it gets stuck.</strong>
+        hex tokens: <code>1b 40 48 69</code>. escapes: <code>\x1b@Hi\n</code>. <code>\e</code> = ESC.
+        <strong style="color:var(--danger)">bad commands can lock the printer. power-cycle to reset.</strong>
       </p>
 
       <textarea id="console-input" rows="6" spellcheck="false" placeholder="1b 40  1b 21 30  48 65 6c 6c 6f 0a">1b 40
@@ -557,50 +552,50 @@ ship the thing</textarea>
 1d 56 00</textarea>
 
       <div class="row">
-        <button id="console-send" class="primary">Send to printer</button>
+        <button id="console-send" class="primary">send</button>
         <span id="console-sent" class="muted"></span>
       </div>
 
-      <h3 style="margin-top:18px">Cheat sheet</h3>
+      <h3 style="margin-top:18px">cheat sheet</h3>
       <table class="cheat">
-        <thead><tr><th>Name</th><th>Hex</th><th>Description</th><th></th></tr></thead>
+        <thead><tr><th>name</th><th>hex</th><th>description</th><th></th></tr></thead>
         <tbody id="cheat-body"><!-- populated --></tbody>
       </table>
     </div>
 
     <!-- Admin tab -->
     <div class="tabpane" data-pane="admin" role="tabpanel" id="pane-admin" aria-labelledby="tab-admin" tabindex="0">
-      <h2>Friend approvals</h2>
-      <p class="help">Friends sign in on the front page (<code>/</code>) with a username + password. They sit pending until you approve.</p>
+      <h2>access</h2>
+      <p class="help">new accounts need approval.</p>
 
       <div class="admin-section">
         <div class="admin-head">
-          <h3>Pending</h3>
-          <button class="ghost tiny" id="admin-refresh-pending">Refresh</button>
+          <h3>pending</h3>
+          <button class="ghost tiny" id="admin-refresh-pending">refresh</button>
         </div>
         <div id="admin-pending-list" class="admin-list"></div>
       </div>
 
       <div class="admin-section">
         <div class="admin-head">
-          <h3>Approved</h3>
-          <button class="ghost tiny" id="admin-refresh-allowed">Refresh</button>
+          <h3>approved</h3>
+          <button class="ghost tiny" id="admin-refresh-allowed">refresh</button>
         </div>
         <div id="admin-allowed-list" class="admin-list"></div>
       </div>
 
       <div class="admin-section">
         <div class="admin-head">
-          <h3>Blocked</h3>
-          <button class="ghost tiny" id="admin-refresh-blocked">Refresh</button>
+          <h3>blocked</h3>
+          <button class="ghost tiny" id="admin-refresh-blocked">refresh</button>
         </div>
         <div id="admin-blocked-list" class="admin-list"></div>
       </div>
 
       <div class="admin-section">
         <div class="admin-head">
-          <h3>Recent prints</h3>
-          <button class="ghost tiny" id="admin-refresh-msgs">Refresh</button>
+          <h3>recent prints</h3>
+          <button class="ghost tiny" id="admin-refresh-msgs">refresh</button>
         </div>
         <div id="admin-msgs-list" class="admin-list"></div>
       </div>
@@ -612,13 +607,13 @@ ship the thing</textarea>
   <aside class="panel preview" id="preview-panel" aria-labelledby="preview-title">
     <div class="preview-head">
       <div>
-        <span class="preview-kicker">Output</span>
-        <h2 id="preview-title">Compose preview</h2>
+        <span class="preview-kicker">preview</span>
+        <h2 id="preview-title">compose preview</h2>
       </div>
-      <span class="preview-state" id="preview-state" data-state="loading">Rendering…</span>
+      <span class="preview-state" id="preview-state" data-state="loading">rendering</span>
     </div>
     <div class="paper" id="paper-frame" aria-live="polite" aria-busy="true">
-      <pre id="preview-out">Preparing preview…</pre>
+      <pre id="preview-out">loading preview</pre>
       <div id="preview-image-wrap" class="imgwrap" hidden>
       </div>
       <div class="tear"></div>

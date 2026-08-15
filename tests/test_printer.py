@@ -44,7 +44,7 @@ def test_eager_open_failure_raises_printer_error(live_mode, monkeypatch):
         with printer.open_printer():
             pass
     msg = str(ei.value)
-    assert "Printer not responding" in msg
+    assert "printer offline" in msg
     assert "DeviceNotFoundError" in msg
 
 
@@ -53,7 +53,7 @@ def test_late_io_failure_raises_printer_error(live_mode, monkeypatch):
     with pytest.raises(printer.PrinterError) as ei:
         with printer.open_printer() as p:
             p.image("fake")
-    assert "Printer not responding" in str(ei.value)
+    assert "printer offline" in str(ei.value)
 
 
 def test_non_device_exception_is_not_masked(live_mode, monkeypatch):

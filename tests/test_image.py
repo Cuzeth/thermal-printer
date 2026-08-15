@@ -71,7 +71,7 @@ def test_rejects_output_taller_than_cap():
 
     # 100px wide → scaled to printer width the height multiplies ~5.8×.
     data = _png_bytes(100, 10_000)
-    with pytest.raises(ValueError, match="crop it"):
+    with pytest.raises(ValueError, match="crop the image"):
         image_feat.process(data, image_feat.ProcessOptions())
 
 
@@ -100,7 +100,7 @@ def test_png_data_url_roundtrip():
 def test_rejects_non_image_bytes():
     import pytest
 
-    with pytest.raises(ValueError, match="look like an image"):
+    with pytest.raises(ValueError, match="not an image"):
         image_feat.process(b"definitely not a png", image_feat.ProcessOptions())
 
 

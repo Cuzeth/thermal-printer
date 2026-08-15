@@ -70,7 +70,7 @@ def _security_headers(resp):
 
 @app.errorhandler(413)
 def _too_large(e):
-    return jsonify({"ok": False, "error": "request too large (max 16MB)",
+    return jsonify({"ok": False, "error": "request exceeds 16 MB",
                     "kind": "input"}), 413
 
 
@@ -203,7 +203,7 @@ def _safe(handler: Callable[[], Any]):
         raise
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"ok": False, "error": str(e), "kind": "server"}), 500
+        return jsonify({"ok": False, "error": "server error", "kind": "server"}), 500
 
 
 # ---------- text composer ----------
@@ -236,7 +236,7 @@ def print_text():
         data = request.get_json(silent=True) or {}
         body = data.get("body", "").rstrip()
         if not body:
-            raise ValueError("Nothing to print.")
+            raise ValueError("nothing to print")
         _print_body(
             body,
             cut=data.get("cut", True),
@@ -265,7 +265,7 @@ def _image_opts_from_form() -> image_feat.ProcessOptions:
 def image_preview():
     def run():
         if "file" not in request.files:
-            raise ValueError("No file uploaded.")
+            raise ValueError("choose a file")
         f = request.files["file"]
         img = image_feat.process(f.read(), _image_opts_from_form())
         return {"data_url": image_feat.to_png_data_url(img),
@@ -278,7 +278,7 @@ def image_preview():
 def print_image():
     def run():
         if "file" not in request.files:
-            raise ValueError("No file uploaded.")
+            raise ValueError("choose a file")
         f = request.files["file"]
         opts = _image_opts_from_form()
         caption = request.form.get("caption", "").strip()
@@ -302,7 +302,7 @@ def _widget_body(kind: str, data: dict) -> str:
     if kind == "weather":
         loc = (data.get("location") or "").strip()
         if not loc:
-            raise ValueError("location is required")
+            raise ValueError("enter a location")
         return widgets.weather(loc, days=int(data.get("days", 1)))
     if kind == "dice":
         return widgets.roll_dice(
@@ -328,7 +328,7 @@ def _widget_body(kind: str, data: dict) -> str:
     if kind == "habits":
         habits = data.get("habits") or []
         if not isinstance(habits, list):
-            raise ValueError("habits must be a list")
+            raise ValueError("invalid habits")
         return widgets.habit_tracker(
             habits=[str(h) for h in habits],
             days=int(data.get("days", 7)),
@@ -353,14 +353,14 @@ def _lab_body(kind: str, data: dict) -> str:
         title = (data.get("title") or "").strip()
         items = data.get("items") or []
         if not isinstance(items, list):
-            raise ValueError("items must be a list")
+            raise ValueError("invalid items")
         if not any((item or "").strip() for item in items):
-            raise ValueError("At least one non-empty item is required.")
+            raise ValueError("add at least one item")
         return widgets.todo(title, [str(item) for item in items])
     if kind == "receipt":
         items = data.get("items") or []
         if not items:
-            raise ValueError("At least one item is required.")
+            raise ValueError("add at least one item")
         return widgets.receipt(
             store=data.get("store", ""),
             items=items,
@@ -583,7 +583,7 @@ def print_qr():
     def run():
         opts = _qr_opts(request.get_json(silent=True) or {})
         if not opts.data:
-            raise ValueError("QR payload is empty.")
+            raise ValueError("enter QR data")
         with open_printer() as p:
             codes_feat.print_qr(p, opts)
             footer(p)
@@ -608,7 +608,7 @@ def print_barcode():
     def run():
         opts = _barcode_opts(request.get_json(silent=True) or {})
         if not opts.data:
-            raise ValueError("Barcode payload is empty.")
+            raise ValueError("enter barcode data")
         with open_printer() as p:
             codes_feat.print_barcode(p, opts)
             footer(p)
@@ -757,7 +757,7 @@ def hw_raw():
         if not parsed:
             raise ValueError("nothing to send")
         if len(parsed) > _MAX_RAW_BYTES:
-            raise ValueError(f"parsed {len(parsed)} bytes; max is {_MAX_RAW_BYTES}")
+            raise ValueError(f"{len(parsed)} bytes. limit: {_MAX_RAW_BYTES}")
         with open_printer() as p:
             hw_feat.send_bytes(p, parsed)
         return {"sent": len(parsed)}
@@ -976,7 +976,7 @@ def friend_preview():
         if not body:
             return {"segments": []}
         if len(body) > _MAX_MSG_LEN:
-            raise ValueError(f"message too long (max {_MAX_MSG_LEN} chars)")
+            raise ValueError(f"{_MAX_MSG_LEN} character limit")
         formatted = widgets.friend_message(
             user["username"],
             body,
@@ -1000,8 +1000,7 @@ def _enqueue_friend_print(user: dict, history_body: str, job: dict):
         if _inflight.get(user["id"], 0) >= _PER_USER_QUEUE_CAP:
             return jsonify({
                 "ok": False,
-                "error": f"you already have {_PER_USER_QUEUE_CAP} prints queued — "
-                         "let them finish first",
+                "error": f"{_PER_USER_QUEUE_CAP} prints already queued",
                 "kind": "user_cap",
             }), 429
         _inflight[user["id"]] = _inflight.get(user["id"], 0) + 1
@@ -1024,7 +1023,7 @@ def _enqueue_friend_print(user: dict, history_body: str, job: dict):
         auth_db.delete_message(msg_id)  # never entered the queue
         return jsonify({
             "ok": False,
-            "error": "the print queue is full — try again in a minute",
+            "error": "print queue full. try again soon",
             "kind": "queue_full",
         }), 503
     except Exception:
@@ -1039,7 +1038,7 @@ def _enqueue_friend_print(user: dict, history_body: str, job: dict):
             except Exception:
                 pass
         traceback.print_exc()
-        return jsonify({"ok": False, "error": "internal error",
+        return jsonify({"ok": False, "error": "print failed",
                         "kind": "server"}), 500
 
     return jsonify({"ok": True, "queued": True, "ahead": ahead})
@@ -1052,9 +1051,9 @@ def friend_print():
     data = request.get_json(silent=True) or {}
     body = (data.get("body") or "").strip()
     if not body:
-        return jsonify({"ok": False, "error": "message is empty"}), 400
+        return jsonify({"ok": False, "error": "type something"}), 400
     if len(body) > _MAX_MSG_LEN:
-        return jsonify({"ok": False, "error": f"message too long (max {_MAX_MSG_LEN} chars)"}), 400
+        return jsonify({"ok": False, "error": f"{_MAX_MSG_LEN} character limit"}), 400
 
     formatted = widgets.friend_message(
         user["username"],
@@ -1072,12 +1071,12 @@ def friend_print_doodle():
     data = request.get_json(silent=True) or {}
     raw = data.get("image") or ""
     if not isinstance(raw, str) or not raw.startswith(_DOODLE_PREFIX):
-        return jsonify({"ok": False, "error": "no drawing attached",
+        return jsonify({"ok": False, "error": "drawing missing",
                         "kind": "input"}), 400
     try:
         png = base64.b64decode(raw[len(_DOODLE_PREFIX):], validate=True)
     except binascii.Error:
-        return jsonify({"ok": False, "error": "bad image data",
+        return jsonify({"ok": False, "error": "invalid image data",
                         "kind": "input"}), 400
     if len(png) > _MAX_DOODLE_BYTES:
         return jsonify({"ok": False, "error": "drawing too large",
@@ -1097,7 +1096,7 @@ def friend_print_doodle():
         style=user.get("name_style") or "plain",
         anonymous=bool(data.get("anonymous", False)),
     )
-    return _enqueue_friend_print(user, "(doodle)", {
+    return _enqueue_friend_print(user, "drawing", {
         "kind": "doodle", "image": img,
         "header": header, "footer": footer_markup,
     })
@@ -1151,7 +1150,7 @@ def admin_list_users():
 @require_admin
 def admin_approve_user(user_id: int):
     if not auth_db.get_user(user_id):
-        return jsonify({"ok": False, "error": "no such user"}), 404
+        return jsonify({"ok": False, "error": "user not found"}), 404
     auth_db.set_status(user_id, "allowed")
     return jsonify({"ok": True})
 
@@ -1160,7 +1159,7 @@ def admin_approve_user(user_id: int):
 @require_admin
 def admin_revoke_user(user_id: int):
     if not auth_db.get_user(user_id):
-        return jsonify({"ok": False, "error": "no such user"}), 404
+        return jsonify({"ok": False, "error": "user not found"}), 404
     auth_db.set_status(user_id, "blocked")
     return jsonify({"ok": True})
 
@@ -1169,7 +1168,7 @@ def admin_revoke_user(user_id: int):
 @require_admin
 def admin_delete_user(user_id: int):
     if not auth_db.get_user(user_id):
-        return jsonify({"ok": False, "error": "no such user"}), 404
+        return jsonify({"ok": False, "error": "user not found"}), 404
     auth_db.delete_user(user_id)
     return jsonify({"ok": True})
 
@@ -1184,7 +1183,7 @@ def admin_reset_link(user_id: int):
     rides in the URL fragment (not a query string) so it never shows up
     in access logs; the console builds the absolute URL client-side."""
     if not auth_db.get_user(user_id):
-        return jsonify({"ok": False, "error": "no such user"}), 404
+        return jsonify({"ok": False, "error": "user not found"}), 404
     token = auth_db.create_reset_token(user_id)
     return jsonify({
         "ok": True,
@@ -1211,7 +1210,7 @@ def admin_reset_printer():
         return jsonify({"ok": True, "reset": False, "dry_run": True})
     found = reset_device()
     if not found:
-        return jsonify({"ok": False, "error": "printer not on USB bus"}), 503
+        return jsonify({"ok": False, "error": "printer not found on USB"}), 503
     return jsonify({"ok": True, "reset": True})
 
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
-  <title>Send Cuzeth a receipt</title>
+  <title>send me a receipt</title>
   <meta name="theme-color" content="#090a0d" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png" sizes="32x32" />
@@ -18,9 +18,9 @@
 <header class="top friends-top">
   <div class="brand">
     <span class="logo" aria-hidden="true">▚▚</span>
-    <span class="title">SEND CUZETH A RECEIPT</span>
+    <span class="title">SEND ME A RECEIPT</span>
   </div>
-  <div class="who" id="who" aria-label="Signed-in account" hidden>
+  <div class="who" id="who" aria-label="signed-in account" hidden>
     <span class="who-name"></span>
     <button type="button" class="ghost tiny signout" id="logout">sign out</button>
   </div>
@@ -30,24 +30,24 @@
 
   <!-- LOADING -->
   <section class="card" data-state="loading">
-    <p class="dim">connecting…</p>
+    <p class="dim">loading</p>
   </section>
 
   <!-- GUEST -->
   <section class="card" data-state="guest" hidden>
-    <h1>print something on his desk</h1>
-    <p class="dim">cuzeth has a thermal receipt printer in his apartment. message him and it pops out of the printer.</p>
+    <h1>print on my desk</h1>
+    <p class="dim">send text or a doodle to my thermal printer.</p>
 
     <div class="guest-actions">
-      <button class="primary block" id="go-register">Create an account</button>
-      <button class="ghost block" id="go-login">I already have one</button>
+      <button class="primary block" id="go-register">create an account</button>
+      <button class="ghost block" id="go-login">sign in</button>
     </div>
   </section>
 
   <!-- REGISTER -->
   <section class="card" data-state="register" hidden>
-    <h1>pick a name + password</h1>
-    <p class="dim">cuzeth will approve your account before you can send messages.</p>
+    <h1>new account</h1>
+    <p class="dim">i'll approve it before you can print.</p>
     <form id="register-form" autocomplete="off">
       <label>
         <span class="label">username</span>
@@ -61,7 +61,7 @@
           required
         />
       </label>
-      <p class="hint">letters, digits, _ or -. up to 20 chars.</p>
+      <p class="hint">1-20 letters, numbers, _ or -</p>
 
       <label>
         <span class="label">password</span>
@@ -90,15 +90,15 @@
       </label>
 
       <div class="row">
-        <button type="submit" class="primary">Create account</button>
-        <button type="button" class="ghost" data-back>Back</button>
+        <button type="submit" class="primary">create account</button>
+        <button type="button" class="ghost" data-back>back</button>
       </div>
     </form>
   </section>
 
   <!-- LOGIN -->
   <section class="card" data-state="login" hidden>
-    <h1>welcome back</h1>
+    <h1>sign in</h1>
     <form id="login-form" autocomplete="on">
       <label>
         <span class="label">username</span>
@@ -123,16 +123,16 @@
         />
       </label>
       <div class="row">
-        <button type="submit" class="primary">Sign in</button>
-        <button type="button" class="ghost" data-back>Back</button>
+        <button type="submit" class="primary">sign in</button>
+        <button type="button" class="ghost" data-back>back</button>
       </div>
     </form>
   </section>
 
   <!-- RESET (arrived via an admin-minted forgot-password link) -->
   <section class="card" data-state="reset" hidden>
-    <h1>pick a new password</h1>
-    <p class="dim">cuzeth sent you this link so you can get back into your account. choose a new password and you're in.</p>
+    <h1>new password</h1>
+    <p class="dim">enter a new password.</p>
     <form id="reset-form" autocomplete="off">
       <label>
         <span class="label">new password</span>
@@ -159,8 +159,8 @@
         />
       </label>
       <div class="row">
-        <button type="submit" class="primary">Set password</button>
-        <button type="button" class="ghost" data-back>Back</button>
+        <button type="submit" class="primary">save password</button>
+        <button type="button" class="ghost" data-back>back</button>
       </div>
     </form>
   </section>
@@ -168,56 +168,56 @@
   <!-- PENDING -->
   <section class="card pending-card" data-state="pending" hidden>
     <div class="pending-stamp">PENDING</div>
-    <h1>you're in the queue</h1>
-    <p>cuzeth needs to give you the green light. he'll see <code id="pending-name"></code> pop up next time he opens the printer console.</p>
-    <p class="dim">leave this tab open or check back later — once he approves you, refresh and you can start printing.</p>
+    <h1>not approved yet</h1>
+    <p>i haven't approved <code id="pending-name"></code> yet.</p>
+    <p class="dim">this page checks every 30 seconds.</p>
     <div class="row">
-      <button class="ghost" id="recheck">Check again</button>
+      <button class="ghost" id="recheck">check now</button>
     </div>
   </section>
 
   <!-- BLOCKED -->
   <section class="card blocked-card" data-state="blocked" hidden>
     <h1>blocked</h1>
-    <p>cuzeth has revoked your access. if this is a mistake, ask him directly.</p>
+    <p>this account is blocked. text me if that's wrong.</p>
   </section>
 
   <!-- ALLOWED -->
   <section class="card" data-state="allowed" hidden>
-    <h1>send a receipt</h1>
-    <p class="dim">it'll print immediately on cuzeth's thermal printer with your name attached.</p>
-    <div class="printer-banner" id="printer-banner" hidden>heads up — the printer looks offline right now. your receipt will queue and print once it's back.</div>
+    <h1>new print</h1>
+    <p class="dim">prints on my desk. your name goes at the top.</p>
+    <div class="printer-banner" id="printer-banner" hidden>printer offline. new prints will stay queued.</div>
 
     <details class="settings" id="settings">
       <summary>name style · <span class="settings-current" id="settings-current">plain</span></summary>
-      <p class="hint">how your name looks on the header line. applies to every receipt you send.</p>
+      <p class="hint">changes the name at the top of your prints.</p>
       <div class="name-style-grid" id="name-style-grid">
         <!-- populated by friends.js -->
       </div>
     </details>
 
-    <div class="mode-switch" id="mode-switch" role="tablist" aria-label="Receipt type">
+    <div class="mode-switch" id="mode-switch" role="tablist" aria-label="print type">
       <button type="button" class="mode-tab active" id="mode-write" role="tab" aria-selected="true" aria-controls="msg-form">write</button>
       <button type="button" class="mode-tab" id="mode-draw" role="tab" aria-selected="false" aria-controls="doodle-panel">draw</button>
     </div>
 
     <form id="msg-form" role="tabpanel" aria-labelledby="mode-write">
-      <label class="sr-only" for="msg-body">Receipt message</label>
+      <label class="sr-only" for="msg-body">print text</label>
       <textarea
         id="msg-body"
         rows="6"
         maxlength="800"
-        placeholder="say something nice. or weird. up to you."
+        placeholder="type here"
         required
       ></textarea>
       <div class="msg-meta">
         <span id="msg-count">0 / 800</span>
       </div>
-      <p class="msg-hint">supports <code>**bold**</code>, <code>*italic*</code>, <code>__underline__</code>, <code>~big~</code>, <code>#</code> heading, <code>##</code> subheading, <code>===</code>, <code>---</code>, <code>&gt;</code> centered, <code>-</code> bullet, <code>[ ]</code>/<code>[x]</code> todo.</p>
+      <p class="msg-hint">formatting: <code>**bold**</code> <code>*italic*</code> <code>__underline__</code> <code>~big~</code> <code># heading</code> <code>## subheading</code> <code>===</code> <code>---</code> <code>&gt; centered</code> <code>- bullet</code> <code>[ ]</code>/<code>[x]</code></p>
 
       <label class="anon-toggle">
         <input type="checkbox" id="msg-anon" />
-        <span>send anonymously <em>(hides your name on this one)</em></span>
+        <span>anonymous <em>(no name)</em></span>
       </label>
 
       <div class="preview-block">
@@ -226,36 +226,36 @@
           <span class="preview-progress" id="preview-progress" data-state="idle">live</span>
         </div>
         <div class="preview-paper" id="preview-paper" aria-live="polite" aria-busy="false">
-          <p class="preview-placeholder">start typing to see how it'll print…</p>
+          <p class="preview-placeholder">preview appears here</p>
         </div>
       </div>
 
       <div class="row">
-        <button type="submit" class="primary">Print it</button>
+        <button type="submit" class="primary">print it</button>
       </div>
     </form>
 
     <div id="doodle-panel" role="tabpanel" aria-labelledby="mode-draw" hidden>
       <canvas id="doodle-canvas" width="576" height="576"></canvas>
-      <p class="hint">draw with your finger or mouse. it prints exactly this, in black and white.</p>
+      <p class="hint">prints in black and white.</p>
       <label class="anon-toggle">
         <input type="checkbox" id="doodle-anon" />
-        <span>send anonymously <em>(hides your name on this one)</em></span>
+        <span>anonymous <em>(no name)</em></span>
       </label>
       <div class="row">
-        <button type="button" class="primary" id="doodle-send">Print it</button>
-        <button type="button" class="ghost" id="doodle-clear">Clear</button>
+        <button type="button" class="primary" id="doodle-send">print it</button>
+        <button type="button" class="ghost" id="doodle-clear">clear</button>
       </div>
     </div>
 
     <div class="history" id="history">
       <div class="history-head">
-        <h2>your history</h2>
-        <button type="button" class="ghost tiny" id="history-refresh" title="reload from server">refresh</button>
+        <h2>your prints</h2>
+        <button type="button" class="ghost tiny" id="history-refresh" title="reload your prints">refresh</button>
       </div>
-      <p class="history-hint dim">everything you've ever printed from this account. tap one to load it back into the box above.</p>
+      <p class="history-hint dim">tap a print to edit it.</p>
       <ul id="history-list" class="history-list"></ul>
-      <p class="history-empty dim" id="history-empty" hidden>nothing yet — send your first receipt above.</p>
+      <p class="history-empty dim" id="history-empty" hidden>no prints yet</p>
     </div>
   </section>
 

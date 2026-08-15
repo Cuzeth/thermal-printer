@@ -47,8 +47,18 @@ def test_signed_in_admin_console_scopes_signout_to_owner_shell(client, auth):
 
 def test_friend_guest_page_hides_the_account_actions(client):
     html = client.get("/").get_data(as_text=True)
-    assert 'id="who" aria-label="Signed-in account" hidden' in html
+    assert 'id="who" aria-label="signed-in account" hidden' in html
     assert html.count('id="logout"') == 1
+
+
+def test_friend_page_uses_first_person_owner_copy(client):
+    html = client.get("/").get_data(as_text=True).lower()
+    assert "cuzeth" not in html
+    assert "—" not in html
+    assert "…" not in html
+    assert "send me a receipt" in html
+    assert "print on my desk" in html
+    assert "i'll approve it" in html
 
 
 def test_private_route_requires_bearer(client):
@@ -136,7 +146,7 @@ def test_lab_preview_uses_same_validation_as_print(client, auth):
         headers=auth,
     )
     assert bad.status_code == 400
-    assert "non-empty item" in bad.get_json()["error"]
+    assert bad.get_json()["error"] == "add at least one item"
 
     good = client.post(
         "/api/admin/preview/lab/todo",
@@ -176,7 +186,7 @@ def test_hw_raw_rejects_oversized_payload(client, auth):
     payload = " ".join(["20"] * 5000)
     r = client.post("/api/admin/hw/raw", json={"bytes": payload}, headers=auth)
     assert r.status_code == 400
-    assert "max is 4096" in r.get_json()["error"]
+    assert r.get_json()["error"] == "5000 bytes. limit: 4096"
 
 
 def test_hw_raw_accepts_small_payload(client, auth):
@@ -401,6 +411,7 @@ def test_admin_reset_link_single_use(client, auth):
     r = client.post("/api/auth/reset",
                     json={"token": token, "password": "sneakypassword1"})
     assert r.status_code == 400
+    assert r.get_json()["error"] == "link expired. text me"
 
 
 def test_admin_reset_link_expires(client, auth):
@@ -417,6 +428,7 @@ def test_admin_reset_link_expires(client, auth):
     r = client.post("/api/auth/reset",
                     json={"token": token, "password": "newpassword1"})
     assert r.status_code == 400
+    assert r.get_json()["error"] == "link expired. text me"
 
 
 def test_admin_reset_link_validates(client, auth):
@@ -536,7 +548,7 @@ def test_admin_lifecycle_404_on_missing_user(client, auth):
     for action in ("approve", "revoke", "delete"):
         r = client.post(f"/api/admin/users/999999/{action}", headers=auth)
         assert r.status_code == 404
-        assert r.get_json()["error"] == "no such user"
+        assert r.get_json()["error"] == "user not found"
 
 
 def test_admin_lifecycle_requires_bearer(client):

@@ -84,7 +84,7 @@ def require_allowed(fn):
         if not user:
             return jsonify({"ok": False, "error": "not signed in"}), 401
         if user["status"] != "allowed":
-            return jsonify({"ok": False, "error": "not approved", "status": user["status"]}), 403
+            return jsonify({"ok": False, "error": "account not approved", "status": user["status"]}), 403
         return fn(*args, **kwargs)
     return wrapper
 

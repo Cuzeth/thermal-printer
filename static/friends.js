@@ -26,7 +26,7 @@ async function postJSON(url, data, options = {}) {
     body: JSON.stringify(data || {}),
     signal: options.signal,
   });
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
+  const j = await r.json().catch(() => ({ ok: false, error: "bad server response" }));
   if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
@@ -92,13 +92,13 @@ function setPrinterPolling(on) {
 // field is CSS-side flavor text — it's not the thermal-printer rendering,
 // just a visual hint so the friend knows what they're picking.
 const NAME_STYLES = [
-  { key: "plain",  label: "plain",      preview: "from you" },
-  { key: "big",    label: "big",        preview: "FROM YOU" },
-  { key: "caps",   label: "caps",       preview: "FROM YOU" },
-  { key: "serif",  label: "serif",      preview: "from you" },
-  { key: "script", label: "script",     preview: "from you" },
-  { key: "gothic", label: "papyrus",    preview: "from you" },
-  { key: "mono",   label: "typewriter", preview: "from you" },
+  { key: "plain",  label: "plain",      preview: "your name" },
+  { key: "big",    label: "big",        preview: "YOUR NAME" },
+  { key: "caps",   label: "caps",       preview: "YOUR NAME" },
+  { key: "serif",  label: "serif",      preview: "your name" },
+  { key: "script", label: "script",     preview: "your name" },
+  { key: "gothic", label: "papyrus",    preview: "your name" },
+  { key: "mono",   label: "typewriter", preview: "your name" },
 ];
 
 function applyMe(user) {
@@ -156,7 +156,7 @@ async function saveNameStyle(style) {
   try {
     const j = await postJSON("/api/settings", { name_style: style });
     applyMe(j.user);
-    toast("style: " + style, "ok");
+    toast(style + " selected", "ok");
     // Refresh the preview so they see the new header font immediately.
     schedulePreview();
   } catch (err) {
@@ -181,7 +181,7 @@ const PREVIEW_DEBOUNCE_MS = 250;
 
 function schedulePreview() {
   clearTimeout(previewTimer);
-  setPreviewProgress("Waiting…", "pending");
+  setPreviewProgress("typing", "pending");
   previewTimer = setTimeout(updatePreview, PREVIEW_DEBOUNCE_MS);
 }
 
@@ -198,7 +198,7 @@ function setPreviewPlaceholder(msg, kind = "placeholder") {
   p.className = `preview-${kind}`;
   p.textContent = msg;
   $("#preview-paper").replaceChildren(p);
-  setPreviewProgress(kind === "error" ? "Failed" : "Live", kind === "error" ? "error" : "idle");
+  setPreviewProgress(kind === "error" ? "failed" : "live", kind === "error" ? "error" : "idle");
 }
 
 async function updatePreview() {
@@ -207,12 +207,12 @@ async function updatePreview() {
   const seq = ++previewSeq;
   if (!body.trim()) {
     previewAbort?.abort();
-    setPreviewPlaceholder("start typing to see how it'll print…");
+    setPreviewPlaceholder("preview appears here");
     return;
   }
   previewAbort?.abort();
   previewAbort = new AbortController();
-  setPreviewProgress("Rendering…", "loading");
+  setPreviewProgress("rendering", "loading");
   try {
     const j = await postJSON("/api/preview", { body, anonymous }, { signal: previewAbort.signal });
     if (seq !== previewSeq) return; // stale — user kept typing
@@ -225,7 +225,7 @@ async function updatePreview() {
     segments.forEach((url, i) => {
       const img = document.createElement("img");
       img.src = url;
-      img.alt = segments.length > 1 ? `Receipt preview segment ${i + 1} of ${segments.length}` : "Receipt preview";
+      img.alt = segments.length > 1 ? `receipt preview, part ${i + 1} of ${segments.length}` : "receipt preview";
       img.className = "preview-img";
       img.decoding = "async";
       nodes.push(img);
@@ -236,7 +236,7 @@ async function updatePreview() {
       }
     });
     $("#preview-paper").replaceChildren(...nodes);
-    setPreviewProgress("Up to date", "ready");
+    setPreviewProgress("ready", "ready");
   } catch (err) {
     if (err.name === "AbortError") return;
     if (seq !== previewSeq) return;
@@ -279,9 +279,9 @@ function historyItem(msg) {
   }
 
   const body = document.createElement("pre");
-  const isDoodle = msg.body === "(doodle)";
+  const isDoodle = msg.body === "drawing" || msg.body === "(doodle)";
   body.className = "history-body" + (isDoodle ? " history-doodle" : "");
-  body.textContent = msg.body;
+  body.textContent = isDoodle ? "drawing" : msg.body;
 
   li.append(when, body);
   if (isDoodle) {
@@ -292,7 +292,7 @@ function historyItem(msg) {
   }
   li.tabIndex = 0;
   li.setAttribute("role", "button");
-  li.setAttribute("aria-label", `Load receipt from ${fmtWhen(msg.printed_at)} into the composer`);
+  li.setAttribute("aria-label", `edit the receipt from ${fmtWhen(msg.printed_at)}`);
   // Click-to-restore: drops the body back into the composer so the friend
   // can tweak + reprint without retyping. No auto-submit.
   li.addEventListener("click", () => {
@@ -312,14 +312,14 @@ function historyItem(msg) {
   return li;
 }
 
-const HISTORY_EMPTY_DEFAULT = "nothing yet — send your first receipt above.";
+const HISTORY_EMPTY_DEFAULT = "no prints yet";
 
 async function loadHistory() {
   const list = $("#history-list");
   const empty = $("#history-empty");
   try {
     const j = await getJSON("/api/history?limit=50");
-    if (!j.ok) throw new Error(j.error || "couldn't load history");
+    if (!j.ok) throw new Error(j.error || "history failed");
     const items = (j.messages || []).map(historyItem);
     list.replaceChildren(...items);
     // Restore the default copy — a previous failed load may have replaced it.
@@ -329,7 +329,7 @@ async function loadHistory() {
     // Non-fatal: show a lightweight error row but leave the form usable.
     list.replaceChildren();
     empty.hidden = false;
-    empty.textContent = "couldn't load history: " + err.message;
+    empty.textContent = "history failed: " + err.message;
   }
 }
 
@@ -345,7 +345,7 @@ function celebrateQueued(j) {
   requestAnimationFrame(() => card?.classList.add("print-confirmed"));
   setTimeout(() => card?.classList.remove("print-confirmed"), 700);
   const ahead = Number(j.ahead) || 0;
-  toast(ahead > 0 ? `queued (${ahead} ahead)` : "queued — printing", "ok");
+  toast(ahead > 0 ? `queued: ${ahead} ahead` : "printing", "ok");
   loadHistory().catch((err) => console.warn("history refresh failed:", err));
   refreshPrinterBanner().catch(() => {});
 }
@@ -359,7 +359,7 @@ async function sendMessage() {
   $("#msg-count").textContent = "0 / 800";
   // Reset anon back to the default so it doesn't silently stick.
   if ($("#msg-anon")) $("#msg-anon").checked = false;
-  setPreviewPlaceholder("start typing to see how it'll print…");
+  setPreviewPlaceholder("preview appears here");
   celebrateQueued(j);
 }
 
@@ -445,7 +445,7 @@ $("#register-form").addEventListener("submit", async (e) => {
   try {
     const j = await postJSON("/api/auth/register", { username, password });
     applyMe(j.user);
-    toast("account created — waiting for approval", "ok");
+    toast("account created", "ok");
   } catch (err) {
     toast(err.message, "err");
   } finally {
@@ -485,7 +485,7 @@ $("#reset-form").addEventListener("submit", async (e) => {
     // doesn't reopen the form with a link that can never work again.
     history.replaceState(null, "", location.pathname);
     applyMe(j.user);
-    toast("password updated — you're signed in", "ok");
+    toast("password saved", "ok");
   } catch (err) {
     toast(err.message, "err");
   } finally {
@@ -548,7 +548,7 @@ $("#doodle-send").addEventListener("click", async () => {
 $("#history-refresh").addEventListener("click", async () => {
   try {
     await loadHistory();
-    toast("history refreshed", "ok");
+    toast("prints refreshed", "ok");
   } catch (err) {
     toast(err.message, "err");
   }
@@ -579,7 +579,7 @@ if (resetTokenFromHash()) {
   show("reset");
 } else {
   refreshMe().catch((e) => {
-    toast("couldn't reach the server: " + e.message, "err");
+    toast("server unavailable: " + e.message, "err");
     show("guest");
   });
 }

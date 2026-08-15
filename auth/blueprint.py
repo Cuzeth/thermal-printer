@@ -47,21 +47,21 @@ def _bad(msg: str, code: int = 400):
 
 def _validate_username(username: str) -> str:
     if not username or not isinstance(username, str):
-        raise ValueError("username required")
+        raise ValueError("enter a username")
     username = username.strip()
     if not USERNAME_RE.match(username):
-        raise ValueError("username must be 1-20 chars, letters/digits/_/- only")
+        raise ValueError("use 1-20 letters, numbers, _ or -")
     return username
 
 
 def validate_password(password: str) -> str:
     """Shared by register and the reset-link redeem — same rules apply."""
     if not password or not isinstance(password, str):
-        raise ValueError("password required")
+        raise ValueError("enter a password")
     if len(password) < MIN_PASSWORD_LEN:
-        raise ValueError(f"password must be at least {MIN_PASSWORD_LEN} characters")
+        raise ValueError(f"use at least {MIN_PASSWORD_LEN} characters")
     if len(password) > MAX_PASSWORD_LEN:
-        raise ValueError(f"password too long (max {MAX_PASSWORD_LEN})")
+        raise ValueError(f"password limit: {MAX_PASSWORD_LEN} characters")
     return password
 
 
@@ -112,7 +112,7 @@ def _record_register(ip: str) -> None:
 @auth_bp.post("/auth/register")
 def register():
     if _register_locked():
-        return _bad("too many signups from this network — try again later", 429)
+        return _bad("too many signups. try again later", 429)
 
     data = request.get_json(silent=True) or {}
     try:
@@ -124,13 +124,13 @@ def register():
 
     if db.get_user_by_username(username):
         _record_register(_client_ip())
-        return _bad("username taken", 409)
+        return _bad("username unavailable", 409)
 
     try:
         user = db.create_pending_user(username, password)
     except sqlite3.IntegrityError:
         _record_register(_client_ip())
-        return _bad("username taken", 409)
+        return _bad("username unavailable", 409)
 
     _record_register(_client_ip())
     sess.login(user["id"])
@@ -146,15 +146,15 @@ def login():
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
     if not username or not password:
-        return _bad("username and password required")
+        return _bad("enter a username and password")
 
     if _login_locked(username):
-        return _bad("too many failed attempts — try again in 15 minutes", 429)
+        return _bad("too many attempts. try again in 15 minutes", 429)
 
     user = db.get_user_by_username(username)
     if not user or not db.verify_password(user, password):
         _record_login_failure(username)
-        return _bad("wrong username or password", 401)
+        return _bad("username or password is wrong", 401)
 
     _clear_login_failures(username)
     sess.login(user["id"])
@@ -173,12 +173,12 @@ def reset_password():
     failed redeems still count against the shared per-IP login bucket to
     bound the noise from anyone poking at the endpoint."""
     if _sliding_check(_ip_failures, _client_ip(), _MAX_IP_FAILURES, _WINDOW_SECONDS):
-        return _bad("too many failed attempts — try again in 15 minutes", 429)
+        return _bad("too many attempts. try again in 15 minutes", 429)
 
     data = request.get_json(silent=True) or {}
     token = data.get("token") or ""
     if not token or not isinstance(token, str):
-        return _bad("reset token required")
+        return _bad("reset link missing")
     # Validate the password *before* consuming the token, so a typo'd
     # too-short password doesn't burn the friend's one-shot link.
     try:
@@ -189,7 +189,7 @@ def reset_password():
     user = db.consume_reset_token(token)
     if not user:
         _sliding_record(_ip_failures, _client_ip(), _WINDOW_SECONDS)
-        return _bad("this reset link is invalid or expired — ask cuzeth for a fresh one")
+        return _bad("link expired. text me")
 
     db.set_password(user["id"], password)
     # They almost certainly racked up failed logins figuring out they'd
@@ -226,12 +226,12 @@ def settings():
     if not user:
         return _bad("not signed in", 401)
     if user["status"] != "allowed":
-        return _bad("not approved", 403)
+        return _bad("account not approved", 403)
     data = request.get_json(silent=True) or {}
     style = (data.get("name_style") or "").strip()
     if style:
         if style not in db.VALID_NAME_STYLES:
-            return _bad(f"unknown name_style: {style}")
+            return _bad(f"unknown name style: {style}")
         db.set_name_style(user["id"], style)
     fresh = db.get_user(user["id"])
     return jsonify({"ok": True, "user": _public_user(fresh)})

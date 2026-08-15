@@ -41,7 +41,7 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => activateTab(t)));
 $$(".tip").forEach((tip) => {
   tip.tabIndex = 0;
   tip.setAttribute("role", "note");
-  tip.setAttribute("aria-label", tip.dataset.tip || "More information");
+  tip.setAttribute("aria-label", tip.dataset.tip || "more information");
 });
 
 // Arrow-key navigation per WAI-ARIA tabs pattern.
@@ -81,7 +81,7 @@ async function apiFetch(url, init = {}) {
     location.reload();
     return new Promise(() => {}); // never resolves — the reload wins
   }
-  const j = await r.json().catch(() => ({ ok: false, error: "bad JSON" }));
+  const j = await r.json().catch(() => ({ ok: false, error: "bad server response" }));
   if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
@@ -111,7 +111,7 @@ function setButtonBusy(btn, busy) {
   else btn.removeAttribute("aria-busy");
 }
 
-async function guard(fn, okMsg = "sent to printer", btn = null) {
+async function guard(fn, okMsg = "done", btn = null) {
   // Prints are synchronous server-side (a briefing can take 15s+), so
   // disable the trigger while in flight — otherwise the natural move
   // (click again) queues a duplicate behind the USB lock.
@@ -129,11 +129,11 @@ async function guard(fn, okMsg = "sent to printer", btn = null) {
 // ---------- preview ----------
 
 const PREVIEW_TITLES = {
-  compose: "Compose preview",
-  image: "Image preview",
-  codes: "Code preview",
-  widgets: "Widget preview",
-  labs: "Lab preview",
+  compose: "compose preview",
+  image: "image preview",
+  codes: "code preview",
+  widgets: "widget preview",
+  labs: "lab preview",
 };
 
 function setPreviewStatus(label, kind = "idle") {
@@ -153,7 +153,7 @@ function beginPreview(owner, title = PREVIEW_TITLES[owner]) {
   const panel = $("#preview-panel");
   panel.hidden = false;
   $("#preview-title").textContent = title;
-  setPreviewStatus("Rendering…", "loading");
+  setPreviewStatus("rendering", "loading");
   return token;
 }
 
@@ -161,7 +161,7 @@ function previewIsCurrent(owner, token) {
   return state.activePane === owner && state.previewOwner === owner && state.previewSeq === token;
 }
 
-function finishPreview(owner, token, label = "Up to date", kind = "ready") {
+function finishPreview(owner, token, label = "ready", kind = "ready") {
   if (!previewIsCurrent(owner, token)) return false;
   setPreviewStatus(label, kind);
   return true;
@@ -185,7 +185,7 @@ function showPreviewImage(url) {
   urls.forEach((u, i) => {
     const img = document.createElement("img");
     img.src = u;
-    img.alt = urls.length > 1 ? `Receipt preview segment ${i + 1} of ${urls.length}` : "Receipt preview";
+    img.alt = urls.length > 1 ? `receipt preview, part ${i + 1} of ${urls.length}` : "receipt preview";
     img.decoding = "async";
     img.className = "preview-result";
     wrap.appendChild(img);
@@ -216,20 +216,20 @@ function configurePreviewForPane(pane) {
   }
   panel.hidden = false;
   $("#preview-title").textContent = PREVIEW_TITLES[pane];
-  setPreviewStatus("Waiting", "idle");
+  setPreviewStatus("waiting", "idle");
   if (pane === "compose") refreshComposePreview();
   if (pane === "image") {
     if (state.imageFile) refreshImagePreview();
-    else showPreviewPlaceholder("Choose an image to preview it here.");
+    else showPreviewPlaceholder("select an image");
   }
-  if (pane === "codes") showPreviewPlaceholder("Choose QR or barcode settings, then preview the code here.");
-  if (pane === "widgets") showPreviewPlaceholder("Choose a widget and preview its receipt before printing.");
-  if (pane === "labs") showPreviewPlaceholder("Open a lab and preview the finished receipt here.");
+  if (pane === "codes") showPreviewPlaceholder("select QR or barcode");
+  if (pane === "widgets") showPreviewPlaceholder("select a widget");
+  if (pane === "labs") showPreviewPlaceholder("select a lab");
 }
 
 async function refreshComposePreview() {
   const owner = "compose";
-  const token = beginPreview(owner, "Compose preview");
+  const token = beginPreview(owner, "compose preview");
   if (token === null) return;
   const body = $("#compose-body").value;
   const rich = $("#compose-rich").checked;
@@ -246,8 +246,8 @@ async function refreshComposePreview() {
     finishPreview(owner, token);
   } catch (e) {
     if (!previewIsCurrent(owner, token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview(owner, token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview(owner, token, "failed", "error");
   }
 }
 
@@ -333,7 +333,7 @@ function debouncedPreview() {
 async function refreshImagePreview() {
   if (!state.imageFile) return;
   const owner = "image";
-  const token = beginPreview(owner, "Image preview");
+  const token = beginPreview(owner, "image preview");
   if (token === null) return;
   const fd = buildImageForm();
   try {
@@ -343,8 +343,8 @@ async function refreshImagePreview() {
     finishPreview(owner, token);
   } catch (e) {
     if (!previewIsCurrent(owner, token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview(owner, token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview(owner, token, "failed", "error");
   }
 }
 
@@ -427,15 +427,15 @@ function previewName(button, fallback) {
 
 // Honest status labels: random widgets re-roll on print, live ones
 // re-fetch, and "now" re-stamps the clock — only the deterministic
-// cards print exactly what the preview shows ("Up to date").
+// cards print exactly what the preview shows ("ready").
 const PREVIEW_FRESHNESS = {
-  dice: "Sample",
-  advice: "Sample",
-  weather: "Live snapshot",
-  briefing: "Live snapshot",
-  hn: "Live snapshot",
-  onthisday: "Live snapshot",
-  now: "Snapshot",
+  dice: "sample",
+  advice: "sample",
+  weather: "live",
+  briefing: "live",
+  hn: "live",
+  onthisday: "live",
+  now: "snapshot",
 };
 
 async function previewWidget(button) {
@@ -452,11 +452,11 @@ async function previewWidget(button) {
     );
     if (!previewIsCurrent("widgets", token)) return;
     showPreviewImage(data_url);
-    finishPreview("widgets", token, PREVIEW_FRESHNESS[kind] || "Up to date");
+    finishPreview("widgets", token, PREVIEW_FRESHNESS[kind] || "ready");
   } catch (e) {
     if (!previewIsCurrent("widgets", token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview("widgets", token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview("widgets", token, "failed", "error");
   } finally {
     setButtonBusy(button, false);
   }
@@ -514,8 +514,8 @@ async function previewLab(button) {
     finishPreview("labs", token);
   } catch (e) {
     if (!previewIsCurrent("labs", token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview("labs", token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview("labs", token, "failed", "error");
   } finally {
     setButtonBusy(button, false);
   }
@@ -624,7 +624,7 @@ $("#qr-print").addEventListener("click", (e) => {
       ec: qrCtrl.ec.value,
       size: Number(qrCtrl.size.value),
     });
-  }, "QR printed", e.currentTarget);
+  }, "printed", e.currentTarget);
 });
 
 let qrT;
@@ -637,8 +637,8 @@ async function refreshQrPreview() {
   const token = beginPreview(owner, "QR code preview");
   if (token === null) return;
   if (!qrCtrl.data.value.trim()) {
-    showPreviewText("Enter QR content to preview it here.");
-    finishPreview(owner, token, "Waiting", "idle");
+    showPreviewText("enter QR data");
+    finishPreview(owner, token, "waiting", "idle");
     return;
   }
   try {
@@ -653,8 +653,8 @@ async function refreshQrPreview() {
     finishPreview(owner, token);
   } catch (e) {
     if (!previewIsCurrent(owner, token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview(owner, token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview(owner, token, "failed", "error");
   }
 }
 
@@ -701,11 +701,11 @@ function buildBcBody() {
 }
 async function refreshBcPreview() {
   const owner = "codes";
-  const token = beginPreview(owner, "Barcode preview");
+  const token = beginPreview(owner, "barcode preview");
   if (token === null) return;
   if (!bcCtrl.data.value.trim()) {
-    showPreviewText("Enter barcode data to preview it here.");
-    finishPreview(owner, token, "Waiting", "idle");
+    showPreviewText("enter barcode data");
+    finishPreview(owner, token, "waiting", "idle");
     return;
   }
   try {
@@ -715,8 +715,8 @@ async function refreshBcPreview() {
     finishPreview(owner, token);
   } catch (e) {
     if (!previewIsCurrent(owner, token)) return;
-    showPreviewText("Preview unavailable\n\n" + e.message);
-    finishPreview(owner, token, "Failed", "error");
+    showPreviewText("preview failed\n\n" + e.message);
+    finishPreview(owner, token, "failed", "error");
   }
 }
 
@@ -755,7 +755,7 @@ $$("button[data-hw]").forEach((b) => {
     }, kind === "cut" ? "cut" :
        kind === "feed" ? "fed" :
        kind === "cash_drawer" ? "drawer kicked" :
-       kind === "beep" ? "beep!" :
+       kind === "beep" ? "beeped" :
        kind === "self_test" ? "self-test sent" :
        kind === "reset" ? "reset sent" :
        "applied", b);
@@ -780,7 +780,7 @@ function renderStatus(rows) {
       out += `0x${r.raw.toString(16).padStart(2, "0")}`;
       if (r.flags) {
         const set = Object.entries(r.flags).filter(([, v]) => v).map(([k]) => k);
-        if (set.length) out += "  ⚠ " + set.join(", ");
+        if (set.length) out += "  /  " + set.map((key) => key.replaceAll("_", " ")).join(", ");
       }
     }
     return out;
@@ -878,7 +878,7 @@ $("#led-send")?.addEventListener("click", (e) => {
       blink: $("#led-blink").checked,
     });
     $("#led-bytes").textContent = j.bytes;
-  }, "LED bytes sent", e.currentTarget);
+  }, "sent", e.currentTarget);
 });
 
 // ---------- console (raw ESC/POS) ----------
@@ -949,7 +949,7 @@ function adminButton(label, kind, onClick) {
   const b = document.createElement("button");
   b.className = "ghost tiny admin-btn admin-btn-" + kind;
   b.textContent = label;
-  b.addEventListener("click", () => guard(onClick, label.toLowerCase() + " ok"));
+  b.addEventListener("click", () => guard(onClick, "done"));
   return b;
 }
 
@@ -970,19 +970,19 @@ function userRow(u, opts) {
   actions.className = "row admin-row-actions";
 
   if (opts.canApprove) {
-    actions.appendChild(adminButton("Approve", "approve", async () => {
+    actions.appendChild(adminButton("approve", "approve", async () => {
       await adminPOST(`/api/admin/users/${u.id}/approve`);
       await refreshAdmin();
     }));
   }
   if (opts.canBlock) {
-    actions.appendChild(adminButton("Block", "block", async () => {
+    actions.appendChild(adminButton("block", "block", async () => {
       await adminPOST(`/api/admin/users/${u.id}/revoke`);
       await refreshAdmin();
     }));
   }
   if (opts.canUnblock) {
-    actions.appendChild(adminButton("Unblock", "approve", async () => {
+    actions.appendChild(adminButton("unblock", "approve", async () => {
       await adminPOST(`/api/admin/users/${u.id}/approve`);
       await refreshAdmin();
     }));
@@ -994,18 +994,18 @@ function userRow(u, opts) {
   // matches whatever host the console is open on (tunnel or localhost).
   const resetBtn = document.createElement("button");
   resetBtn.className = "ghost tiny admin-btn admin-btn-reset";
-  resetBtn.textContent = "Reset link";
+  resetBtn.textContent = "reset link";
   resetBtn.addEventListener("click", async () => {
     try {
       const j = await postJSON(`/api/admin/users/${u.id}/reset_link`, {});
       const url = location.origin + j.path;
       try {
         await navigator.clipboard.writeText(url);
-        toast(`reset link for ${u.username} copied — valid ${j.expires_minutes} min`, "ok");
+        toast(`reset link copied. expires in ${j.expires_minutes} min`, "ok");
       } catch {
         // Clipboard can be denied; prompt() pre-selects its value, so
         // the link is still one keystroke away.
-        prompt(`Reset link for ${u.username} (valid ${j.expires_minutes} min):`, url);
+        prompt(`reset link for ${u.username}. expires in ${j.expires_minutes} min`, url);
       }
     } catch (e) {
       toast(e.message, "err");
@@ -1013,8 +1013,8 @@ function userRow(u, opts) {
   });
   actions.appendChild(resetBtn);
 
-  actions.appendChild(adminButton("Delete", "delete", async () => {
-    if (!confirm(`Delete ${u.username}? Their account and messages will be removed.`)) return;
+  actions.appendChild(adminButton("delete", "delete", async () => {
+    if (!confirm(`delete ${u.username} and all of their prints?`)) return;
     await adminPOST(`/api/admin/users/${u.id}/delete`);
     await refreshAdmin();
   }));
@@ -1035,7 +1035,7 @@ async function loadPending() {
   list.replaceChildren();
   try {
     const { users } = await adminGET("/api/admin/users?status=pending");
-    if (!users.length) return list.appendChild(emptyState("no pending requests"));
+    if (!users.length) return list.appendChild(emptyState("none pending"));
     users.forEach((u) => list.appendChild(userRow(u, { canApprove: true })));
   } catch (e) {
     list.appendChild(emptyState("error: " + e.message));
@@ -1047,7 +1047,7 @@ async function loadAllowed() {
   list.replaceChildren();
   try {
     const { users } = await adminGET("/api/admin/users?status=allowed");
-    if (!users.length) return list.appendChild(emptyState("no approved friends yet"));
+    if (!users.length) return list.appendChild(emptyState("none approved"));
     users.forEach((u) => list.appendChild(userRow(u, { canBlock: true })));
   } catch (e) {
     list.appendChild(emptyState("error: " + e.message));
@@ -1059,7 +1059,7 @@ async function loadBlocked() {
   list.replaceChildren();
   try {
     const { users } = await adminGET("/api/admin/users?status=blocked");
-    if (!users.length) return list.appendChild(emptyState("no blocked users"));
+    if (!users.length) return list.appendChild(emptyState("none blocked"));
     users.forEach((u) => list.appendChild(userRow(u, { canUnblock: true })));
   } catch (e) {
     list.appendChild(emptyState("error: " + e.message));
@@ -1071,7 +1071,7 @@ async function loadMessages() {
   list.replaceChildren();
   try {
     const { messages } = await adminGET("/api/admin/messages?limit=20");
-    if (!messages.length) return list.appendChild(emptyState("no messages yet"));
+    if (!messages.length) return list.appendChild(emptyState("no prints yet"));
     messages.forEach((m) => {
       const card = document.createElement("div");
       card.className = "wid admin-msg";

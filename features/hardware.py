@@ -98,18 +98,18 @@ def set_density(p, level: int = 8) -> None:
 
 # A subset of common ESC/POS code pages (ESC t n)
 CODE_PAGES: dict[int, str] = {
-    0: "CP437 (USA, Std Europe)",
-    2: "CP850 (Multilingual)",
+    0: "CP437 (US + standard Europe)",
+    2: "CP850 (multilingual)",
     3: "CP860 (Portuguese)",
-    4: "CP863 (Canadian-French)",
+    4: "CP863 (Canadian French)",
     5: "CP865 (Nordic)",
     16: "WPC1252 (Windows Latin-1)",
-    17: "CP866 (Cyrillic #2)",
+    17: "CP866 (Cyrillic 2)",
     18: "CP852 (Latin 2)",
-    19: "CP858 (Euro)",
-    20: "Thai character code 42",
-    21: "Thai character code 11",
-    22: "Thai character code 13",
+    19: "CP858 (euro)",
+    20: "Thai 42",
+    21: "Thai 11",
+    22: "Thai 13",
 }
 
 
@@ -207,7 +207,7 @@ def parse_raw_input(text: str) -> bytes:
     # Hex path.
     tokens = re.findall(r"[0-9a-fA-F]{2}", text)
     if not tokens:
-        raise ValueError("no hex bytes or escape sequences found")
+        raise ValueError("enter hex bytes or escape sequences")
     return bytes(int(t, 16) for t in tokens)
 
 
@@ -222,20 +222,20 @@ def send_raw(p, text: str) -> int:
 
 # A tiny cheat sheet of common commands, exported for the UI.
 CHEAT_SHEET = [
-    ("ESC @", "1b 40", "Initialize printer"),
-    ("LF",    "0a",    "Print & line feed"),
-    ("FF",    "0c",    "Form feed"),
-    ("ESC E 1", "1b 45 01", "Bold on"),
-    ("ESC E 0", "1b 45 00", "Bold off"),
-    ("ESC ! n", "1b 21 30", "Double width + height"),
-    ("ESC a n", "1b 61 01", "Align (0=L, 1=C, 2=R)"),
-    ("ESC d n", "1b 64 03", "Feed n lines"),
-    ("ESC p 0 50 100", "1b 70 00 32 64", "Kick drawer pin 2"),
-    ("ESC B 3 5", "1b 42 03 05", "Beep 3 times, 500ms"),
-    ("GS V 0",  "1d 56 00", "Full cut"),
-    ("GS V 1",  "1d 56 01", "Partial cut"),
-    ("GS B 1",  "1d 42 01", "Inverse (white on black) on"),
-    ("ESC { 1", "1b 7b 01", "Upside-down on"),
-    ("ESC V 1", "1b 56 01", "90° clockwise rotation on"),
-    ("DLE EOT 1", "10 04 01", "Printer status query"),
+    ("ESC @", "1b 40", "initialize"),
+    ("LF",    "0a",    "print + line feed"),
+    ("FF",    "0c",    "form feed"),
+    ("ESC E 1", "1b 45 01", "bold on"),
+    ("ESC E 0", "1b 45 00", "bold off"),
+    ("ESC ! n", "1b 21 30", "double width + height"),
+    ("ESC a n", "1b 61 01", "align: 0 left, 1 center, 2 right"),
+    ("ESC d n", "1b 64 03", "feed n lines"),
+    ("ESC p 0 50 100", "1b 70 00 32 64", "drawer pin 2"),
+    ("ESC B 3 5", "1b 42 03 05", "3 beeps, 500ms"),
+    ("GS V 0",  "1d 56 00", "full cut"),
+    ("GS V 1",  "1d 56 01", "partial cut"),
+    ("GS B 1",  "1d 42 01", "inverse on"),
+    ("ESC { 1", "1b 7b 01", "upside-down on"),
+    ("ESC V 1", "1b 56 01", "rotate 90° clockwise"),
+    ("DLE EOT 1", "10 04 01", "read printer status"),
 ]

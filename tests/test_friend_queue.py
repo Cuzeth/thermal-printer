@@ -56,7 +56,7 @@ def test_friend_print_rejects_oversized_body(client):
     _signed_in_client(client, "q_long")
     r = client.post("/api/print", json={"body": "x" * (app_module._MAX_MSG_LEN + 1)})
     assert r.status_code == 400
-    assert "too long" in r.get_json()["error"]
+    assert r.get_json()["error"] == "800 character limit"
 
 
 def test_friend_print_per_user_cap(client):
@@ -171,14 +171,14 @@ def test_init_reconciles_orphaned_queued_rows():
 
 def test_doodle_prints_and_lands_in_history(client):
     """A real doodle queues, the DRY_RUN worker actually runs the doodle
-    job, and the history row shows the '(doodle)' placeholder body."""
+    job, and the history row shows the 'drawing' placeholder body."""
     user = _signed_in_client(client, "q_doodle")
     r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
     assert r.status_code == 200
     assert r.get_json()["queued"] is True
     app_module._PRINT_QUEUE.join()
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
-    row = next(m for m in msgs if m["body"] == "(doodle)")
+    row = next(m for m in msgs if m["body"] == "drawing")
     assert row["status"] == "printed"
 
 

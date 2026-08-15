@@ -72,8 +72,8 @@ def _looks_offline(e: BaseException) -> bool:
 
 def _offline_msg(e: BaseException) -> str:
     return (
-        f"Printer not responding ({config.USB_VENDOR_ID:#06x}:"
-        f"{config.USB_PRODUCT_ID:#06x}). Check the USB cable + power. "
+        f"printer offline ({config.USB_VENDOR_ID:#06x}:"
+        f"{config.USB_PRODUCT_ID:#06x}). check USB and power. "
         f"[{type(e).__name__}]"
     )
 
@@ -172,7 +172,7 @@ def open_printer() -> Iterator[object]:
                     raise PrinterError(_offline_msg(e)) from e
             else:
                 raise PrinterError(
-                    f"Could not connect to printer ({config.USB_VENDOR_ID:#06x}:"
+                    f"printer connection failed ({config.USB_VENDOR_ID:#06x}:"
                     f"{config.USB_PRODUCT_ID:#06x}): {e}"
                 ) from e
 

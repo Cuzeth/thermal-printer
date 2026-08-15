@@ -1,7 +1,7 @@
 {
-  "name": "Send Cuzeth a Receipt",
-  "short_name": "Receipts",
-  "description": "Print something on Cuzeth's desk.",
+  "name": "send me a receipt",
+  "short_name": "receipts",
+  "description": "send text or a doodle to my thermal printer",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

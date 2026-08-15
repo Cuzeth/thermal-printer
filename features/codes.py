@@ -54,7 +54,7 @@ class QROptions:
 
 def make_qr_image(opts: QROptions) -> Image.Image:
     if not opts.data:
-        raise ValueError("QR payload is empty.")
+        raise ValueError("enter QR data")
     q = qrcode.QRCode(
         error_correction=_EC_MAP.get(opts.ec.upper(), ERROR_CORRECT_M),
         box_size=max(1, int(opts.box_size)),
@@ -94,14 +94,14 @@ class BarcodeOptions:
 
 def make_barcode_image(opts: BarcodeOptions) -> Image.Image:
     if opts.kind not in BARCODE_TYPES:
-        raise ValueError(f"Unknown barcode type: {opts.kind}")
+        raise ValueError(f"unknown barcode type: {opts.kind}")
     if not opts.data:
-        raise ValueError("Barcode payload is empty.")
+        raise ValueError("enter barcode data")
     lib_name, _ = BARCODE_TYPES[opts.kind]
     try:
         cls = get_barcode_class(lib_name)
     except Exception as e:
-        raise ValueError(f"barcode lib: {e}")
+        raise ValueError(f"barcode library error: {e}")
     try:
         # CODE39 is case-sensitive and refuses some chars — upper-case by default
         data = opts.data.upper() if opts.kind == "CODE39" else opts.data

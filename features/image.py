@@ -47,13 +47,13 @@ def process(image_bytes: bytes, opts: ProcessOptions) -> Image.Image:
     except Exception as e:
         # PIL raises UnidentifiedImageError (an OSError) on non-image
         # bytes. Surface it as input error (400), not a server 500.
-        raise ValueError("that file doesn't look like an image") from e
+        raise ValueError("not an image") from e
     if img.width < 1 or img.height < 1:
-        raise ValueError("image has no pixels")
+        raise ValueError("empty image")
     if img.width * img.height > MAX_INPUT_PIXELS:
         raise ValueError(
-            f"image is {img.width}×{img.height} "
-            f"(max {MAX_INPUT_PIXELS:,} pixels) — resize it first"
+            f"image too large: {img.width}×{img.height}. "
+            f"limit: {MAX_INPUT_PIXELS:,} pixels"
         )
 
     # Handle transparency -> white background
@@ -73,8 +73,8 @@ def process(image_bytes: bytes, opts: ProcessOptions) -> Image.Image:
         new_h = max(1, int(round(img.height * ratio)))
     if new_h > MAX_OUTPUT_HEIGHT:
         raise ValueError(
-            f"image would be {new_h}px tall at {target_w}px wide "
-            f"(max {MAX_OUTPUT_HEIGHT}px) — crop it or reduce the width"
+            f"output height: {new_h}px. limit: {MAX_OUTPUT_HEIGHT}px. "
+            "crop the image or reduce its width"
         )
     if img.width != target_w:
         img = img.resize((target_w, new_h), Image.LANCZOS)

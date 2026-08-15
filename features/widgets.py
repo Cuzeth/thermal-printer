@@ -23,16 +23,16 @@ import config
 # ---------- offline banks ----------
 
 FALLBACK_ADVICE = [
-    "Do the hard thing first.",
-    "Sleep on it.",
-    "Write it down before you lose it.",
-    "Ask one question less than you think you need to.",
-    "The best time to start was yesterday. The next best time is now.",
-    "Close the tabs you haven't touched in a week.",
-    "Drink the water sitting next to you.",
-    "Say the thing out loud before you commit it.",
-    "Short walk, no phone.",
-    "Delete before you refactor.",
+    "Do the annoying thing first.",
+    "Sleep first.",
+    "Write it down.",
+    "Ask one question.",
+    "Start now.",
+    "Close some tabs.",
+    "Drink water.",
+    "Say it out loud.",
+    "Go for a walk.",
+    "Delete it.",
 ]
 
 # ---------- dice ----------
@@ -177,17 +177,14 @@ def _fetch_wttr(location: str) -> dict | None:
         return None
 
 
-def _weather_error_body(location: str, err: str) -> str:
+def _weather_error_body(location: str) -> str:
     return "\n".join(
         [
             "# WEATHER",
             "===",
             "",
-            "could not fetch weather for:",
+            "weather unavailable",
             f"  {location}",
-            "",
-            textwrap.fill(err, width=config.RECEIPT_WIDTH),
-            "",
             "---",
         ]
     )
@@ -204,7 +201,7 @@ def weather(location: str, days: int = 1) -> str:
 
     data = _fetch_wttr(location)
     if not data:
-        return _weather_error_body(location, "wttr.in did not respond")
+        return _weather_error_body(location)
 
     try:
         current = data.get("current_condition", [{}])[0]
@@ -279,8 +276,8 @@ def weather(location: str, days: int = 1) -> str:
             f"sunset          {sunset}",
             "---",
         ])
-    except Exception as e:
-        return _weather_error_body(location, str(e))
+    except Exception:
+        return _weather_error_body(location)
 
 
 # ---------- hacker news ----------
@@ -296,13 +293,12 @@ def hacker_news(count: int = 5) -> str:
         )
         r.raise_for_status()
         ids = r.json()[:count]
-    except Exception as e:
+    except Exception:
         return "\n".join([
             "# HACKER NEWS",
             "===",
             "",
-            "(could not reach HN)",
-            textwrap.fill(str(e), width=config.RECEIPT_WIDTH),
+            "Hacker News unavailable",
             "---",
         ])
 
@@ -370,14 +366,13 @@ def on_this_day(count: int = 4) -> str:
         )
         r.raise_for_status()
         data = r.json() or {}
-    except Exception as e:
+    except Exception:
         return "\n".join([
             "# ON THIS DAY",
             "===",
             f"> {today.strftime('%B %-d')}",
             "",
-            "(could not reach wikipedia)",
-            textwrap.fill(str(e), width=config.RECEIPT_WIDTH),
+            "Wikipedia unavailable",
             "---",
         ])
 
@@ -388,7 +383,7 @@ def on_this_day(count: int = 4) -> str:
             "===",
             f"> {today.strftime('%B %-d')}",
             "",
-            "(no events found)",
+            "no events",
             "---",
         ])
 
@@ -419,7 +414,7 @@ def calendar_month(year: int | None = None, month: int | None = None) -> str:
     y = int(year) if year else today.year
     m = int(month) if month else today.month
     if not (1 <= m <= 12):
-        raise ValueError("month must be 1-12")
+        raise ValueError("month: 1-12")
 
     cal = calendar.Calendar(firstweekday=6)  # Sunday first
     weeks = cal.monthdayscalendar(y, m)
@@ -461,11 +456,11 @@ def countdown(label: str, target_iso: str) -> str:
     try:
         target = dt.date.fromisoformat(target_iso)
     except Exception:
-        raise ValueError(f"invalid date: {target_iso!r} — use YYYY-MM-DD")
+        raise ValueError(f"invalid date: {target_iso!r}. use YYYY-MM-DD")
 
     today = dt.date.today()
     delta = (target - today).days
-    label = (label or "the big day").strip() or "the big day"
+    label = (label or "event").strip() or "event"
 
     if delta > 0:
         headline = f"{delta} DAY" + ("S" if delta != 1 else "")
@@ -500,7 +495,7 @@ def habit_tracker(habits: list[str], days: int = 7) -> str:
     """A weekly grid: each habit gets a row of checkboxes, one per day."""
     cleaned = [h.strip()[:24] for h in habits if (h or "").strip()]
     if not cleaned:
-        raise ValueError("at least one habit is required")
+        raise ValueError("add at least one habit")
     days = max(1, min(7, int(days)))
     today = dt.date.today()
     monday = today - dt.timedelta(days=today.weekday())
@@ -527,8 +522,6 @@ def habit_tracker(habits: list[str], days: int = 7) -> str:
         row = "  ".join(["." for _ in range(days)])
         lines.append(f"{name}  {row}")
     lines.append("```")
-    lines.append("")
-    lines.append("> fill a dot each day")
     lines.append("---")
     return "\n".join(lines)
 
@@ -557,7 +550,6 @@ def morning_briefing_sections(location: str = "") -> list[str]:
     intro = "\n".join([
         f"# {weekday}",
         "===",
-        "> good morning",
         f"> {when}",
         "---",
     ])

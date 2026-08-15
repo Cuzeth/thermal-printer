@@ -69,31 +69,31 @@ PROTOCOLS: dict[str, Protocol] = {
         Protocol(
             key="esc_c",
             name="ESC C r g b",
-            note="5-byte direct RGB. Common simple vendor command.",
+            note="5-byte direct RGB vendor command",
             build=_esc_c_rgb,
         ),
         Protocol(
             key="gs_n",
             name="GS N 01 r g b",
-            note="Notification LED extension used by some ESC/POS variants.",
+            note="notification LED extension",
             build=_gs_n_rgb,
         ),
         Protocol(
             key="gs_paren_c",
             name="GS ( C ...",
-            note="ESC/POS extension-table style; more common on newer units.",
+            note="ESC/POS extension-table format",
             build=_gs_paren_c,
         ),
         Protocol(
             key="mht_custom",
             name="GS 0x8C r g b",
-            note="Plausible Milestone/MHT vendor sequence.",
+            note="possible Milestone/MHT sequence",
             build=_mht_custom,
         ),
         Protocol(
             key="three_bit",
             name="ESC L n (3-bit)",
-            note="Older printers with fixed 8-color slots (R/G/B mapped).",
+            note="fixed 8-color slots",
             build=_three_bit,
         ),
     ]

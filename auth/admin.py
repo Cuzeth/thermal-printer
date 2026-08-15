@@ -57,11 +57,11 @@ def login():
     if not config.TOTP_SECRET:
         # Fail closed but say why — a fresh .env shouldn't look like a
         # mistyped code.
-        return jsonify({"ok": False, "error": "TOTP_SECRET is not set",
+        return jsonify({"ok": False, "error": "TOTP_SECRET missing",
                         "kind": "server"}), 503
     if _locked():
         return jsonify({"ok": False,
-                        "error": "too many failed attempts — try again in 15 minutes",
+                        "error": "too many attempts. try again in 15 minutes",
                         "kind": "input"}), 429
 
     code = str((request.get_json(silent=True) or {}).get("code", ""))
@@ -72,7 +72,7 @@ def login():
     if step <= _last_used_step:
         _record_failure()
         return jsonify({"ok": False,
-                        "error": "code already used — wait for the next one",
+                        "error": "code already used",
                         "kind": "input"}), 401
 
     _last_used_step = step
