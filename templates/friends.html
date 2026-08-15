@@ -129,6 +129,42 @@
     </form>
   </section>
 
+  <!-- RESET (arrived via an admin-minted forgot-password link) -->
+  <section class="card" data-state="reset" hidden>
+    <h1>pick a new password</h1>
+    <p class="dim">cuzeth sent you this link so you can get back into your account. choose a new password and you're in.</p>
+    <form id="reset-form" autocomplete="off">
+      <label>
+        <span class="label">new password</span>
+        <input
+          type="password"
+          id="reset-password"
+          placeholder="at least 8 characters"
+          minlength="8"
+          maxlength="200"
+          autocomplete="new-password"
+          required
+        />
+      </label>
+      <label>
+        <span class="label">confirm password</span>
+        <input
+          type="password"
+          id="reset-password-2"
+          placeholder="type it again"
+          minlength="8"
+          maxlength="200"
+          autocomplete="new-password"
+          required
+        />
+      </label>
+      <div class="row">
+        <button type="submit" class="primary">Set password</button>
+        <button type="button" class="ghost" data-back>Back</button>
+      </div>
+    </form>
+  </section>
+
   <!-- PENDING -->
   <section class="card pending-card" data-state="pending" hidden>
     <div class="pending-stamp">PENDING</div>

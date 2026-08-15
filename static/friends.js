@@ -2,7 +2,7 @@
 
 const $ = (sel) => document.querySelector(sel);
 
-const STATES = ["loading", "guest", "register", "login", "pending", "blocked", "allowed"];
+const STATES = ["loading", "guest", "register", "login", "reset", "pending", "blocked", "allowed"];
 
 // ---------- toast ----------
 
@@ -45,6 +45,15 @@ function show(state) {
   });
   if (state === "register") requestAnimationFrame(() => $("#reg-username")?.focus());
   if (state === "login") requestAnimationFrame(() => $("#login-username")?.focus());
+  if (state === "reset") requestAnimationFrame(() => $("#reset-password")?.focus());
+}
+
+// An admin-minted forgot-password link lands here as /#reset=<token>. The
+// token rides in the URL fragment on purpose: fragments never leave the
+// browser, so the secret can't end up in tunnel or server access logs.
+function resetTokenFromHash() {
+  const m = location.hash.match(/^#reset=([A-Za-z0-9_\-]+)$/);
+  return m ? m[1] : null;
 }
 
 let me = null;
@@ -461,6 +470,29 @@ $("#login-form").addEventListener("submit", async (e) => {
   }
 });
 
+$("#reset-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const password = $("#reset-password").value;
+  const confirm = $("#reset-password-2").value;
+  if (password !== confirm) {
+    return toast("passwords don't match", "err");
+  }
+  const btn = e.submitter || e.target.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    const j = await postJSON("/api/auth/reset", { token: resetTokenFromHash() || "", password });
+    // Scrub the burnt token from the URL so a reload or a shared tab
+    // doesn't reopen the form with a link that can never work again.
+    history.replaceState(null, "", location.pathname);
+    applyMe(j.user);
+    toast("password updated — you're signed in", "ok");
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $("#msg-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = e.submitter || e.target.querySelector("button[type=submit]");
@@ -540,7 +572,14 @@ $("#logout").addEventListener("click", async () => {
   }
 });
 
-refreshMe().catch((e) => {
-  toast("couldn't reach the server: " + e.message, "err");
-  show("guest");
-});
+// A reset link takes priority over whatever session this browser holds —
+// the friend clicked it because they can't get in, so send them straight
+// to the new-password form instead of the usual signed-in/guest routing.
+if (resetTokenFromHash()) {
+  show("reset");
+} else {
+  refreshMe().catch((e) => {
+    toast("couldn't reach the server: " + e.message, "err");
+    show("guest");
+  });
+}

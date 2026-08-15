@@ -24,7 +24,6 @@ import config
 from auth import auth_bp
 from auth import db as auth_db
 from auth.admin import admin_auth_bp
-from auth.blueprint import validate_password
 from auth.session import current_user, is_admin_request, require_admin, require_allowed
 from features import codes as codes_feat
 from features import hardware as hw_feat
@@ -1175,21 +1174,23 @@ def admin_delete_user(user_id: int):
     return jsonify({"ok": True})
 
 
-@app.post("/api/admin/users/<int:user_id>/password")
+@app.post("/api/admin/users/<int:user_id>/reset_link")
 @require_admin
-def admin_set_password(user_id: int):
-    """Reset a friend's password. There's no self-service reset on the
-    friends page — without this, a friend who forgot their password could
-    only be deleted (losing their history and burning the username)."""
+def admin_reset_link(user_id: int):
+    """Mint a temporary forgot-password link for a friend. There's no
+    self-service reset on the friends page — the owner hands this link
+    over whatever chat they already share, and the friend picks their own
+    new password there, so the owner never knows or types it. The token
+    rides in the URL fragment (not a query string) so it never shows up
+    in access logs; the console builds the absolute URL client-side."""
     if not auth_db.get_user(user_id):
         return jsonify({"ok": False, "error": "no such user"}), 404
-    data = request.get_json(silent=True) or {}
-    try:
-        password = validate_password(data.get("password", ""))
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
-    auth_db.set_password(user_id, password)
-    return jsonify({"ok": True})
+    token = auth_db.create_reset_token(user_id)
+    return jsonify({
+        "ok": True,
+        "path": f"/#reset={token}",
+        "expires_minutes": auth_db.RESET_TOKEN_MINUTES,
+    })
 
 
 @app.get("/api/admin/messages")
