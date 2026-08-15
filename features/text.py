@@ -12,7 +12,10 @@ Markup is line-based. A line can start with an optional directive:
     ===             -> double horizontal rule
     !!!             -> cut paper here (split into multiple receipts)
 
-Inline: **bold**, __underline__, ~big~text~ (double width/height chunk).
+Inline: **bold**, *italic*, __underline__, ~big~text~ (double width/height
+chunk). The printer's ROM font has no italic face and ESC/POS has no italic
+command, so this backend prints italic spans as plain text — only the
+pretty-font renderer (features/render.py) can actually slant them.
 Everything else prints as left-aligned body text.
 """
 

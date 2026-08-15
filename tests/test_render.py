@@ -150,7 +150,7 @@ def test_markup_vocab_all_paths():
         "# Heading\n"
         "## Sub\n"
         "> centered\n"
-        "regular body with **bold** and __underline__ and ~BIG~ text\n"
+        "regular body with **bold** and *italic* and __underline__ and ~BIG~ text\n"
         "- bullet\n"
         "[ ] todo\n"
         "[x] done\n"

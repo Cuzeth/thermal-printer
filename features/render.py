@@ -68,6 +68,11 @@ _FONT_CANDIDATES: dict[str, list[tuple[str, int]]] = {
         ("/System/Library/Fonts/Supplemental/Courier New Bold.ttf", 0),
         ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 0),
     ],
+    "mono_italic": [
+        ("/System/Library/Fonts/Menlo.ttc", 2),
+        ("/System/Library/Fonts/Supplemental/Courier New Italic.ttf", 0),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf", 0),
+    ],
     # CJK coverage (Chinese, Japanese, Korean). Used via script-based fallback
     # when a message contains CJK code points. `fonts-noto-cjk` on Pi / Debian
     # ships the .ttc at these paths. On macOS we use the system CJK fonts.
@@ -642,7 +647,12 @@ class Renderer:
         pieces: list[Piece] = []
         for sp in spans:
             size = BODY * 2 if sp.big else BODY
-            base_kind = "mono_bold" if sp.bold else "mono_regular"
+            if sp.bold:
+                base_kind = "mono_bold"
+            elif sp.italic:
+                base_kind = "mono_italic"
+            else:
+                base_kind = "mono_regular"
             # Split on runs of ASCII whitespace so wrapping can break. CJK
             # chars have no spaces between them, so we also split each CJK
             # run into per-character tokens so wrapping happens mid-word
