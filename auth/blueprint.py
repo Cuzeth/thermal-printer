@@ -55,7 +55,7 @@ def _validate_username(username: str) -> str:
 
 
 def validate_password(password: str) -> str:
-    """Shared with the admin reset endpoint in app.py — same rules apply."""
+    """Shared by register and the reset-link redeem — same rules apply."""
     if not password or not isinstance(password, str):
         raise ValueError("password required")
     if len(password) < MIN_PASSWORD_LEN:
@@ -157,6 +157,44 @@ def login():
         return _bad("wrong username or password", 401)
 
     _clear_login_failures(username)
+    sess.login(user["id"])
+    return jsonify({"ok": True, "user": _public_user(user)})
+
+
+# ---------- password reset ----------
+
+@auth_bp.post("/auth/reset")
+def reset_password():
+    """Redeem an admin-minted forgot-password link: the friend picks a new
+    password and lands signed in, so a reset never needs a second trip
+    through the login form.
+
+    The token is 256 bits of randomness, so guessing is hopeless — but
+    failed redeems still count against the shared per-IP login bucket to
+    bound the noise from anyone poking at the endpoint."""
+    if _sliding_check(_ip_failures, _client_ip(), _MAX_IP_FAILURES, _WINDOW_SECONDS):
+        return _bad("too many failed attempts — try again in 15 minutes", 429)
+
+    data = request.get_json(silent=True) or {}
+    token = data.get("token") or ""
+    if not token or not isinstance(token, str):
+        return _bad("reset token required")
+    # Validate the password *before* consuming the token, so a typo'd
+    # too-short password doesn't burn the friend's one-shot link.
+    try:
+        password = validate_password(data.get("password", ""))
+    except ValueError as e:
+        return _bad(str(e))
+
+    user = db.consume_reset_token(token)
+    if not user:
+        _sliding_record(_ip_failures, _client_ip(), _WINDOW_SECONDS)
+        return _bad("this reset link is invalid or expired — ask cuzeth for a fresh one")
+
+    db.set_password(user["id"], password)
+    # They almost certainly racked up failed logins figuring out they'd
+    # forgotten the password — don't make the new one sit out a lockout.
+    _clear_login_failures(user["username"])
     sess.login(user["id"])
     return jsonify({"ok": True, "user": _public_user(user)})
 

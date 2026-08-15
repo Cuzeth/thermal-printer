@@ -10,6 +10,8 @@ boot (`rm data/app.db`) — init() won't migrate the old columns.
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import sqlite3
 from contextlib import contextmanager
 from typing import Iterator, Optional
@@ -24,13 +26,15 @@ PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS users (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-  password_hash TEXT    NOT NULL,
-  status        TEXT    NOT NULL DEFAULT 'pending',
-  name_style    TEXT    NOT NULL DEFAULT 'plain',
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-  approved_at   TEXT
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  username            TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash       TEXT    NOT NULL,
+  status              TEXT    NOT NULL DEFAULT 'pending',
+  name_style          TEXT    NOT NULL DEFAULT 'plain',
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  approved_at         TEXT,
+  reset_token_hash    TEXT,
+  reset_token_expires TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -85,6 +89,10 @@ def init() -> None:
             conn.execute(
                 "ALTER TABLE users ADD COLUMN name_style TEXT NOT NULL DEFAULT 'plain'"
             )
+        if "reset_token_hash" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN reset_token_hash TEXT")
+        if "reset_token_expires" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN reset_token_expires TEXT")
         msg_cols = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
         if "status" not in msg_cols:
             # Pre-status rows were logged synchronously at print time, so
@@ -136,6 +144,59 @@ def set_password(user_id: int, password: str) -> None:
             "UPDATE users SET password_hash = ? WHERE id = ?",
             (generate_password_hash(password), user_id),
         )
+
+
+# ---------- password reset links ----------
+
+# How long an admin-minted reset link stays redeemable. Long enough for
+# "texted the link, friend opens it after dinner", short enough that a
+# link rotting in a chat history isn't a standing credential.
+RESET_TOKEN_MINUTES = 60
+
+
+def _reset_digest(token: str) -> str:
+    # Plain sha256, not werkzeug's salted hash: we need to *look up* the
+    # row by token, and the token is already 256 bits of secrets-module
+    # randomness, so salting adds nothing.
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_reset_token(user_id: int) -> str:
+    """Mint a single-use forgot-password token for this user.
+
+    Returns the raw token — the only copy that ever exists; the DB keeps
+    just its sha256, so a leaked database can't be turned into working
+    reset links. Minting again overwrites the previous token, so at most
+    one link per user is live at a time."""
+    token = secrets.token_urlsafe(32)
+    with db() as conn:
+        conn.execute(
+            "UPDATE users SET reset_token_hash = ?, "
+            f"reset_token_expires = datetime('now', '+{RESET_TOKEN_MINUTES} minutes') "
+            "WHERE id = ?",
+            (_reset_digest(token), user_id),
+        )
+    return token
+
+
+def consume_reset_token(token: str) -> Optional[dict]:
+    """Redeem a reset token: return its user and burn the token, or None
+    if it matches nothing or has expired. Burning happens even before the
+    caller sets the new password — a reset link is strictly one shot."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE reset_token_hash = ? "
+            "AND reset_token_expires > datetime('now')",
+            (_reset_digest(token),),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE users SET reset_token_hash = NULL, reset_token_expires = NULL "
+            "WHERE id = ?",
+            (row["id"],),
+        )
+        return dict(row)
 
 
 def get_user(user_id: int) -> Optional[dict]:

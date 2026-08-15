@@ -356,16 +356,27 @@ def test_friend_preview_honors_anonymous_flag(client):
     assert len(segs) >= 1
 
 
-def test_admin_password_reset_flow(client, auth):
-    """Admin reset → old password stops working, new one signs in."""
+def test_admin_reset_link_flow(client, auth):
+    """Admin mints a link → friend redeems it with a password of their own
+    choosing → old password dead, new one works, and the redeeming browser
+    is signed in on the spot (no second trip through the login form)."""
     from auth import blueprint as auth_bp_mod, db as auth_db
 
     user = auth_db.create_pending_user("pwreset_alice", "oldpassword1")
     auth_db.set_status(user["id"], "allowed")
 
-    r = client.post(f"/api/admin/users/{user['id']}/password",
-                    json={"password": "newpassword1"}, headers=auth)
+    r = client.post(f"/api/admin/users/{user['id']}/reset_link", headers=auth)
     assert r.status_code == 200
+    j = r.get_json()
+    assert j["path"].startswith("/#reset=")
+    token = j["path"].split("=", 1)[1]
+
+    r = client.post("/api/auth/reset",
+                    json={"token": token, "password": "newpassword1"})
+    assert r.status_code == 200
+    assert r.get_json()["user"]["username"] == "pwreset_alice"
+    r = client.get("/api/me")
+    assert r.get_json()["user"]["username"] == "pwreset_alice"
 
     auth_bp_mod._failures.clear()
     auth_bp_mod._ip_failures.clear()
@@ -377,21 +388,56 @@ def test_admin_password_reset_flow(client, auth):
     assert r.status_code == 200
 
 
-def test_admin_password_reset_validates(client, auth):
-    from auth import db as auth_db
+def test_admin_reset_link_single_use(client, auth):
+    """A redeemed link is burnt — replaying the same token fails."""
+    from auth import blueprint as auth_bp_mod, db as auth_db
+    auth_bp_mod._ip_failures.clear()
 
-    user = auth_db.create_pending_user("pwreset_bob", "oldpassword1")
-    r = client.post(f"/api/admin/users/{user['id']}/password",
-                    json={"password": "short"}, headers=auth)
+    user = auth_db.create_pending_user("pwreset_carol", "oldpassword1")
+    token = auth_db.create_reset_token(user["id"])
+    r = client.post("/api/auth/reset",
+                    json={"token": token, "password": "newpassword1"})
+    assert r.status_code == 200
+    r = client.post("/api/auth/reset",
+                    json={"token": token, "password": "sneakypassword1"})
     assert r.status_code == 400
 
-    r = client.post("/api/admin/users/999999/password",
-                    json={"password": "longenough1"}, headers=auth)
+
+def test_admin_reset_link_expires(client, auth):
+    """A token past its expiry timestamp is refused."""
+    from auth import blueprint as auth_bp_mod, db as auth_db
+    auth_bp_mod._ip_failures.clear()
+
+    user = auth_db.create_pending_user("pwreset_dave", "oldpassword1")
+    token = auth_db.create_reset_token(user["id"])
+    with auth_db.db() as conn:
+        conn.execute(
+            "UPDATE users SET reset_token_expires = datetime('now', '-1 minute') "
+            "WHERE id = ?", (user["id"],))
+    r = client.post("/api/auth/reset",
+                    json={"token": token, "password": "newpassword1"})
+    assert r.status_code == 400
+
+
+def test_admin_reset_link_validates(client, auth):
+    """A too-short password is rejected *without* burning the one-shot
+    token; minting a link for an unknown user 404s."""
+    from auth import blueprint as auth_bp_mod, db as auth_db
+    auth_bp_mod._ip_failures.clear()
+
+    user = auth_db.create_pending_user("pwreset_bob", "oldpassword1")
+    token = auth_db.create_reset_token(user["id"])
+    r = client.post("/api/auth/reset", json={"token": token, "password": "short"})
+    assert r.status_code == 400
+    r = client.post("/api/auth/reset", json={"token": token, "password": "longenough1"})
+    assert r.status_code == 200
+
+    r = client.post("/api/admin/users/999999/reset_link", headers=auth)
     assert r.status_code == 404
 
 
-def test_admin_password_reset_requires_bearer(client):
-    r = client.post("/api/admin/users/1/password", json={"password": "longenough1"})
+def test_admin_reset_link_requires_bearer(client):
+    r = client.post("/api/admin/users/1/reset_link")
     assert r.status_code == 401
 
 

@@ -988,18 +988,25 @@ function userRow(u, opts) {
     }));
   }
 
-  // No self-service reset on the friends page — this is the only recovery path for a
-  // friend who forgot their password. Custom handler (not adminButton) so
-  // a cancelled prompt doesn't toast a bogus success.
+  // No self-service reset on the friends page — this link is the only
+  // recovery path for a friend who forgot their password. The server
+  // returns just the path; we bolt on location.origin here so the link
+  // matches whatever host the console is open on (tunnel or localhost).
   const resetBtn = document.createElement("button");
   resetBtn.className = "ghost tiny admin-btn admin-btn-reset";
-  resetBtn.textContent = "Reset PW";
+  resetBtn.textContent = "Reset link";
   resetBtn.addEventListener("click", async () => {
-    const pw = prompt(`New password for ${u.username} (8-200 chars):`);
-    if (pw === null) return;
     try {
-      await postJSON(`/api/admin/users/${u.id}/password`, { password: pw });
-      toast(`password reset for ${u.username}`, "ok");
+      const j = await postJSON(`/api/admin/users/${u.id}/reset_link`, {});
+      const url = location.origin + j.path;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast(`reset link for ${u.username} copied — valid ${j.expires_minutes} min`, "ok");
+      } catch {
+        // Clipboard can be denied; prompt() pre-selects its value, so
+        // the link is still one keystroke away.
+        prompt(`Reset link for ${u.username} (valid ${j.expires_minutes} min):`, url);
+      }
     } catch (e) {
       toast(e.message, "err");
     }
