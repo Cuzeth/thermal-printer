@@ -285,11 +285,93 @@ textarea { resize: vertical; min-height: 120px; }
 }
 
 /* DOODLE — draw panel */
+.doodle-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.doodle-history,
+.brush-options {
+  display: flex;
+  gap: 6px;
+}
+.doodle-tool,
+.brush-size {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--dim);
+  font-family: inherit;
+  cursor: pointer;
+  transition-property: color, background-color, border-color, box-shadow, scale;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+.doodle-tool {
+  padding: 9px 11px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.doodle-tool:hover:not(:disabled),
+.brush-size:hover { color: var(--ink); border-color: var(--accent); }
+.doodle-tool:active:not(:disabled),
+.brush-size:active { scale: .96; }
+.doodle-tool:focus-visible,
+.brush-size:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.doodle-tool:disabled { opacity: .38; cursor: not-allowed; }
+.brush-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.brush-picker legend {
+  width: 100%;
+  margin: 0 0 5px;
+  padding: 0;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-align: right;
+  text-transform: uppercase;
+}
+.brush-size {
+  min-width: 58px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 8px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+.brush-size.active {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: rgb(247 180 44 / .08);
+  box-shadow: 0 0 0 2px rgba(247,180,44,.14);
+}
+.brush-dot {
+  display: block;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
+}
+.brush-dot-thin { width: 4px; height: 4px; }
+.brush-dot-medium { width: 8px; height: 8px; }
+.brush-dot-thick { width: 14px; height: 14px; }
 #doodle-canvas {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  margin-top: 14px;
+  margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
@@ -570,4 +652,8 @@ button.ghost:active { scale: .96; }
   .row { flex-direction: column; }
   .row > button { width: 100%; }
   .preview-paper { margin-inline: -2px; padding-inline: 10px; }
+  .doodle-toolbar { align-items: flex-end; gap: 8px; }
+  .doodle-history, .brush-options { gap: 4px; }
+  .doodle-tool { padding-inline: 8px; }
+  .brush-size { min-width: 48px; padding-inline: 4px; }
 }

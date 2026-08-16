@@ -366,6 +366,9 @@ async function sendMessage() {
 // ---------- doodle canvas ----------
 
 let doodleCtx = null;
+let doodleBrushSize = 8;
+let doodleActions = [];
+let doodleHistoryIndex = 0;
 
 function doodleFillWhite() {
   const canvas = $("#doodle-canvas");
@@ -373,19 +376,86 @@ function doodleFillWhite() {
   doodleCtx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function drawDoodleStroke(stroke) {
+  const points = stroke.points;
+  if (!points.length) return;
+  doodleCtx.fillStyle = "#000";
+  doodleCtx.strokeStyle = "#000";
+  doodleCtx.lineWidth = stroke.size;
+  doodleCtx.lineCap = "round";
+  doodleCtx.lineJoin = "round";
+  if (points.length === 1) {
+    doodleCtx.beginPath();
+    doodleCtx.arc(points[0][0], points[0][1], stroke.size / 2, 0, Math.PI * 2);
+    doodleCtx.fill();
+    return;
+  }
+  doodleCtx.beginPath();
+  doodleCtx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i += 1) {
+    doodleCtx.lineTo(points[i][0], points[i][1]);
+  }
+  doodleCtx.stroke();
+}
+
+function renderDoodleHistory() {
+  doodleFillWhite();
+  for (const action of doodleActions.slice(0, doodleHistoryIndex)) {
+    if (action.kind === "clear") doodleFillWhite();
+    else drawDoodleStroke(action);
+  }
+}
+
+function updateDoodleHistoryControls() {
+  $("#doodle-undo").disabled = doodleHistoryIndex === 0;
+  $("#doodle-redo").disabled = doodleHistoryIndex === doodleActions.length;
+}
+
+function commitDoodleAction(action) {
+  // A fresh stroke after undo starts a new timeline, just like a text editor.
+  doodleActions = doodleActions.slice(0, doodleHistoryIndex);
+  doodleActions.push(action);
+  doodleHistoryIndex = doodleActions.length;
+  updateDoodleHistoryControls();
+}
+
+function undoDoodle() {
+  if (doodleHistoryIndex === 0) return;
+  doodleHistoryIndex -= 1;
+  renderDoodleHistory();
+  updateDoodleHistoryControls();
+}
+
+function redoDoodle() {
+  if (doodleHistoryIndex === doodleActions.length) return;
+  doodleHistoryIndex += 1;
+  renderDoodleHistory();
+  updateDoodleHistoryControls();
+}
+
+function resetDoodle() {
+  doodleActions = [];
+  doodleHistoryIndex = 0;
+  doodleFillWhite();
+  updateDoodleHistoryControls();
+}
+
+function doodleHasInk() {
+  let hasInk = false;
+  for (const action of doodleActions.slice(0, doodleHistoryIndex)) {
+    hasInk = action.kind === "clear" ? false : true;
+  }
+  return hasInk;
+}
+
 function initDoodleCanvas() {
   const canvas = $("#doodle-canvas");
   if (!canvas || doodleCtx) return;
   doodleCtx = canvas.getContext("2d");
-  doodleCtx.strokeStyle = "#000";
-  doodleCtx.lineWidth = 8;
-  doodleCtx.lineCap = "round";
-  doodleCtx.lineJoin = "round";
-  doodleFillWhite();
+  resetDoodle();
 
-  let drawing = false;
-  let lastX = 0;
-  let lastY = 0;
+  let activeStroke = null;
+  let activePointerId = null;
 
   // CSS size can differ from the 576x576 backing store — scale client
   // coords into canvas space so strokes land under the pointer.
@@ -397,21 +467,44 @@ function initDoodleCanvas() {
   }
 
   canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (activeStroke) return;
+    e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
-    drawing = true;
-    [lastX, lastY] = canvasPoint(e);
+    activePointerId = e.pointerId;
+    activeStroke = {
+      kind: "stroke",
+      size: doodleBrushSize,
+      points: [canvasPoint(e)],
+    };
+    // A tap should make a dot, not disappear because there was no move.
+    drawDoodleStroke(activeStroke);
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!drawing) return;
-    const [x, y] = canvasPoint(e);
-    doodleCtx.beginPath();
-    doodleCtx.moveTo(lastX, lastY);
-    doodleCtx.lineTo(x, y);
-    doodleCtx.stroke();
-    [lastX, lastY] = [x, y];
+    if (!activeStroke || e.pointerId !== activePointerId) return;
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const event of events) {
+      const previous = activeStroke.points[activeStroke.points.length - 1];
+      const point = canvasPoint(event);
+      doodleCtx.beginPath();
+      doodleCtx.moveTo(previous[0], previous[1]);
+      doodleCtx.lineTo(point[0], point[1]);
+      doodleCtx.strokeStyle = "#000";
+      doodleCtx.lineWidth = activeStroke.size;
+      doodleCtx.lineCap = "round";
+      doodleCtx.lineJoin = "round";
+      doodleCtx.stroke();
+      activeStroke.points.push(point);
+    }
   });
-  canvas.addEventListener("pointerup", () => { drawing = false; });
-  canvas.addEventListener("pointerleave", () => { drawing = false; });
+  const finishStroke = (e) => {
+    if (!activeStroke || e.pointerId !== activePointerId) return;
+    commitDoodleAction(activeStroke);
+    activeStroke = null;
+    activePointerId = null;
+  };
+  canvas.addEventListener("pointerup", finishStroke);
+  canvas.addEventListener("pointercancel", finishStroke);
 }
 
 async function sendDoodle() {
@@ -419,7 +512,7 @@ async function sendDoodle() {
   const anonymous = !!$("#doodle-anon")?.checked;
   const image = canvas.toDataURL("image/png");
   const j = await postJSON("/api/print/doodle", { image, anonymous });
-  doodleFillWhite();
+  resetDoodle();
   if ($("#doodle-anon")) $("#doodle-anon").checked = false;
   celebrateQueued(j);
 }
@@ -529,8 +622,37 @@ function setMode(mode) {
 $("#mode-write").addEventListener("click", () => setMode("write"));
 $("#mode-draw").addEventListener("click", () => setMode("draw"));
 
+document.querySelectorAll(".brush-size").forEach((button) => {
+  button.addEventListener("click", () => {
+    doodleBrushSize = Number(button.dataset.size);
+    document.querySelectorAll(".brush-size").forEach((candidate) => {
+      const selected = candidate === button;
+      candidate.classList.toggle("active", selected);
+      candidate.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+  });
+});
+
+$("#doodle-undo").addEventListener("click", undoDoodle);
+$("#doodle-redo").addEventListener("click", redoDoodle);
+
 $("#doodle-clear").addEventListener("click", () => {
-  if (doodleCtx) doodleFillWhite();
+  if (!doodleCtx || !doodleHasInk()) return;
+  doodleFillWhite();
+  commitDoodleAction({ kind: "clear" });
+});
+
+document.addEventListener("keydown", (e) => {
+  if ($("#doodle-panel").hidden || !(e.metaKey || e.ctrlKey)) return;
+  const key = e.key.toLowerCase();
+  if (key === "z") {
+    e.preventDefault();
+    if (e.shiftKey) redoDoodle();
+    else undoDoodle();
+  } else if (key === "y") {
+    e.preventDefault();
+    redoDoodle();
+  }
 });
 
 $("#doodle-send").addEventListener("click", async () => {

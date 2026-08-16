@@ -236,7 +236,30 @@
     </form>
 
     <div id="doodle-panel" role="tabpanel" aria-labelledby="mode-draw" hidden>
-      <canvas id="doodle-canvas" width="576" height="576"></canvas>
+      <div class="doodle-toolbar" aria-label="drawing tools">
+        <div class="doodle-history" role="group" aria-label="drawing history">
+          <button type="button" class="doodle-tool" id="doodle-undo" title="undo last stroke" disabled>undo</button>
+          <button type="button" class="doodle-tool" id="doodle-redo" title="redo last stroke" disabled>redo</button>
+        </div>
+        <fieldset class="brush-picker">
+          <legend>brush size</legend>
+          <div class="brush-options">
+            <button type="button" class="brush-size" data-size="4" aria-label="thin brush" aria-pressed="false">
+              <span class="brush-dot brush-dot-thin" aria-hidden="true"></span>
+              <span>thin</span>
+            </button>
+            <button type="button" class="brush-size active" data-size="8" aria-label="medium brush" aria-pressed="true">
+              <span class="brush-dot brush-dot-medium" aria-hidden="true"></span>
+              <span>medium</span>
+            </button>
+            <button type="button" class="brush-size" data-size="16" aria-label="thick brush" aria-pressed="false">
+              <span class="brush-dot brush-dot-thick" aria-hidden="true"></span>
+              <span>thick</span>
+            </button>
+          </div>
+        </fieldset>
+      </div>
+      <canvas id="doodle-canvas" width="576" height="576" aria-label="drawing canvas">drawing canvas</canvas>
       <p class="hint">prints in black and white.</p>
       <label class="anon-toggle">
         <input type="checkbox" id="doodle-anon" />

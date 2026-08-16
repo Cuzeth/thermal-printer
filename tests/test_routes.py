@@ -61,6 +61,18 @@ def test_friend_page_uses_first_person_owner_copy(client):
     assert "i'll approve it" in html
 
 
+def test_friend_drawing_controls_are_exposed(client):
+    """The friend canvas exposes navigable history and explicit brush
+    sizes instead of hiding either feature behind gestures."""
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="doodle-undo"' in html
+    assert 'id="doodle-redo"' in html
+    assert html.count('class="brush-size') == 3
+    assert 'data-size="4"' in html
+    assert 'data-size="8"' in html
+    assert 'data-size="16"' in html
+
+
 def test_private_route_requires_bearer(client):
     r = client.post("/api/admin/print/now", json={})
     assert r.status_code == 401
