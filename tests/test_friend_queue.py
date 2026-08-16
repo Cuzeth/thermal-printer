@@ -167,11 +167,37 @@ def test_init_reconciles_orphaned_queued_rows():
     assert row["status"] == "failed"
 
 
+def test_init_migrates_existing_history_for_saved_drawings(tmp_path, monkeypatch):
+    """A Pi upgrading in place gets the nullable drawing column without
+    losing its existing message rows."""
+    old_db = tmp_path / "old-app.db"
+    with sqlite3.connect(old_db) as conn:
+        conn.execute(
+            "CREATE TABLE messages ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, "
+            "body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'printed', "
+            "printed_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "INSERT INTO messages (user_id, body) VALUES (?, ?)",
+            (1, "still here"),
+        )
+
+    monkeypatch.setattr(auth_db.config, "DB_PATH", old_db)
+    auth_db.init()
+
+    with sqlite3.connect(old_db) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        body = conn.execute("SELECT body FROM messages").fetchone()[0]
+    assert "drawing" in columns
+    assert body == "still here"
+
+
 # ---------- doodles ----------
 
 def test_doodle_prints_and_lands_in_history(client):
-    """A real doodle queues, the DRY_RUN worker actually runs the doodle
-    job, and the history row shows the 'drawing' placeholder body."""
+    """A real doodle prints and keeps a reusable normalized PNG in the
+    friend's history instead of only a placeholder body."""
     user = _signed_in_client(client, "q_doodle")
     r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
     assert r.status_code == 200
@@ -180,6 +206,37 @@ def test_doodle_prints_and_lands_in_history(client):
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
     row = next(m for m in msgs if m["body"] == "drawing")
     assert row["status"] == "printed"
+    assert row["has_drawing"] is True
+
+    saved = client.get(f"/api/history/{row['id']}/drawing")
+    assert saved.status_code == 200
+    data_url = saved.get_json()["image"]
+    assert data_url.startswith("data:image/png;base64,")
+    restored = Image.open(io.BytesIO(base64.b64decode(data_url.split(",", 1)[1])))
+    assert restored.size == (576, 576)
+    assert restored.convert("L").getextrema()[0] == 0
+
+
+def test_saved_doodle_is_scoped_to_its_friend(client):
+    """History ids are not capabilities: a different signed-in friend
+    cannot fetch someone else's saved drawing."""
+    owner = _signed_in_client(client, "q_doodle_owner")
+    r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
+    assert r.status_code == 200
+    app_module._PRINT_QUEUE.join()
+    row = next(
+        m for m in auth_db.list_messages_for_user(owner["id"], limit=5)
+        if m["has_drawing"]
+    )
+
+    other = auth_db.create_pending_user("q_doodle_other", "hunter2hunter")
+    auth_db.set_status(other["id"], "allowed")
+    with client.session_transaction() as s:
+        s[sess.SESSION_USER_KEY] = other["id"]
+
+    hidden = client.get(f"/api/history/{row['id']}/drawing")
+    assert hidden.status_code == 404
+    assert hidden.get_json()["error"] == "drawing not found"
 
 
 def test_doodle_rejects_blank_canvas(client):

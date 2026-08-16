@@ -281,13 +281,28 @@ function historyItem(msg) {
   const body = document.createElement("pre");
   const isDoodle = msg.body === "drawing" || msg.body === "(doodle)";
   body.className = "history-body" + (isDoodle ? " history-doodle" : "");
-  body.textContent = isDoodle ? "drawing" : msg.body;
+  body.textContent = isDoodle
+    ? (msg.has_drawing ? "drawing · tap to reuse" : "drawing · preview unavailable")
+    : msg.body;
 
   li.append(when, body);
   if (isDoodle) {
-    // A placeholder body — nothing sensible to restore into the textarea,
-    // so skip the click-to-restore handler and its pointer cursor.
-    li.classList.add("history-doodle-row");
+    if (msg.has_drawing) {
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      li.setAttribute("aria-label", `reuse the drawing from ${fmtWhen(msg.printed_at)}`);
+      li.addEventListener("click", () => restoreDrawing(msg));
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          li.click();
+        }
+      });
+    } else {
+      // Rows created before drawing storage was added have no pixels to
+      // restore. Keep the history entry honest and non-interactive.
+      li.classList.add("history-doodle-row");
+    }
     return li;
   }
   li.tabIndex = 0;
@@ -398,10 +413,25 @@ function drawDoodleStroke(stroke) {
   doodleCtx.stroke();
 }
 
+function drawDoodleImage(image) {
+  const canvas = $("#doodle-canvas");
+  const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  doodleCtx.drawImage(
+    image,
+    (canvas.width - width) / 2,
+    (canvas.height - height) / 2,
+    width,
+    height,
+  );
+}
+
 function renderDoodleHistory() {
   doodleFillWhite();
   for (const action of doodleActions.slice(0, doodleHistoryIndex)) {
     if (action.kind === "clear") doodleFillWhite();
+    else if (action.kind === "image") drawDoodleImage(action.image);
     else drawDoodleStroke(action);
   }
 }
@@ -446,6 +476,31 @@ function doodleHasInk() {
     hasInk = action.kind === "clear" ? false : true;
   }
   return hasInk;
+}
+
+function loadDrawingImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("saved drawing could not be opened"));
+    image.src = src;
+  });
+}
+
+async function restoreDrawing(msg) {
+  try {
+    const j = await getJSON(`/api/history/${encodeURIComponent(msg.id)}/drawing`);
+    if (!j.ok) throw new Error(j.error || "drawing failed to load");
+    const image = await loadDrawingImage(j.image);
+    setMode("draw");
+    resetDoodle();
+    drawDoodleImage(image);
+    commitDoodleAction({ kind: "image", image });
+    $("#doodle-canvas").scrollIntoView({ behavior: "smooth", block: "center" });
+    toast("drawing restored", "ok");
+  } catch (err) {
+    toast(err.message, "err");
+  }
 }
 
 function initDoodleCanvas() {

@@ -1,4 +1,4 @@
-"""SQLite for users + messages.
+"""SQLite for users + print history.
 
 One file at config.DB_PATH. WAL mode + FKs on. Single-process gunicorn means
 we don't need a connection pool; every request opens its own conn.
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body       TEXT    NOT NULL,
+  drawing    BLOB,
   status     TEXT    NOT NULL DEFAULT 'printed',
   printed_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -100,6 +101,8 @@ def init() -> None:
             conn.execute(
                 "ALTER TABLE messages ADD COLUMN status TEXT NOT NULL DEFAULT 'printed'"
             )
+        if "drawing" not in msg_cols:
+            conn.execute("ALTER TABLE messages ADD COLUMN drawing BLOB")
 
         # The print queue lives in process memory, so any row still
         # 'queued' at boot belongs to a job that no longer exists — the
@@ -261,13 +264,18 @@ def set_name_style(user_id: int, style: str) -> None:
 VALID_MESSAGE_STATUSES = ("queued", "printed", "failed")
 
 
-def log_message(user_id: int, body: str, status: str = "printed") -> int:
+def log_message(
+    user_id: int,
+    body: str,
+    status: str = "printed",
+    drawing: bytes | None = None,
+) -> int:
     if status not in VALID_MESSAGE_STATUSES:
         raise ValueError(f"invalid message status: {status}")
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO messages (user_id, body, status) VALUES (?, ?, ?)",
-            (user_id, body, status),
+            "INSERT INTO messages (user_id, body, status, drawing) VALUES (?, ?, ?, ?)",
+            (user_id, body, status, drawing),
         )
         return cur.lastrowid
 
@@ -308,8 +316,24 @@ def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
     — otherwise a bursty double-print would show in the wrong order."""
     with db() as conn:
         rows = conn.execute(
-            "SELECT id, body, status, printed_at FROM messages "
+            "SELECT id, body, status, printed_at, "
+            "drawing IS NOT NULL AS has_drawing FROM messages "
             "WHERE user_id = ? ORDER BY printed_at DESC, id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) | {"has_drawing": bool(r["has_drawing"])} for r in rows]
+
+
+def get_message_drawing_for_user(message_id: int, user_id: int) -> bytes | None:
+    """Return one saved drawing, scoped to its owner.
+
+    Missing rows, text rows, and another friend's rows intentionally all
+    look alike so this helper cannot be used to probe history ids.
+    """
+    with db() as conn:
+        row = conn.execute(
+            "SELECT drawing FROM messages WHERE id = ? AND user_id = ? "
+            "AND drawing IS NOT NULL",
+            (message_id, user_id),
+        ).fetchone()
+        return bytes(row["drawing"]) if row else None

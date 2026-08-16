@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import io
 import os
 import queue
 import sys
@@ -992,7 +993,12 @@ def friend_preview():
     return _safe(run)
 
 
-def _enqueue_friend_print(user: dict, history_body: str, job: dict):
+def _enqueue_friend_print(
+    user: dict,
+    history_body: str,
+    job: dict,
+    history_drawing: bytes | None = None,
+):
     """Shared bookkeeping for every friend print kind: per-user cap,
     optimistic history row, queue insert, and the crash-safe unwind.
     Returns a Flask response."""
@@ -1011,7 +1017,9 @@ def _enqueue_friend_print(user: dict, history_body: str, job: dict):
         # immediately, even before the worker actually pulls it. The row
         # starts 'queued'; the worker flips it to 'printed' or 'failed' so
         # the friend can see whether it actually hit paper.
-        msg_id = auth_db.log_message(user["id"], history_body, status="queued")
+        msg_id = auth_db.log_message(
+            user["id"], history_body, status="queued", drawing=history_drawing,
+        )
 
         # qsize() before put = jobs the printer must finish first.
         # Approximate (the worker may have started one but not yet
@@ -1091,6 +1099,8 @@ def friend_print_doodle():
         return jsonify({"ok": False, "error": "draw something first",
                         "kind": "input"}), 400
     img = image_feat.pad_to_printer_width(img)
+    saved = io.BytesIO()
+    img.save(saved, format="PNG")
     header, footer_markup = widgets.friend_frame(
         user["username"],
         style=user.get("name_style") or "plain",
@@ -1099,7 +1109,7 @@ def friend_print_doodle():
     return _enqueue_friend_print(user, "drawing", {
         "kind": "doodle", "image": img,
         "header": header, "footer": footer_markup,
-    })
+    }, history_drawing=saved.getvalue())
 
 
 @app.get("/api/history")
@@ -1120,6 +1130,18 @@ def friend_history():
         "ok": True,
         "messages": auth_db.list_messages_for_user(user["id"], limit=limit),
     })
+
+
+@app.get("/api/history/<int:message_id>/drawing")
+@require_allowed
+def friend_history_drawing(message_id: int):
+    """Return one reusable drawing from the signed-in friend's history."""
+    user = current_user()
+    drawing = auth_db.get_message_drawing_for_user(message_id, user["id"])
+    if drawing is None:
+        return jsonify({"ok": False, "error": "drawing not found"}), 404
+    encoded = base64.b64encode(drawing).decode("ascii")
+    return jsonify({"ok": True, "image": _DOODLE_PREFIX + encoded})
 
 
 @app.get("/api/printer")
