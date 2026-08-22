@@ -46,24 +46,6 @@ body.friends {
   letter-spacing: -.01em;
   color: var(--text);
 }
-/* The state field narrates the page's own state machine. */
-.top-state::before { content: "--"; }
-.top-state::after { content: "loading"; }
-body[data-page="guest"] .top-state::before { content: "01"; }
-body[data-page="guest"] .top-state::after { content: "guest"; }
-body[data-page="register"] .top-state::before,
-body[data-page="login"] .top-state::before,
-body[data-page="reset"] .top-state::before,
-body[data-page="pending"] .top-state::before { content: "02"; }
-body[data-page="register"] .top-state::after { content: "register"; }
-body[data-page="login"] .top-state::after { content: "sign in"; }
-body[data-page="reset"] .top-state::after { content: "recovery"; }
-body[data-page="pending"] .top-state::after { content: "pending"; }
-body[data-page="blocked"] .top-state::before { content: "00"; }
-body[data-page="blocked"] .top-state::after { content: "blocked"; }
-body[data-page="allowed"] .top-state::before { content: "03"; }
-body[data-page="allowed"] .top-state::after { content: "approved"; }
-
 /* ---------- page grid ---------- */
 
 .friends-main {
@@ -112,7 +94,6 @@ body[data-page="allowed"] .top-state::after { content: "approved"; }
   height: 1px;
   background: var(--line-strong);
 }
-.card-head .kicker { grid-column: 1 / -1; margin-bottom: 40px; }
 .card h1 {
   grid-column: 1;
   margin: 0;
@@ -128,13 +109,6 @@ body[data-page="allowed"] .top-state::after { content: "approved"; }
   font-size: clamp(64px, 12vw, 192px);
   line-height: .8;
   text-transform: uppercase;
-}
-.head-side {
-  grid-column: 2;
-  align-self: end;
-  display: grid;
-  gap: 14px;
-  padding-bottom: 8px;
 }
 .card h2 {
   margin: 0;
@@ -160,24 +134,6 @@ body[data-page="allowed"] .top-state::after { content: "approved"; }
   line-height: 1.5;
   color: var(--text-muted);
 }
-.head-meta {
-  display: flex;
-  flex-wrap: wrap;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.head-meta span + span {
-  margin-left: 14px;
-  padding-left: 14px;
-  border-left: 1px solid var(--line);
-}
-
 /* ---------- loading ---------- */
 
 .card[data-state="loading"] { padding: 48px 0; }
@@ -197,8 +153,6 @@ body[data-page="allowed"] .top-state::after { content: "approved"; }
   margin-top: 28px;
 }
 .guest-actions button { width: 100%; min-height: 52px; justify-content: space-between; padding-inline: 18px; }
-.card[data-state="guest"] .spec-strip { margin-top: 56px; }
-
 /* ---------- register / login / reset ---------- */
 
 .form-side {
@@ -306,7 +260,7 @@ label .label {
   grid-template-rows: auto auto auto 1fr;
   align-items: start;
 }
-.card[data-state="allowed"] .card-head { grid-area: h; margin-bottom: 40px; }
+.card[data-state="allowed"] .card-head { grid-area: h; grid-template-columns: minmax(0, 1fr); margin-bottom: 40px; }
 .card[data-state="allowed"] .printer-banner { grid-area: b; }
 .card[data-state="allowed"] .composer-wrap { grid-area: c; }
 .card[data-state="allowed"] .settings { grid-area: s; }
@@ -343,45 +297,8 @@ label .label {
   animation: lamp 900ms steps(2, end) infinite;
 }
 
-/* The composer is the dark engineered object on the pale page. Its tab,
-   side rail and dimension line live on the wrapper so the corner cut on
-   the panel itself can't clip them. */
+/* The composer is the dark engineered object on the pale page. */
 .composer-wrap { position: relative; z-index: 1; }
-.composer-dim {
-  position: absolute;
-  right: -22px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line-strong);
-}
-.composer-dim::before,
-.composer-dim::after {
-  content: "";
-  position: absolute;
-  left: -4px;
-  width: 9px;
-  height: 1px;
-  background: var(--line-strong);
-}
-.composer-dim::before { top: 0; }
-.composer-dim::after { bottom: 0; }
-.composer-dim span {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  rotate: -90deg;
-  padding: 0 10px;
-  background: var(--bone);
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
 .composer {
   --ground: var(--ink);
   --ground-2: var(--ink-2);
@@ -408,14 +325,6 @@ label .label {
   gap: 16px;
   padding: 12px 30px 12px 16px;
   border-bottom: 1px solid var(--line);
-}
-.composer-head .spec {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
 }
 .composer > form,
 .composer > #doodle-panel { padding: 0 24px; }
@@ -861,7 +770,6 @@ label .label {
 
 @media (max-width: 1100px) {
   .card-head { grid-template-columns: minmax(0, 1fr); }
-  .head-side { grid-column: 1; margin-top: 24px; padding-bottom: 0; }
   .card[data-state="allowed"] {
     grid-template-areas:
       "h h h h h h h h h h h h"
@@ -871,8 +779,7 @@ label .label {
       "y y y y y y y y y y y y";
     grid-template-rows: none;
   }
-  .card[data-state="allowed"] .rail,
-  .composer-dim { display: none; }
+  .card[data-state="allowed"] .rail { display: none; }
   .settings { margin: 48px 0 0; }
   .history { margin-top: 40px; }
 }
@@ -893,14 +800,11 @@ label .label {
 @media (max-width: 640px) {
   .friends-main { padding: 28px var(--gutter) 96px; }
   .who-name { display: none; }
-  .card-head .kicker { margin-bottom: 24px; }
   .card h1 { font-size: clamp(56px, 15vw, 72px); }
   .card h1.display { font-size: clamp(56px, 15vw, 80px); }
   .bg-idx { font-size: clamp(150px, 44vw, 220px); top: -.08em; right: calc(-1 * var(--gutter) - .1em); }
   .lead { font-size: 16px; }
   .guest-actions { margin-top: 28px; }
-  .card[data-state="guest"] .spec-strip { margin-top: 32px; }
-  .spec-strip > span { padding: 8px 10px; }
   .form-card form { padding: 24px 18px 20px; }
   .pending-card, .blocked-card { padding: 22px 18px; }
   .pending-card .row { margin-top: 20px; }

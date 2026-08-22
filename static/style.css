@@ -197,7 +197,6 @@ code {
 .status[data-state="pending"]::before { background: var(--signal-orange); animation: lamp 900ms steps(2, end) infinite; }
 .status[data-state="error"] { color: var(--text); }
 .status[data-state="error"]::before { background: var(--signal-coral); }
-.status[data-state="live"]::before { background: var(--sage); }
 .status[data-state="dry"]::before { background: var(--signal-orange); }
 @keyframes lamp { 50% { opacity: .25; } }
 
@@ -257,27 +256,6 @@ code {
   background-size: 22px 22px;
   background-position: 0 0;
 }
-
-/* Spec strip: a row of mono facts separated by hairlines. */
-.spec-strip {
-  display: flex;
-  flex-wrap: wrap;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-.spec-strip > span {
-  padding: 10px 16px 10px 0;
-  margin-right: 16px;
-  border-right: 1px solid var(--line);
-  font-variant-numeric: tabular-nums;
-}
-.spec-strip > span:last-child { border-right: 0; margin-right: 0; }
 
 .warn { color: var(--coral-text); }
 
@@ -429,20 +407,7 @@ code {
   border-left: 1px solid var(--line);
   white-space: nowrap;
 }
-.top-state { color: var(--text); }
-.top-state::before {
-  margin-right: 8px;
-  color: var(--signal-orange);
-  font-variant-numeric: tabular-nums;
-}
 .account-actions { display: flex; align-items: center; gap: 14px; min-width: max-content; }
-.session-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
 
 .tabs {
   display: flex;
@@ -532,27 +497,6 @@ main > .rail {
   margin-top: -40px;
 }
 main > .rail::before { top: -1px; }
-/* A rotated annotation rides the rail, the way a dimension sits on a
-   drawing's extension line. */
-.rail > span {
-  position: absolute;
-  top: 160px;
-  left: 50%;
-  display: block;
-  translate: -50% 0;
-  rotate: -90deg;
-  padding: 0 10px;
-  background: var(--ground);
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 /* Side rail on an engineered panel: a hairline in the gutter that climbs
    to the rule above, with one block of signal paint where it meets the
    panel's top edge. Parent must be position: relative. */
@@ -993,37 +937,6 @@ button.is-busy::after {
 }
 .wid-section + .widgets { margin-top: 0; border-top: 0; }
 
-/* Origin-of-data chip next to each widget title: a square lamp + label. */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 7px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.chip::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: var(--text-dim);
-}
-.chip-live { color: var(--text); }
-.chip-live::before { background: var(--signal-orange); }
-.chip-hero {
-  background: var(--signal-orange-fill);
-  color: var(--ink);
-  border-color: transparent;
-}
-.chip-hero::before { background: var(--ink); }
-
 /* Hero: the morning briefing spread sits above the tile grid with the
    pane's one orange rule. */
 .wid-hero {
@@ -1167,17 +1080,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
-.preview-kicker {
-  display: block;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
 .preview-head h2 {
-  margin: 4px 0 0;
+  margin: 0;
   font-family: var(--sans);
   font-size: 18px;
   font-weight: 600;
@@ -1187,20 +1091,6 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
 }
 .preview-state { margin-top: 2px; }
 .preview-body { padding: 20px; }
-.preview-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
 .preview[aria-busy="true"] .paper::after {
   content: "";
   position: absolute;
@@ -1628,10 +1518,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   color: var(--bone);
   white-space: nowrap;
 }
-.login-art .spec-strip { margin-top: 24px; border-bottom: 0; }
 /* Keep the dot matrix from running through the small type. */
-.login-art .kicker > *,
-.login-art .spec-strip > span { background: var(--ground); }
+.login-art .kicker > * { background: var(--ground); }
 .login-spread > .rail {
   grid-column: 8;
   grid-row: 1;
@@ -1702,20 +1590,6 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   font-size: 11px;
   color: var(--coral-text);
 }
-.login-security {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 /* ---------- responsive ---------- */
 
 @media (max-width: 1180px) {
@@ -1740,7 +1614,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
 
 @media (max-width: 640px) {
   .top-bar { min-height: 52px; gap: 12px; }
-  .sub, .session-label { display: none; }
+  .sub { display: none; }
   .tab { padding: 0 12px; }
   /* The strip scrolls; a fade on the right edge says so. */
   .tabs {

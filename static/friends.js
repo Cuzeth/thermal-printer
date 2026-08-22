@@ -193,6 +193,7 @@ function setPreviewProgress(label, state = "idle") {
   if (!el) return;
   el.textContent = label;
   el.dataset.state = state;
+  el.hidden = !label;
   $("#preview-paper")?.setAttribute("aria-busy", state === "loading" ? "true" : "false");
 }
 
@@ -201,7 +202,7 @@ function setPreviewPlaceholder(msg, kind = "placeholder") {
   p.className = `preview-${kind}`;
   p.textContent = msg;
   $("#preview-paper").replaceChildren(p);
-  setPreviewProgress(kind === "error" ? "failed" : "live", kind === "error" ? "error" : "idle");
+  setPreviewProgress(kind === "error" ? "failed" : "", kind === "error" ? "error" : "idle");
 }
 
 async function updatePreview() {

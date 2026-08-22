@@ -29,12 +29,11 @@
       </svg>
       <span class="brand-copy">
         <span class="title">send me a receipt</span>
-        <span class="sub"><span>{{ mm }} mm thermal</span><span>{{ pixel_width }} px</span></span>
+        <span class="sub"><span>{{ mm }} mm / {{ pixel_width }} px / {{ width }} col</span></span>
       </span>
     </div>
     <div class="top-nav" aria-hidden="true">
       <span class="top-crumb">friends / print queue</span>
-      <span class="top-state"></span>
     </div>
     <div class="who" id="who" aria-label="signed-in account" hidden>
       <span class="who-name"></span>
@@ -54,7 +53,6 @@
   <section class="card" data-state="guest" hidden>
     <span class="bg-idx" aria-hidden="true">01</span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">01</span><span class="t-label">open to friends</span></div>
       <h1 class="display">print on my desk</h1>
     </div>
     <p class="lead">send text or a doodle to my thermal printer.</p>
@@ -64,16 +62,12 @@
       <button class="ghost block arrow" id="go-login">sign in</button>
     </div>
 
-    <div class="spec-strip" aria-hidden="true">
-      <span>{{ mm }} mm paper</span><span>{{ pixel_width }} px</span><span>1-bit</span><span>fifo queue</span><span>name on top</span>
-    </div>
   </section>
 
   <!-- REGISTER -->
   <section class="card form-card" data-state="register" hidden>
     <span class="bg-idx" aria-hidden="true">02</span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">register</span></div>
       <h1>new account</h1>
     </div>
     <div class="form-side">
@@ -132,7 +126,6 @@
   <section class="card form-card" data-state="login" hidden>
     <span class="bg-idx" aria-hidden="true">02</span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">sign in</span></div>
       <h1>sign in</h1>
     </div>
     <form id="login-form" autocomplete="on">
@@ -170,11 +163,7 @@
   <section class="card form-card" data-state="reset" hidden>
     <span class="bg-idx" aria-hidden="true">02</span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">recovery</span></div>
       <h1>new password</h1>
-    </div>
-    <div class="form-side">
-      <p class="lead dim">enter a new password.</p>
     </div>
     <form id="reset-form" autocomplete="off">
       <span class="panel-tab" aria-hidden="true">form / 02</span>
@@ -214,8 +203,7 @@
     <span class="bg-idx" aria-hidden="true">02</span>
     <div class="card-head">
       <div class="pending-stamp" aria-hidden="true">pending</div>
-      <h1>not approved yet</h1>
-      <p>i haven't approved <code id="pending-name"></code> yet.</p>
+      <p><code id="pending-name"></code> is waiting for approval.</p>
       <p class="hint">this page checks every 30 seconds.</p>
     </div>
     <div class="row">
@@ -227,9 +215,8 @@
   <section class="card blocked-card" data-state="blocked" hidden>
     <span class="bg-idx" aria-hidden="true">00</span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">00</span><span class="t-label">access revoked</span></div>
       <h1>blocked</h1>
-      <p>this account is blocked. text me if that's wrong.</p>
+      <p>text me if this is a mistake.</p>
     </div>
   </section>
 
@@ -238,25 +225,16 @@
     <span class="bg-idx" aria-hidden="true">03</span>
     <span class="rail" aria-hidden="true"></span>
     <div class="card-head">
-      <div class="kicker" aria-hidden="true"><span class="idx">03</span><span class="t-label">approved</span></div>
       <h1>new print</h1>
-      <div class="head-side">
-        <p class="lead dim">prints on my desk. your name goes at the top.</p>
-        <div class="head-meta" aria-hidden="true">
-          <span>queue / fifo</span><span>{{ pixel_width }} px / {{ width }} col</span><span>{{ mm }} mm</span>
-        </div>
-      </div>
     </div>
     <div class="printer-banner" id="printer-banner" hidden>printer offline. new prints will stay queued.</div>
 
     <div class="composer-wrap">
       <span class="panel-tab" aria-hidden="true">tx / 01</span>
       <span class="side-rail" aria-hidden="true"></span>
-      <span class="composer-dim" aria-hidden="true"><span>{{ pixel_width }} px</span></span>
       <div class="composer cut">
         <div class="composer-head">
           <span class="t-label">composer</span>
-          <span class="spec" aria-hidden="true">{{ mm }} mm / 1-bit / queue</span>
         </div>
 
         <div class="mode-switch" id="mode-switch" role="tablist" aria-label="print type">
@@ -286,7 +264,7 @@
           <div class="preview-block">
             <div class="preview-label-row">
               <div class="preview-label">print preview</div>
-              <span class="preview-progress status" id="preview-progress" data-state="idle">live</span>
+              <span class="preview-progress status" id="preview-progress" data-state="idle" hidden></span>
             </div>
             <div class="preview-paper" id="preview-paper" aria-live="polite" aria-busy="false">
               <p class="preview-placeholder">preview appears here</p>
@@ -338,7 +316,6 @@
 
     <details class="settings" id="settings">
       <summary>name style · <span class="settings-current" id="settings-current">plain</span></summary>
-      <p class="hint">changes the name at the top of your prints.</p>
       <div class="name-style-grid" id="name-style-grid">
         <!-- populated by friends.js -->
       </div>

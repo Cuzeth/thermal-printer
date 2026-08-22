@@ -425,16 +425,16 @@ function previewName(button, fallback) {
   return name || fallback;
 }
 
-// Honest status labels: random widgets re-roll on print, live ones
-// re-fetch, and "now" re-stamps the clock — only the deterministic
+// Honest status labels: random and network-backed widgets can change on
+// print, and "now" re-stamps the clock — only the deterministic
 // cards print exactly what the preview shows ("ready").
 const PREVIEW_FRESHNESS = {
   dice: "sample",
   advice: "sample",
-  weather: "live",
-  briefing: "live",
-  hn: "live",
-  onthisday: "live",
+  weather: "sample",
+  briefing: "sample",
+  hn: "sample",
+  onthisday: "sample",
   now: "snapshot",
 };
 

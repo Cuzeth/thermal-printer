@@ -25,9 +25,11 @@
       </svg>
       <span class="brand-copy">
         <span class="title">Thermal</span>
+        {% if dry_run %}
         <span class="sub">
-          <span class="status" data-state="{{ 'dry' if dry_run else 'live' }}">{% if dry_run %}dry run{% else %}live{% endif %}</span>
+          <span class="status" data-state="dry">dry run</span>
         </span>
+        {% endif %}
       </span>
     </div>
     <div class="top-nav" aria-hidden="true">
@@ -35,7 +37,6 @@
       <span>{% if pixel_width <= 384 %}58{% else %}80{% endif %} mm / {{ pixel_width }} px / {{ width }} col</span>
     </div>
     <div class="account-actions">
-      <span class="session-label">session admin</span>
       <button type="button" class="ghost tiny signout" id="signout" title="sign out">sign out</button>
     </div>
   </div>
@@ -91,7 +92,7 @@ that's it</textarea>
       </div>
 
       <div class="row">
-        <label class="chk"><input type="checkbox" id="compose-rich" checked /> pretty font (render as image)</label>
+        <label class="chk"><input type="checkbox" id="compose-rich" checked /> render formatting</label>
         <label class="chk"><input type="checkbox" id="compose-cut" checked /> cut paper after print</label>
       </div>
       <div class="row">
@@ -106,7 +107,6 @@ that's it</textarea>
         <span class="bg-idx" aria-hidden="true">02</span>
         <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">raster</span></div>
         <h2>Image</h2>
-        <p class="help">photos use Floyd-Steinberg dithering by default.</p>
       </div>
 
       <div id="drop" class="drop tgrid" role="button" tabindex="0" aria-controls="image-file" aria-label="choose or drop an image">
@@ -158,15 +158,15 @@ that's it</textarea>
     <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
       <div class="pane-head">
         <span class="bg-idx" aria-hidden="true">04</span>
-        <div class="kicker" aria-hidden="true"><span class="idx">04</span><span class="t-label">one-press prints</span></div>
+        <div class="kicker" aria-hidden="true"><span class="idx">04</span><span class="t-label">utilities</span></div>
         <h2>Widgets</h2>
-        <p class="help">live widgets need internet.</p>
+        <p class="help">weather and news fetch current data.</p>
       </div>
 
       <!-- Hero: morning briefing combines several live widgets into one scroll. -->
       <article class="wid wid-wide wid-hero">
         <div class="wid-head">
-          <h3>morning briefing <span class="chip chip-hero">combo</span></h3>
+          <h3>morning briefing</h3>
           <p>weather, Hacker News, and on this day</p>
         </div>
         <div class="grid2">
@@ -183,8 +183,7 @@ that's it</textarea>
       <h3 class="wid-section" data-group="A">daily</h3>
       <div class="widgets" data-group="A">
         <article class="wid">
-          <h3>weather <span class="chip chip-live">live</span></h3>
-          <p>current conditions or three-day forecast</p>
+          <h3>weather</h3>
           <label>location <input type="text" id="w-loc" placeholder="city, airport, or zip" value="{{ default_location }}" /></label>
           <label>report
             <select id="w-days">
@@ -199,7 +198,7 @@ that's it</textarea>
         </article>
 
         <article class="wid">
-          <h3>calendar <span class="chip chip-offline">offline</span></h3>
+          <h3>calendar</h3>
           <p>month grid with today marked</p>
           <div class="grid2">
             <label>year <input type="number" id="w-cal-year" min="1900" max="2100" /></label>
@@ -213,7 +212,7 @@ that's it</textarea>
         </article>
 
         <article class="wid">
-          <h3>countdown <span class="chip chip-offline">offline</span></h3>
+          <h3>countdown</h3>
           <p>days before or after a date</p>
           <label>label <input type="text" id="w-cd-label" placeholder="birthday" value="event" /></label>
           <label>date <input type="date" id="w-cd-date" /></label>
@@ -224,8 +223,7 @@ that's it</textarea>
         </article>
 
         <article class="wid">
-          <h3>habit tracker <span class="chip chip-offline">offline</span></h3>
-          <p>one row per habit</p>
+          <h3>habit tracker</h3>
           <label>habits (one per line)
             <textarea id="w-habits" rows="4">drink water
 move 20 min
@@ -242,8 +240,7 @@ sleep by 11</textarea>
       <h3 class="wid-section" data-group="B">news</h3>
       <div class="widgets" data-group="B">
         <article class="wid">
-          <h3>Hacker News <span class="chip chip-live">live</span></h3>
-          <p>top stories</p>
+          <h3>Hacker News</h3>
           <label>count <span class="v" id="w-hn-v">5</span>
             <input type="range" id="w-hn-count" min="1" max="10" step="1" value="5" />
           </label>
@@ -254,7 +251,7 @@ sleep by 11</textarea>
         </article>
 
         <article class="wid">
-          <h3>on this day <span class="chip chip-live">live</span></h3>
+          <h3>on this day</h3>
           <p>Wikipedia events for today</p>
           <label>count <span class="v" id="w-otd-v">4</span>
             <input type="range" id="w-otd-count" min="1" max="8" step="1" value="4" />
@@ -266,8 +263,7 @@ sleep by 11</textarea>
         </article>
 
         <article class="wid">
-          <h3>advice <span class="chip chip-live">live</span></h3>
-          <p>one random line</p>
+          <h3>advice</h3>
           <div class="action-pair">
             <button type="button" data-preview-widget="advice" class="ghost" title="preview and print use different lines">preview</button>
             <button data-widget="advice" class="primary">print advice</button>
@@ -278,8 +274,7 @@ sleep by 11</textarea>
       <h3 class="wid-section" data-group="C">tools</h3>
       <div class="widgets" data-group="C">
         <article class="wid">
-          <h3>dice <span class="chip chip-offline">offline</span></h3>
-          <p>custom roll or preset</p>
+          <h3>dice</h3>
           <div class="row mini">
             <input type="number" id="w-dice-count" value="2" min="1" max="20" aria-label="number of dice" />
             <span>d</span>
@@ -298,7 +293,7 @@ sleep by 11</textarea>
         </article>
 
         <article class="wid">
-          <h3>now <span class="chip chip-offline">offline</span></h3>
+          <h3>now</h3>
           <p>time, week, day, and year progress</p>
           <div class="action-pair">
             <button type="button" data-preview-widget="now" class="ghost">preview</button>
@@ -307,8 +302,7 @@ sleep by 11</textarea>
         </article>
 
         <article class="wid">
-          <h3>ASCII art <span class="chip chip-offline">offline</span></h3>
-          <p>text drawings</p>
+          <h3>ASCII art</h3>
           <select id="w-ascii">
             <option value="cat">cat</option>
             <option value="dog">dog</option>
@@ -399,7 +393,6 @@ mail package</textarea>
         <span class="bg-idx" aria-hidden="true">03</span>
         <div class="kicker" aria-hidden="true"><span class="idx">03</span><span class="t-label">symbologies</span></div>
         <h2>Codes</h2>
-        <p class="help">QR and 1D barcodes. prints use native ESC/POS.</p>
       </div>
 
       <details open>
@@ -477,13 +470,11 @@ mail package</textarea>
         <span class="bg-idx" aria-hidden="true">06</span>
         <div class="kicker" aria-hidden="true"><span class="idx">06</span><span class="t-label">controls</span></div>
         <h2>Hardware</h2>
-        <p class="help">some commands may not work on this printer.</p>
       </div>
 
       <div class="widgets" data-group="H">
         <article class="wid">
           <h3>cash drawer <span class="tip" data-tip="sends a pulse through the RJ11 jack. most drawers use pin 2. try pin 5 if needed.">?</span></h3>
-          <p>drawer-open pulse</p>
           <div class="row mini">
             <button data-hw="cash_drawer" data-pin="2" class="primary">pin 2</button>
             <button data-hw="cash_drawer" data-pin="5" class="ghost">pin 5</button>
@@ -531,26 +522,22 @@ mail package</textarea>
 
         <article class="wid">
           <h3>reset <span class="tip" data-tip="ESC @ resets alignment, font size, density, code page, line spacing, underline, and inverse mode.">?</span></h3>
-          <p>restore defaults</p>
           <button data-hw="reset" class="ghost">reset printer</button>
         </article>
 
         <article class="wid">
           <h3>self-test <span class="tip" data-tip="starts the built-in diagnostic print. if nothing happens, hold the feed button during power-on.">?</span></h3>
-          <p>diagnostic print</p>
           <button data-hw="self_test" class="ghost">run self-test</button>
         </article>
 
         <article class="wid wid-wide">
           <h3>status <span class="tip" data-tip="reads general, offline, error, and paper-sensor bytes. requires a readable IN endpoint.">?</span></h3>
-          <p>current printer status</p>
           <button data-hw="status" class="primary">read status</button>
           <pre id="hw-status-out" class="status-box">no reading yet</pre>
         </article>
 
         <article class="wid wid-wide">
           <h3>RGB LED <span class="tip" data-tip="the P80E LED command is undocumented. try each protocol or send SDK bytes from the console.">?</span> <span class="badge">experimental</span></h3>
-          <p>undocumented vendor command</p>
 
           <div class="led-grid">
             <div>
@@ -657,16 +644,13 @@ mail package</textarea>
 
   </section>
 
-  <span class="rail" aria-hidden="true"><span>{{ pixel_width }} px / {{ width }} col</span></span>
+  <span class="rail" aria-hidden="true"></span>
 
   <!-- right: receipt preview -->
   <aside class="panel preview cut" id="preview-panel" aria-labelledby="preview-title">
     <span class="panel-tab" aria-hidden="true">out / 01</span>
     <div class="preview-head">
-      <div>
-        <span class="preview-kicker">output</span>
-        <h2 id="preview-title">compose preview</h2>
-      </div>
+      <h2 id="preview-title">compose preview</h2>
       <span class="preview-state status" id="preview-state" data-state="loading">rendering</span>
     </div>
     <div class="preview-body reg">
@@ -676,10 +660,6 @@ mail package</textarea>
         </div>
         <div class="tear"></div>
       </div>
-    </div>
-    <div class="preview-foot" aria-hidden="true">
-      <span>{{ pixel_width }} px / {{ width }} col</span>
-      <span>{% if pixel_width <= 384 %}58{% else %}80{% endif %} mm thermal</span>
     </div>
   </aside>
 </main>
