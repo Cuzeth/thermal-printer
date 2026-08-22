@@ -414,7 +414,13 @@ code {
   gap: 0;
   min-width: 0;
   overflow-x: auto;
-  padding: 0 var(--gutter);
+  overflow-y: hidden;
+  /* The active underline hangs 1px over the header rule. A sideways-scrolling
+     strip is a scroll container on both axes, so that 1px has to live inside
+     the box (bottom padding, pulled back by the margin) or it becomes a 1px
+     vertical scroll that bounces on touch screens. */
+  padding: 0 var(--gutter) 1px;
+  margin-bottom: -1px;
   border-top: 1px solid var(--line);
   scrollbar-width: none;
 }
