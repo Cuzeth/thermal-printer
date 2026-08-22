@@ -337,6 +337,8 @@ async function loadHistory() {
     if (!j.ok) throw new Error(j.error || "history failed");
     const items = (j.messages || []).map(historyItem);
     list.replaceChildren(...items);
+    const count = $("#history-count");
+    if (count) count.textContent = String(items.length);
     // Restore the default copy — a previous failed load may have replaced it.
     empty.textContent = HISTORY_EMPTY_DEFAULT;
     empty.hidden = items.length > 0;

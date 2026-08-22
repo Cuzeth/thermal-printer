@@ -4,36 +4,50 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>thermal printer</title>
-  <meta name="theme-color" content="#090a0d" />
+  <meta name="theme-color" content="#202321" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body data-width="{{ width }}" data-pixel-width="{{ pixel_width }}" data-dry="{{ 'true' if dry_run else 'false' }}">
 
 <header class="top">
-  <div class="brand">
-    <span class="logo" aria-hidden="true">▚▚</span>
-    <span class="brand-copy">
-      <span class="title">THERMAL // CONSOLE</span>
-      <span class="sub"><span class="status-dot {{ 'status-dot-dry' if dry_run else '' }}" aria-hidden="true"></span>{{ width }} cols · {{ pixel_width }}px · {% if dry_run %}dry run{% else %}live mode{% endif %}</span>
-    </span>
+  <div class="top-bar">
+    <div class="brand">
+      <svg class="mark" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+        <rect x=".5" y=".5" width="19" height="19" fill="none" stroke="currentColor" />
+        <rect x="3" y="3" width="7" height="7" fill="#eb5e28" />
+        <rect x="10" y="10" width="7" height="7" fill="currentColor" />
+      </svg>
+      <span class="brand-copy">
+        <span class="title">Thermal</span>
+        <span class="sub">
+          <span class="status" data-state="{{ 'dry' if dry_run else 'live' }}">{% if dry_run %}dry run{% else %}live{% endif %}</span>
+          <span>{{ width }} col</span>
+          <span>{{ pixel_width }} px</span>
+        </span>
+      </span>
+    </div>
+    <span class="top-meta" aria-hidden="true">console / esc-pos / {% if pixel_width <= 384 %}58{% else %}80{% endif %} mm</span>
+    <div class="account-actions">
+      <span class="session-label">session admin</span>
+      <button type="button" class="ghost tiny signout" id="signout" title="sign out">sign out</button>
+    </div>
   </div>
   <nav class="tabs" role="tablist" aria-label="console sections">
-    <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0">compose</button>
-    <button class="tab"        data-tab="image"    role="tab" id="tab-image"    aria-controls="pane-image"    aria-selected="false" tabindex="-1">image</button>
-    <button class="tab"        data-tab="codes"    role="tab" id="tab-codes"    aria-controls="pane-codes"    aria-selected="false" tabindex="-1">codes</button>
-    <button class="tab"        data-tab="widgets"  role="tab" id="tab-widgets"  aria-controls="pane-widgets"  aria-selected="false" tabindex="-1">widgets</button>
-    <button class="tab"        data-tab="labs"     role="tab" id="tab-labs"     aria-controls="pane-labs"     aria-selected="false" tabindex="-1">labs</button>
-    <button class="tab"        data-tab="hardware" role="tab" id="tab-hardware" aria-controls="pane-hardware" aria-selected="false" tabindex="-1">hardware</button>
-    <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1">console</button>
-    <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1">admin</button>
+    <button class="tab active" data-tab="compose"  role="tab" id="tab-compose"  aria-controls="pane-compose"  aria-selected="true"  tabindex="0"><span class="tab-idx" aria-hidden="true">01</span>compose</button>
+    <button class="tab"        data-tab="image"    role="tab" id="tab-image"    aria-controls="pane-image"    aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">02</span>image</button>
+    <button class="tab"        data-tab="codes"    role="tab" id="tab-codes"    aria-controls="pane-codes"    aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">03</span>codes</button>
+    <button class="tab"        data-tab="widgets"  role="tab" id="tab-widgets"  aria-controls="pane-widgets"  aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">04</span>widgets</button>
+    <button class="tab"        data-tab="labs"     role="tab" id="tab-labs"     aria-controls="pane-labs"     aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">05</span>labs</button>
+    <button class="tab"        data-tab="hardware" role="tab" id="tab-hardware" aria-controls="pane-hardware" aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">06</span>hardware</button>
+    <button class="tab"        data-tab="console"  role="tab" id="tab-console"  aria-controls="pane-console"  aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">07</span>console</button>
+    <button class="tab"        data-tab="admin"    role="tab" id="tab-admin"    aria-controls="pane-admin"    aria-selected="false" tabindex="-1"><span class="tab-idx" aria-hidden="true">08</span>admin</button>
   </nav>
-  <div class="account-actions">
-    <span class="session-label">signed in</span>
-    <button type="button" class="ghost tiny signout" id="signout" title="sign out">sign out</button>
-  </div>
 </header>
 
 <main>
@@ -42,13 +56,16 @@
 
     <!-- Compose tab -->
     <div class="tabpane active" data-pane="compose" role="tabpanel" id="pane-compose" aria-labelledby="tab-compose" tabindex="0">
-      <h2>text</h2>
-      <p class="help">
-        formatting: <code># heading</code>, <code>## subheading</code>, <code>&gt; centered</code>,
-        <code>- bullet</code>, <code>[ ] todo</code>, <code>[x] done</code>,
-        <code>---</code>, <code>===</code>, <code>!!!</code> (cut here).
-        inline: <code>**bold**</code>, <code>*italic*</code>, <code>__underline__</code>, <code>~big~</code>
-      </p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">01</span><span class="t-label">text</span></div>
+        <h2>Compose</h2>
+        <p class="help">
+          <code># heading</code> <code>## subheading</code> <code>&gt; centered</code>
+          <code>- bullet</code> <code>[ ] todo</code> <code>[x] done</code>
+          <code>---</code> <code>===</code> <code>!!!</code> (cut here)<br />
+          inline: <code>**bold**</code> <code>*italic*</code> <code>__underline__</code> <code>~big~</code>
+        </p>
+      </div>
       <label class="sr-only" for="compose-body">print contents</label>
       <textarea id="compose-body" rows="18" spellcheck="false"># TEST PRINT
 ===
@@ -73,21 +90,27 @@ that's it</textarea>
       </div>
       <div class="row">
         <button id="compose-preview" class="ghost">refresh preview</button>
-        <button id="compose-print" class="primary">print</button>
+        <button id="compose-print" class="signal">print</button>
       </div>
     </div>
 
     <!-- Image tab -->
     <div class="tabpane" data-pane="image" role="tabpanel" id="pane-image" aria-labelledby="tab-image" tabindex="0">
-      <h2>image</h2>
-      <p class="help">photos use Floyd-Steinberg dithering by default.</p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">raster</span></div>
+        <h2>Image</h2>
+        <p class="help">photos use Floyd-Steinberg dithering by default.</p>
+      </div>
 
-      <div id="drop" class="drop" role="button" tabindex="0" aria-controls="image-file" aria-label="choose or drop an image">
+      <div id="drop" class="drop tgrid" role="button" tabindex="0" aria-controls="image-file" aria-label="choose or drop an image">
         <input type="file" id="image-file" accept="image/*" hidden />
         <div class="drop-inner">
-          <div class="drop-icon" aria-hidden="true">⬚</div>
+          <svg class="drop-icon" width="40" height="28" viewBox="0 0 40 28" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1 8V1h7M32 1h7v7M39 20v7h-7M8 27H1v-7" />
+            <path d="M14 14h12M20 8v12" />
+          </svg>
           <div><strong>click or drop an image</strong></div>
-          <div class="muted">PNG · JPG · GIF · WEBP</div>
+          <div class="muted">PNG / JPG / GIF / WEBP</div>
         </div>
       </div>
 
@@ -126,8 +149,11 @@ that's it</textarea>
 
     <!-- Widgets tab -->
     <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
-      <h2>widgets</h2>
-      <p class="help">live widgets need internet.</p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">04</span><span class="t-label">one-press prints</span></div>
+        <h2>Widgets</h2>
+        <p class="help">live widgets need internet.</p>
+      </div>
 
       <!-- Hero: morning briefing combines several live widgets into one scroll. -->
       <article class="wid wid-wide wid-hero">
@@ -141,13 +167,13 @@ that's it</textarea>
           </label>
           <div class="hero-actions">
             <button type="button" data-preview-widget="briefing" class="ghost">preview</button>
-            <button data-widget="briefing" class="primary">print briefing</button>
+            <button data-widget="briefing" class="signal">print briefing</button>
           </div>
         </div>
       </article>
 
       <h3 class="wid-section">daily</h3>
-      <div class="widgets">
+      <div class="widgets" data-group="A">
         <article class="wid">
           <h3>weather <span class="chip chip-live">live</span></h3>
           <p>current conditions or three-day forecast</p>
@@ -206,7 +232,7 @@ sleep by 11</textarea>
       </div>
 
       <h3 class="wid-section">news</h3>
-      <div class="widgets">
+      <div class="widgets" data-group="B">
         <article class="wid">
           <h3>Hacker News <span class="chip chip-live">live</span></h3>
           <p>top stories</p>
@@ -242,7 +268,7 @@ sleep by 11</textarea>
       </div>
 
       <h3 class="wid-section">tools</h3>
-      <div class="widgets">
+      <div class="widgets" data-group="C">
         <article class="wid">
           <h3>dice <span class="chip chip-offline">offline</span></h3>
           <p>custom roll or preset</p>
@@ -299,7 +325,11 @@ sleep by 11</textarea>
 
     <!-- Labs tab -->
     <div class="tabpane" data-pane="labs" role="tabpanel" id="pane-labs" aria-labelledby="tab-labs" tabindex="0">
-      <h2>labs</h2>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">05</span><span class="t-label">templates</span></div>
+        <h2>Labs</h2>
+        <p class="help">small fill-in-the-blanks prints.</p>
+      </div>
 
       <details open>
         <summary><h3 class="inline">todo list</h3></summary>
@@ -343,7 +373,7 @@ mail package</textarea>
             <button class="ghost r-del">×</button>
           </div>
         </div>
-        <button id="r-add" class="ghost">+ add item</button>
+        <button id="r-add" class="ghost tiny">+ add item</button>
         <div class="grid2">
           <label>tax rate % <input id="r-tax" type="number" value="8.75" step="0.01" min="0" /></label>
           <label>note <input id="r-note" type="text" placeholder="optional" /></label>
@@ -357,8 +387,11 @@ mail package</textarea>
 
     <!-- Codes tab -->
     <div class="tabpane" data-pane="codes" role="tabpanel" id="pane-codes" aria-labelledby="tab-codes" tabindex="0">
-      <h2>QR + barcodes</h2>
-      <p class="help">prints use native ESC/POS.</p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">03</span><span class="t-label">symbologies</span></div>
+        <h2>Codes</h2>
+        <p class="help">QR and 1D barcodes. prints use native ESC/POS.</p>
+      </div>
 
       <details open>
         <summary><h3 class="inline">QR code</h3></summary>
@@ -383,7 +416,7 @@ mail package</textarea>
       </details>
 
       <details>
-        <summary><h3 class="inline">▯▮▯  1D barcode</h3></summary>
+        <summary><h3 class="inline">1D barcode</h3></summary>
         <div class="grid2">
           <label>type
             <select id="bc-kind">
@@ -431,10 +464,13 @@ mail package</textarea>
 
     <!-- Hardware tab -->
     <div class="tabpane" data-pane="hardware" role="tabpanel" id="pane-hardware" aria-labelledby="tab-hardware" tabindex="0">
-      <h2>hardware</h2>
-      <p class="help">some commands may not work on this printer.</p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">06</span><span class="t-label">controls</span></div>
+        <h2>Hardware</h2>
+        <p class="help">some commands may not work on this printer.</p>
+      </div>
 
-      <div class="widgets">
+      <div class="widgets" data-group="H">
         <article class="wid">
           <h3>cash drawer <span class="tip" data-tip="sends a pulse through the RJ11 jack. most drawers use pin 2. try pin 5 if needed.">?</span></h3>
           <p>drawer-open pulse</p>
@@ -447,7 +483,7 @@ mail package</textarea>
         <article class="wid">
           <h3>beep <span class="tip" data-tip="count sets the number of beeps. duration uses 100ms units. some printers have no buzzer.">?</span></h3>
           <div class="row mini">
-            <label>× <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
+            <label>count <input type="number" id="hw-beep-count" value="2" min="1" max="9" /></label>
             <label>dur <input type="number" id="hw-beep-dur" value="3" min="1" max="9" /></label>
           </div>
           <button data-hw="beep" class="primary">beep</button>
@@ -509,8 +545,8 @@ mail package</textarea>
           <div class="led-grid">
             <div>
               <label>color</label>
-              <input type="color" id="led-color" value="#ff8a3d" />
-              <div class="row mini" style="margin-top:8px; flex-wrap:wrap;">
+              <input type="color" id="led-color" value="#eb5e28" />
+              <div class="row mini led-presets">
                 <button class="ghost led-preset" data-color="#000000">off</button>
                 <button class="ghost led-preset" data-color="#ff0000">red</button>
                 <button class="ghost led-preset" data-color="#00ff00">green</button>
@@ -524,8 +560,8 @@ mail package</textarea>
             <div>
               <label>protocol</label>
               <select id="led-protocol"></select>
-              <p id="led-protocol-note" class="muted" style="margin-top:6px;"></p>
-              <label class="chk" style="margin-top:10px;"><input type="checkbox" id="led-blink" /> blink once after set</label>
+              <p id="led-protocol-note" class="muted"></p>
+              <label class="chk"><input type="checkbox" id="led-blink" /> blink once after set</label>
               <div class="row">
                 <button id="led-send" class="primary">send</button>
                 <code id="led-bytes" class="mono dim"></code>
@@ -538,11 +574,14 @@ mail package</textarea>
 
     <!-- Console tab -->
     <div class="tabpane" data-pane="console" role="tabpanel" id="pane-console" aria-labelledby="tab-console" tabindex="0">
-      <h2>raw ESC/POS</h2>
-      <p class="help">
-        hex tokens: <code>1b 40 48 69</code>. escapes: <code>\x1b@Hi\n</code>. <code>\e</code> = ESC.
-        <strong style="color:var(--danger)">bad commands can lock the printer. power-cycle to reset.</strong>
-      </p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">07</span><span class="t-label">raw bytes</span></div>
+        <h2>Console</h2>
+        <p class="help">
+          hex tokens: <code>1b 40 48 69</code>. escapes: <code>\x1b@Hi\n</code>. <code>\e</code> = ESC.
+          <strong class="warn">bad commands can lock the printer. power-cycle to reset.</strong>
+        </p>
+      </div>
 
       <textarea id="console-input" rows="6" spellcheck="false" placeholder="1b 40  1b 21 30  48 65 6c 6c 6f 0a">1b 40
 1b 61 01
@@ -552,11 +591,11 @@ mail package</textarea>
 1d 56 00</textarea>
 
       <div class="row">
-        <button id="console-send" class="primary">send</button>
+        <button id="console-send" class="signal">send</button>
         <span id="console-sent" class="muted"></span>
       </div>
 
-      <h3 style="margin-top:18px">cheat sheet</h3>
+      <h3 class="rule-label console-sub">cheat sheet</h3>
       <table class="cheat">
         <thead><tr><th>name</th><th>hex</th><th>description</th><th></th></tr></thead>
         <tbody id="cheat-body"><!-- populated --></tbody>
@@ -565,8 +604,11 @@ mail package</textarea>
 
     <!-- Admin tab -->
     <div class="tabpane" data-pane="admin" role="tabpanel" id="pane-admin" aria-labelledby="tab-admin" tabindex="0">
-      <h2>access</h2>
-      <p class="help">new accounts need approval.</p>
+      <div class="pane-head">
+        <div class="kicker" aria-hidden="true"><span class="idx">08</span><span class="t-label">friends</span></div>
+        <h2>Access</h2>
+        <p class="help">new accounts need approval.</p>
+      </div>
 
       <div class="admin-section">
         <div class="admin-head">
@@ -607,16 +649,22 @@ mail package</textarea>
   <aside class="panel preview" id="preview-panel" aria-labelledby="preview-title">
     <div class="preview-head">
       <div>
-        <span class="preview-kicker">preview</span>
+        <span class="preview-kicker">output</span>
         <h2 id="preview-title">compose preview</h2>
       </div>
-      <span class="preview-state" id="preview-state" data-state="loading">rendering</span>
+      <span class="preview-state status" id="preview-state" data-state="loading">rendering</span>
     </div>
-    <div class="paper" id="paper-frame" aria-live="polite" aria-busy="true">
-      <pre id="preview-out">loading preview</pre>
-      <div id="preview-image-wrap" class="imgwrap" hidden>
+    <div class="preview-body reg">
+      <div class="paper" id="paper-frame" aria-live="polite" aria-busy="true">
+        <pre id="preview-out">loading preview</pre>
+        <div id="preview-image-wrap" class="imgwrap" hidden>
+        </div>
+        <div class="tear"></div>
       </div>
-      <div class="tear"></div>
+    </div>
+    <div class="preview-foot" aria-hidden="true">
+      <span>{{ pixel_width }} px / {{ width }} col</span>
+      <span>{% if pixel_width <= 384 %}58{% else %}80{% endif %} mm thermal</span>
     </div>
   </aside>
 </main>
