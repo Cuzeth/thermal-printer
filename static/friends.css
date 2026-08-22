@@ -70,9 +70,8 @@ body[data-page="allowed"] .top-state::after { content: "approved"; }
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   column-gap: var(--gutter);
-  max-width: 1360px;
-  margin: 0 auto;
-  padding: 40px var(--gutter) 160px;
+  padding: 40px max(var(--gutter), calc((100% - 1360px) / 2 + var(--gutter))) 160px;
+  overflow: clip;
 }
 
 .card {
@@ -738,6 +737,7 @@ label .label {
   grid-column: 2;
   grid-row: 1;
   display: grid;
+  align-content: start;
   justify-items: end;
   gap: 6px;
   padding-top: 4px;

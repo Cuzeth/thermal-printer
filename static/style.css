@@ -16,7 +16,6 @@
   --ink: #202321;
   --ink-2: #191c1a;
   --ink-3: #2b2f2c;
-  --navy: #102631;
   --bone: #efece3;
   --sage: #c9dcc8;
   --gray: #aeb1ac;
@@ -71,9 +70,6 @@
 html {
   color-scheme: dark;
   background: var(--ink);
-  /* Oversized numerals and full-bleed rules crop at the viewport edge
-     instead of adding a sideways scroll. */
-  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -276,12 +272,12 @@ code {
   border-bottom: 1px solid var(--line);
 }
 .spec-strip > span {
-  padding: 10px 16px;
+  padding: 10px 16px 10px 0;
+  margin-right: 16px;
   border-right: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
 }
-.spec-strip > span:first-child { padding-left: 0; }
-.spec-strip > span:last-child { border-right: 0; }
+.spec-strip > span:last-child { border-right: 0; margin-right: 0; }
 
 .warn { color: var(--coral-text); }
 
@@ -507,14 +503,18 @@ code {
 
 /* ---------- main layout ---------- */
 
+/* main is the full-width canvas: the 12-column content centres inside it
+   via computed gutters, and overflow: clip crops the oversized numerals
+   and edge-to-edge rules at the viewport without creating a scroll
+   container (so the sticky output module still works) or a sideways
+   scroll on phones. */
 main {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   column-gap: var(--gutter);
   row-gap: 40px;
-  padding: 40px var(--gutter) 120px;
-  max-width: 1600px;
-  margin: 0 auto;
+  padding: 40px max(var(--gutter), calc((100% - 1600px) / 2 + var(--gutter))) 120px;
+  overflow: clip;
   align-items: start;
 }
 
@@ -959,12 +959,16 @@ button.is-busy::after {
 }
 .action-pair button { width: 100%; margin-top: 0; padding-inline: 12px; }
 
-/* Category titles break the grid into indexed groups. */
+/* Category titles break the grid into indexed groups: small index and
+   name on the left, the group letter oversized on the right, the rule
+   running between them. */
 .wid-section {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
-  margin: 36px 0 0;
+  margin: 40px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 500;
@@ -978,11 +982,16 @@ button.is-busy::after {
   color: var(--signal-orange);
 }
 .wid-section::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line);
+  content: attr(data-group);
+  margin-left: auto;
+  font-family: var(--sans);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: .8;
+  letter-spacing: -.04em;
+  color: var(--text-dim);
 }
+.wid-section + .widgets { margin-top: 0; border-top: 0; }
 
 /* Origin-of-data chip next to each widget title: a square lamp + label. */
 .chip {
@@ -1024,12 +1033,12 @@ button.is-busy::after {
   align-items: end;
   padding: 24px;
   margin-top: 4px;
-  background: var(--navy);
+  background: var(--ink-2);
   border: 1px solid var(--line);
   border-top: 2px solid var(--signal-orange);
 }
 .wid-hero:hover::before { scale: 0 1; }
-.wid-hero .wid-head h3 { font-size: 24px; padding-right: 0; }
+.wid-hero .wid-head h3 { font-size: 32px; letter-spacing: -.035em; padding-right: 0; }
 .wid-hero .wid-head p {
   margin-top: 8px;
   font-family: var(--sans);
@@ -1146,7 +1155,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   position: sticky;
   top: 126px;
   padding: 0;
-  background: var(--navy);
+  background: var(--ink-2);
   border: 1px solid var(--line);
 }
 .preview-head { padding-right: 28px; }
@@ -1597,6 +1606,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   align-content: end;
   min-height: 100vh;
   padding: 32px var(--gutter);
+  overflow: clip;
 }
 .login-art {
   grid-column: 1 / span 7;
@@ -1619,6 +1629,9 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   white-space: nowrap;
 }
 .login-art .spec-strip { margin-top: 24px; border-bottom: 0; }
+/* Keep the dot matrix from running through the small type. */
+.login-art .kicker > *,
+.login-art .spec-strip > span { background: var(--ground); }
 .login-spread > .rail {
   grid-column: 8;
   grid-row: 1;
@@ -1633,7 +1646,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   grid-column: 8 / -1;
   align-self: end;
   padding: 28px 28px 20px;
-  background: var(--navy);
+  background: var(--ink-2);
   border: 1px solid var(--line);
   text-align: left;
 }
@@ -1709,6 +1722,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   .top-meta { display: none; }
   .controls { grid-column: 1 / span 7; }
   .preview { grid-column: 8 / -1; }
+  main > .rail { grid-column: 8; }
   .pane-head { grid-template-columns: 1fr; }
   .pane-head .help { grid-column: 1; }
 }
@@ -1717,7 +1731,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   main { row-gap: 48px; padding-top: 32px; }
   main > .rail { display: none; }
   .controls, .preview { grid-column: 1 / -1; }
-  .preview { grid-row: 2; position: static; max-width: 560px; }
+  /* Stays positioned so its projecting tab keeps anchoring to the module. */
+  .preview { grid-row: 2; position: relative; top: auto; max-width: 560px; }
   .login-art { grid-column: 1 / -1; }
   .login-card { grid-column: 1 / -1; }
   .login-spread > .rail { display: none; }
