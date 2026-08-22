@@ -204,7 +204,7 @@ def test_doodle_prints_and_lands_in_history(client):
     assert r.get_json()["queued"] is True
     app_module._PRINT_QUEUE.join()
     msgs = auth_db.list_messages_for_user(user["id"], limit=5)
-    row = next(m for m in msgs if m["body"] == "drawing")
+    row = next(m for m in msgs if m["body"] == "(doodle)")
     assert row["status"] == "printed"
     assert row["has_drawing"] is True
 
