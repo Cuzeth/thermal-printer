@@ -16,12 +16,12 @@ from PIL import Image, ImageDraw
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 
-# Palette lifted from style.css. The tile sits between --bg and --panel so
+# Palette lifted from style.css. The tile is --ink so
 # the icon holds its own against both light and dark browser chrome.
-TILE = "#12141b"
-PAPER = "#f5efd8"
-PAPER_INK = "#1a1915"
-ACCENT = "#f7b42c"
+TILE = "#202321"
+PAPER = "#efece3"
+PAPER_INK = "#202321"
+ACCENT = "#eb5e28"
 
 # Everything is drawn in the SVG's 64-unit space and scaled up; keep these
 # numbers in lockstep with favicon.svg or the two icons will drift apart.

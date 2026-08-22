@@ -4,27 +4,38 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>thermal printer</title>
-  <meta name="theme-color" content="#090a0d" />
+  <meta name="theme-color" content="#202321" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body class="admin-login">
-  <div class="login-wrap">
-    <form class="login-card" id="login-form">
-      <span class="logo" aria-hidden="true">&#9626;&#9626;</span>
-      <span class="login-eyebrow">private access</span>
-      <h1>THERMAL // CONSOLE</h1>
-      <p id="code-help">six-digit authenticator code</p>
+  <main class="login-spread tgrid">
+    <div class="login-art" aria-hidden="true">
+      <div class="kicker"><span class="idx">00</span><span class="t-label">private access</span></div>
+      <div class="login-display">ADMIN</div>
+      <div class="spec-strip">
+        <span>TOTP</span><span>RFC 6238</span><span>6 digits</span><span>12 h session</span>
+      </div>
+    </div>
+    <span class="rail" aria-hidden="true"></span>
+    <form class="login-card cut" id="login-form">
+      <span class="panel-tab" aria-hidden="true">auth / 00</span>
+      <span class="login-eyebrow">authenticator</span>
+      <h1>Thermal console</h1>
+      <p id="code-help">six-digit code from your authenticator app</p>
       <label class="sr-only" for="code">authenticator code</label>
       <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
              pattern="[0-9]*" maxlength="6" placeholder="000000" aria-describedby="code-help login-err" autofocus />
-      <button id="login-btn" class="primary" type="submit">unlock console</button>
+      <button id="login-btn" class="signal" type="submit">unlock console</button>
       <div id="login-err" role="alert"></div>
-      <div class="login-security"><span aria-hidden="true">●</span> private · 12 hours</div>
+      <div class="login-security"><span class="status" data-state="ready">private</span><span>single use per code</span></div>
     </form>
-  </div>
+  </main>
 
   <script>
     const form = document.getElementById("login-form");

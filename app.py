@@ -77,7 +77,11 @@ def _too_large(e):
 
 @app.route("/")
 def friends_index():
-    return render_template("friends.html")
+    return render_template(
+        "friends.html",
+        width=config.RECEIPT_WIDTH,
+        pixel_width=config.PRINTER_PIXEL_WIDTH,
+    )
 
 
 @app.route("/m/")
@@ -1106,7 +1110,7 @@ def friend_print_doodle():
         style=user.get("name_style") or "plain",
         anonymous=bool(data.get("anonymous", False)),
     )
-    return _enqueue_friend_print(user, "drawing", {
+    return _enqueue_friend_print(user, "(doodle)", {
         "kind": "doodle", "image": img,
         "header": header, "footer": footer_markup,
     }, history_drawing=saved.getvalue())
