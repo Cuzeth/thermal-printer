@@ -39,6 +39,9 @@ async function getJSON(url) {
 // ---------- state machine ----------
 
 function show(state) {
+  // The header narrates the state machine from this hook. It must not be
+  // data-state: the cards are looked up by that attribute just below.
+  document.body.dataset.page = state;
   STATES.forEach((s) => {
     const el = document.querySelector(`[data-state="${s}"]`);
     if (el) el.hidden = s !== state;

@@ -77,7 +77,11 @@ def _too_large(e):
 
 @app.route("/")
 def friends_index():
-    return render_template("friends.html")
+    return render_template(
+        "friends.html",
+        width=config.RECEIPT_WIDTH,
+        pixel_width=config.PRINTER_PIXEL_WIDTH,
+    )
 
 
 @app.route("/m/")

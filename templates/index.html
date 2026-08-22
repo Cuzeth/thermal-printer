@@ -27,12 +27,13 @@
         <span class="title">Thermal</span>
         <span class="sub">
           <span class="status" data-state="{{ 'dry' if dry_run else 'live' }}">{% if dry_run %}dry run{% else %}live{% endif %}</span>
-          <span>{{ width }} col</span>
-          <span>{{ pixel_width }} px</span>
         </span>
       </span>
     </div>
-    <span class="top-meta" aria-hidden="true">console / esc-pos / {% if pixel_width <= 384 %}58{% else %}80{% endif %} mm</span>
+    <div class="top-nav" aria-hidden="true">
+      <span class="top-crumb">console / esc-pos</span>
+      <span>{% if pixel_width <= 384 %}58{% else %}80{% endif %} mm / {{ pixel_width }} px / {{ width }} col</span>
+    </div>
     <div class="account-actions">
       <span class="session-label">session admin</span>
       <button type="button" class="ghost tiny signout" id="signout" title="sign out">sign out</button>
@@ -57,6 +58,7 @@
     <!-- Compose tab -->
     <div class="tabpane active" data-pane="compose" role="tabpanel" id="pane-compose" aria-labelledby="tab-compose" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">01</span>
         <div class="kicker" aria-hidden="true"><span class="idx">01</span><span class="t-label">text</span></div>
         <h2>Compose</h2>
         <p class="help">
@@ -67,7 +69,10 @@
         </p>
       </div>
       <label class="sr-only" for="compose-body">print contents</label>
-      <textarea id="compose-body" rows="18" spellcheck="false"># TEST PRINT
+      <div class="editor">
+        <span class="panel-tab" aria-hidden="true">src / 01</span>
+        <span class="side-rail" aria-hidden="true"></span>
+        <textarea id="compose-body" rows="18" spellcheck="false"># TEST PRINT
 ===
 
 > yep, the printer works
@@ -83,6 +88,7 @@
 ---
 
 that's it</textarea>
+      </div>
 
       <div class="row">
         <label class="chk"><input type="checkbox" id="compose-rich" checked /> pretty font (render as image)</label>
@@ -97,6 +103,7 @@ that's it</textarea>
     <!-- Image tab -->
     <div class="tabpane" data-pane="image" role="tabpanel" id="pane-image" aria-labelledby="tab-image" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">02</span>
         <div class="kicker" aria-hidden="true"><span class="idx">02</span><span class="t-label">raster</span></div>
         <h2>Image</h2>
         <p class="help">photos use Floyd-Steinberg dithering by default.</p>
@@ -150,6 +157,7 @@ that's it</textarea>
     <!-- Widgets tab -->
     <div class="tabpane" data-pane="widgets" role="tabpanel" id="pane-widgets" aria-labelledby="tab-widgets" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">04</span>
         <div class="kicker" aria-hidden="true"><span class="idx">04</span><span class="t-label">one-press prints</span></div>
         <h2>Widgets</h2>
         <p class="help">live widgets need internet.</p>
@@ -326,6 +334,7 @@ sleep by 11</textarea>
     <!-- Labs tab -->
     <div class="tabpane" data-pane="labs" role="tabpanel" id="pane-labs" aria-labelledby="tab-labs" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">05</span>
         <div class="kicker" aria-hidden="true"><span class="idx">05</span><span class="t-label">templates</span></div>
         <h2>Labs</h2>
         <p class="help">small fill-in-the-blanks prints.</p>
@@ -388,6 +397,7 @@ mail package</textarea>
     <!-- Codes tab -->
     <div class="tabpane" data-pane="codes" role="tabpanel" id="pane-codes" aria-labelledby="tab-codes" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">03</span>
         <div class="kicker" aria-hidden="true"><span class="idx">03</span><span class="t-label">symbologies</span></div>
         <h2>Codes</h2>
         <p class="help">QR and 1D barcodes. prints use native ESC/POS.</p>
@@ -465,6 +475,7 @@ mail package</textarea>
     <!-- Hardware tab -->
     <div class="tabpane" data-pane="hardware" role="tabpanel" id="pane-hardware" aria-labelledby="tab-hardware" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">06</span>
         <div class="kicker" aria-hidden="true"><span class="idx">06</span><span class="t-label">controls</span></div>
         <h2>Hardware</h2>
         <p class="help">some commands may not work on this printer.</p>
@@ -575,6 +586,7 @@ mail package</textarea>
     <!-- Console tab -->
     <div class="tabpane" data-pane="console" role="tabpanel" id="pane-console" aria-labelledby="tab-console" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">07</span>
         <div class="kicker" aria-hidden="true"><span class="idx">07</span><span class="t-label">raw bytes</span></div>
         <h2>Console</h2>
         <p class="help">
@@ -605,6 +617,7 @@ mail package</textarea>
     <!-- Admin tab -->
     <div class="tabpane" data-pane="admin" role="tabpanel" id="pane-admin" aria-labelledby="tab-admin" tabindex="0">
       <div class="pane-head">
+        <span class="bg-idx" aria-hidden="true">08</span>
         <div class="kicker" aria-hidden="true"><span class="idx">08</span><span class="t-label">friends</span></div>
         <h2>Access</h2>
         <p class="help">new accounts need approval.</p>
@@ -645,8 +658,11 @@ mail package</textarea>
 
   </section>
 
+  <span class="rail" aria-hidden="true"><span>{{ pixel_width }} px / {{ width }} col</span></span>
+
   <!-- right: receipt preview -->
-  <aside class="panel preview" id="preview-panel" aria-labelledby="preview-title">
+  <aside class="panel preview cut" id="preview-panel" aria-labelledby="preview-title">
+    <span class="panel-tab" aria-hidden="true">out / 01</span>
     <div class="preview-head">
       <div>
         <span class="preview-kicker">output</span>

@@ -71,6 +71,9 @@
 html {
   color-scheme: dark;
   background: var(--ink);
+  /* Oversized numerals and full-bleed rules crop at the viewport edge
+     instead of adding a sideways scroll. */
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -282,6 +285,88 @@ code {
 
 .warn { color: var(--coral-text); }
 
+/* Environmental numeral: one oversized index per screen, low contrast,
+   allowed to crop off the viewport edge and sit behind panels. */
+.bg-idx {
+  position: absolute;
+  z-index: 0;
+  top: -.12em;
+  right: calc(-1 * var(--gutter) - .1em);
+  font-family: var(--sans);
+  font-size: clamp(220px, 36vh, 460px);
+  font-weight: 700;
+  line-height: .8;
+  letter-spacing: -.07em;
+  color: var(--bg-idx, rgba(239, 236, 227, .045));
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Projecting tab on a panel's top edge: the one piece of signal paint a
+   module gets. Parent must be position: relative. */
+.panel-tab {
+  position: absolute;
+  z-index: 2;
+  top: -14px;
+  left: -1px;
+  height: 14px;
+  padding: 0 8px;
+  background: var(--signal-orange);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Corner cut on a panel's top-right: a triangle of the surrounding ground
+   with a hairline across the diagonal. --cut-ground is the colour behind
+   the panel, not inside it. */
+.cut { position: relative; }
+.cut::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: -1px;
+  right: -1px;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  background: linear-gradient(225deg, var(--cut-ground, var(--ground)) 0 50%, var(--line-strong) 50% calc(50% + 1.4px), transparent calc(50% + 1.4px));
+}
+
+/* Vertical alignment rail with a crosshair where it meets a rule. */
+.rail {
+  position: relative;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+.rail::before {
+  content: "+";
+  position: absolute;
+  top: -7px;
+  left: -4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: var(--ground);
+}
+.rail::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
 /* ---------- header ---------- */
 
 .top {
@@ -298,6 +383,12 @@ code {
   align-items: center;
   min-height: 56px;
   padding: 0 var(--gutter);
+}
+.top-bar > .account-actions,
+.top-bar > .who {
+  align-self: stretch;
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 14px; min-width: max-content; }
 .mark { display: block; color: var(--text); flex: none; }
@@ -323,14 +414,30 @@ code {
   font-variant-numeric: tabular-nums;
 }
 .sub .status { font-size: inherit; letter-spacing: inherit; }
-.top-meta {
-  justify-self: center;
+.top-nav {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  min-width: 0;
   font-family: var(--mono);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-muted);
+}
+.top-nav > span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 20px;
+  border-left: 1px solid var(--line);
   white-space: nowrap;
+}
+.top-state { color: var(--text); }
+.top-state::before {
+  margin-right: 8px;
+  color: var(--signal-orange);
+  font-variant-numeric: tabular-nums;
 }
 .account-actions { display: flex; align-items: center; gap: 14px; min-width: max-content; }
 .session-label {
@@ -412,8 +519,76 @@ main {
 }
 
 .panel { min-width: 0; }
-.controls { grid-column: 1 / span 8; }
-.preview { grid-column: 9 / -1; }
+/* Explicit rows: the rail also lives in column 9 of row one, and
+   auto-placement would otherwise bump the output module down a row. */
+.controls { grid-column: 1 / span 8; grid-row: 1; }
+.preview { grid-column: 9 / -1; grid-row: 1; }
+main > .rail {
+  grid-column: 9;
+  grid-row: 1;
+  justify-self: start;
+  align-self: stretch;
+  margin-left: calc(var(--gutter) / -2);
+  margin-top: -40px;
+}
+main > .rail::before { top: -1px; }
+/* A rotated annotation rides the rail, the way a dimension sits on a
+   drawing's extension line. */
+.rail > span {
+  position: absolute;
+  top: 160px;
+  left: 50%;
+  display: block;
+  translate: -50% 0;
+  rotate: -90deg;
+  padding: 0 10px;
+  background: var(--ground);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Side rail on an engineered panel: a hairline in the gutter that climbs
+   to the rule above, with one block of signal paint where it meets the
+   panel's top edge. Parent must be position: relative. */
+.side-rail {
+  position: absolute;
+  left: -20px;
+  top: -40px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-strong);
+  pointer-events: none;
+}
+.side-rail::before {
+  content: "";
+  position: absolute;
+  top: 40px;
+  left: -1px;
+  width: 3px;
+  height: 72px;
+  background: var(--signal-orange);
+}
+.side-rail::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+/* The compose editor is the console's engineered input object. */
+.editor { position: relative; margin-top: 24px; }
+.editor textarea { margin-top: 0; border-color: var(--line-strong); }
+.editor .side-rail { top: -64px; }
+.editor .side-rail::before { top: 64px; }
 
 .tabpane { display: none; counter-reset: sec det; }
 .tabpane.active { display: block; }
@@ -421,23 +596,39 @@ main {
 /* Every pane opens like a spread: kicker, oversized title, metadata
    bottom-right, then a rule. */
 .pane-head {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 36%);
   gap: 16px 32px;
   align-items: end;
   padding-bottom: 24px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 32px;
+  margin-bottom: 40px;
 }
+/* The rule runs from the left edge of the viewport to the column edge. */
+.pane-head::after {
+  content: "";
+  position: absolute;
+  left: -100vw;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--line-strong);
+}
+.pane-head .bg-idx {
+  top: -.22em;
+  right: -.02em;
+  font-size: clamp(160px, 26vh, 320px);
+}
+.pane-head > :not(.bg-idx) { position: relative; z-index: 1; }
 .pane-head .kicker { grid-column: 1 / -1; }
 .pane-head h2 {
   grid-column: 1;
-  margin: 0;
+  margin: 0 0 -.08em;
   font-family: var(--sans);
-  font-size: clamp(40px, 5vw, 76px);
+  font-size: clamp(48px, 6vw, 104px);
   font-weight: 700;
-  line-height: .9;
-  letter-spacing: -.045em;
+  line-height: .82;
+  letter-spacing: -.055em;
   color: var(--text);
 }
 .pane-head .help { grid-column: 2; }
@@ -951,12 +1142,14 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
 /* ---------- preview module ---------- */
 
 .preview {
+  --cut-ground: var(--ink);
   position: sticky;
   top: 126px;
   padding: 0;
   background: var(--navy);
   border: 1px solid var(--line);
 }
+.preview-head { padding-right: 28px; }
 .preview-head {
   display: flex;
   align-items: flex-start;
@@ -1426,7 +1619,17 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   white-space: nowrap;
 }
 .login-art .spec-strip { margin-top: 24px; border-bottom: 0; }
+.login-spread > .rail {
+  grid-column: 8;
+  grid-row: 1;
+  justify-self: start;
+  align-self: stretch;
+  margin-left: calc(var(--gutter) / -2);
+  margin-bottom: -32px;
+}
+.login-spread > .rail::before { display: none; }
 .login-card {
+  --cut-ground: var(--ink);
   grid-column: 8 / -1;
   align-self: end;
   padding: 28px 28px 20px;
@@ -1512,10 +1715,12 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
 
 @media (max-width: 900px) {
   main { row-gap: 48px; padding-top: 32px; }
+  main > .rail { display: none; }
   .controls, .preview { grid-column: 1 / -1; }
-  .preview { position: static; max-width: 560px; }
+  .preview { grid-row: 2; position: static; max-width: 560px; }
   .login-art { grid-column: 1 / -1; }
   .login-card { grid-column: 1 / -1; }
+  .login-spread > .rail { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -1529,7 +1734,9 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   }
   main { padding: 24px var(--gutter) 96px; row-gap: 40px; }
   .pane-head { gap: 12px; padding-bottom: 20px; margin-bottom: 24px; }
-  .pane-head h2 { font-size: clamp(36px, 11vw, 48px); }
+  .pane-head h2 { font-size: clamp(44px, 13vw, 60px); }
+  .pane-head .bg-idx { font-size: clamp(120px, 40vw, 180px); top: -.1em; right: calc(-1 * var(--gutter) - .08em); }
+  .top-nav { display: none; }
   .grid2, .wid-hero .grid2 { grid-template-columns: 1fr; }
   .wid-hero { grid-template-columns: 1fr; padding: 20px 16px; }
   .hero-actions { grid-template-columns: 1fr 1fr; }
@@ -1537,6 +1744,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   .preview-body { padding: 14px; }
   .paper { padding-inline: 14px; min-height: 260px; }
   .paper pre { min-height: 180px; }
+  .side-rail { display: none; }
   .preview { top: auto; }
   .led-grid { grid-template-columns: 1fr; }
   .cheat td:nth-child(3), .cheat th:nth-child(3) { display: none; }
