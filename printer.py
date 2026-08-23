@@ -148,6 +148,18 @@ def open_printer() -> Iterator[object]:
             # surfaces halfway through a print as a bare AssertionError.
             if hasattr(p, "open"):
                 p.open()
+            # open() can still hand back a dead handle: escpos catches the
+            # USBError from set_configuration(), logs "Could not set
+            # configuration", and carries on. Seen after a long idle —
+            # the device is still listed on the bus, but the first write
+            # dies with "[Errno 19] No such device", past the point
+            # where the reset-and-reopen below could help. Asking for
+            # the active configuration is the same call that write
+            # makes, so a stale handle fails here instead, inside the
+            # recovery path.
+            dev = getattr(p, "device", None)
+            if dev is not None:
+                dev.get_active_configuration()
             return p
 
         try:

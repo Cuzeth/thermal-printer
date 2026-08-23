@@ -94,3 +94,55 @@ def test_status_flips_on_offline_open_and_recovers(live_mode, monkeypatch):
     with printer.open_printer():
         pass
     assert printer.status()["ok"] is True
+
+
+def test_dead_handle_after_open_triggers_reset_and_reopen(live_mode, monkeypatch):
+    """escpos' open() can return without raising while holding a handle
+    the kernel already dropped (it swallows the set_configuration error).
+    The post-open probe must surface that as an open-time failure so the
+    USB reset + reopen path runs, instead of the first write dying."""
+    opens = []
+
+    class _DeadDevice:
+        def get_active_configuration(self):
+            raise type("USBError", (Exception,), {})("[Errno 19] No such device")
+
+    class _LiveDevice:
+        def get_active_configuration(self):
+            return object()
+
+    class _FlakyUsb:
+        def __init__(self, *a, **k):
+            opens.append(self)
+            self.device = _DeadDevice() if len(opens) == 1 else _LiveDevice()
+        def open(self): pass
+        def close(self): pass
+
+    monkeypatch.setattr(printer, "Usb", _FlakyUsb)
+    monkeypatch.setattr(printer, "reset_device", lambda: True)
+    with printer.open_printer() as p:
+        assert isinstance(p.device, _LiveDevice)
+    assert len(opens) == 2
+    assert printer.status()["ok"] is True
+
+
+def test_dead_handle_with_device_gone_is_a_clean_offline_error(live_mode, monkeypatch):
+    """Same dead handle, but the reset finds nothing on the bus: the
+    friend-facing 'printer offline' error, not a pyusb traceback."""
+    class _DeadDevice:
+        def get_active_configuration(self):
+            raise type("USBError", (Exception,), {})("[Errno 19] No such device")
+
+    class _DeadUsb:
+        def __init__(self, *a, **k):
+            self.device = _DeadDevice()
+        def open(self): pass
+        def close(self): pass
+
+    monkeypatch.setattr(printer, "Usb", _DeadUsb)
+    monkeypatch.setattr(printer, "reset_device", lambda: False)
+    with pytest.raises(printer.PrinterError) as ei:
+        with printer.open_printer():
+            pass
+    assert "printer offline" in str(ei.value)
+    assert printer.status()["ok"] is False
