@@ -112,14 +112,6 @@ def init() -> None:
                 "ALTER TABLE messages ADD COLUMN anonymous INTEGER NOT NULL DEFAULT 0"
             )
 
-        # The print queue lives in process memory, so any row still
-        # 'queued' at boot belongs to a job that no longer exists — the
-        # process restarted before the worker got to it. Flip them to
-        # 'failed' so the friends page stops showing a print that will
-        # never happen. Safe here: init() runs at import, before the
-        # worker thread starts and before any request can enqueue.
-        conn.execute("UPDATE messages SET status = 'failed' WHERE status = 'queued'")
-
 
 # ---------- users ----------
 
@@ -269,6 +261,11 @@ def set_name_style(user_id: int, style: str) -> None:
 # Lifecycle of a friend print: logged 'queued' at enqueue, flipped to
 # 'printed' or 'failed' by the queue worker. Rows written synchronously
 # (tests, pre-status data) default to 'printed'.
+#
+# The row is the durable job. It holds the raw body or the saved drawing
+# plus the anonymous flag, and the worker rebuilds the print from it —
+# so a row still 'queued' after a restart is simply replayed
+# (app._replay_queued), not lost.
 VALID_MESSAGE_STATUSES = ("queued", "printed", "failed")
 
 
@@ -291,14 +288,15 @@ def log_message(
 
 
 def get_message(message_id: int) -> dict | None:
-    """One history row with everything the owner's retry needs to rebuild
-    the print: the raw body or saved drawing, the friend's current name
-    style, and whether they sent it anonymously. Owner-only — no user
-    scoping, unlike get_message_drawing_for_user."""
+    """One history row with everything needed to rebuild the print: the
+    raw body or saved drawing, when it was sent, the friend's current
+    name style, and whether they sent it anonymously. Used by the queue
+    worker and the owner's retry. No user scoping, unlike
+    get_message_drawing_for_user."""
     with db() as conn:
         row = conn.execute(
-            "SELECT m.id, m.body, m.status, m.drawing, m.anonymous, "
-            "u.username, u.name_style "
+            "SELECT m.id, m.user_id, m.body, m.status, m.drawing, m.anonymous, "
+            "m.printed_at, u.username, u.name_style "
             "FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?",
             (message_id,),
         ).fetchone()
@@ -308,6 +306,16 @@ def get_message(message_id: int) -> dict | None:
         msg["drawing"] = bytes(row["drawing"]) if row["drawing"] is not None else None
         msg["anonymous"] = bool(row["anonymous"])
         return msg
+
+
+def list_queued_message_ids() -> list[tuple[int, int]]:
+    """(user_id, message_id) for every row still 'queued', oldest first —
+    what the worker should pick back up after a restart."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT user_id, id FROM messages WHERE status = 'queued' ORDER BY id"
+        ).fetchall()
+        return [(r["user_id"], r["id"]) for r in rows]
 
 
 def set_message_status(message_id: int, status: str) -> None:

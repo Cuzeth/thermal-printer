@@ -7,6 +7,7 @@ import base64
 import io
 import queue
 import sqlite3
+from datetime import datetime, timezone
 
 import pytest
 from PIL import Image, ImageDraw
@@ -153,18 +154,68 @@ def test_worker_survives_status_update_failure(client, monkeypatch):
         assert app_module._inflight.get(user["id"], 0) == 0
 
 
-def test_init_reconciles_orphaned_queued_rows():
-    """Boot-time init() flips leftover 'queued' rows to 'failed' — the
-    in-memory queue that would have processed them no longer exists after
-    a restart."""
+def test_boot_replays_orphaned_queued_rows(monkeypatch):
+    """Rows left 'queued' by a process that died are picked back up at
+    boot and printed, oldest first, with the friend's original send time
+    on the footer — not dropped or failed."""
     user = auth_db.create_pending_user("q_orphan", "hunter2hunter")
-    msg_id = auth_db.log_message(user["id"], "orphan", status="queued")
+    first = auth_db.log_message(user["id"], "orphan one", status="queued")
+    second = auth_db.log_message(user["id"], "orphan two", status="queued")
+    seen = []
+    monkeypatch.setattr(app_module, "_print_body", lambda body, **kw: seen.append(body))
 
-    auth_db.init()  # idempotent; simulates a restart
+    # Other tests may leave their own 'queued' rows behind; only ours
+    # are asserted on.
+    assert app_module._replay_queued() >= 2
+    app_module._PRINT_QUEUE.join()
 
-    msgs = auth_db.list_messages_for_user(user["id"], limit=5)
-    row = next(m for m in msgs if m["id"] == msg_id)
-    assert row["status"] == "failed"
+    ours = [b for b in seen if "orphan" in b]
+    assert len(ours) == 2
+    assert "orphan one" in ours[0] and "orphan two" in ours[1]
+    sent = auth_db.get_message(first)["printed_at"]
+    stamp = (datetime.fromisoformat(sent).replace(tzinfo=timezone.utc)
+             .astimezone().strftime("%I:%M %p").lower())
+    assert stamp in ours[0]
+    for msg_id in (first, second):
+        assert auth_db.get_message(msg_id)["status"] == "printed"
+    with app_module._inflight_lock:
+        assert app_module._inflight.get(user["id"], 0) == 0
+
+
+def test_replay_fails_rows_past_the_queue_cap(monkeypatch):
+    """If more rows are queued than the in-memory queue holds, the
+    overflow is marked failed (retryable) rather than left queued forever."""
+    monkeypatch.setattr(app_module, "_print_body", lambda body, **kw: None)
+    # Clear any 'queued' leftovers from earlier tests so the cap below
+    # is exercised by our two rows alone.
+    app_module._replay_queued()
+    app_module._PRINT_QUEUE.join()
+
+    user = auth_db.create_pending_user("q_overflow", "hunter2hunter")
+    kept = auth_db.log_message(user["id"], "fits", status="queued")
+    dropped = auth_db.log_message(user["id"], "doesn't", status="queued")
+    monkeypatch.setattr(app_module, "_PRINT_QUEUE", queue.Queue(maxsize=1))
+
+    assert app_module._replay_queued() == 1
+    # Drain by hand: the worker thread is bound to the real queue object.
+    uid, mid = app_module._PRINT_QUEUE.get_nowait()
+    assert mid == kept
+    assert auth_db.get_message(dropped)["status"] == "failed"
+    app_module._dec_inflight(uid)
+
+
+def test_worker_skips_rows_deleted_while_queued(client):
+    """A friend removed while their print waits (cascade deletes the row)
+    must not wedge the worker — it logs and moves on."""
+    user = _signed_in_client(client, "q_vanish")
+    msg_id = auth_db.log_message(user["id"], "gone", status="queued")
+    auth_db.delete_message(msg_id)
+    with app_module._inflight_lock:
+        app_module._inflight[user["id"]] = 1
+    app_module._PRINT_QUEUE.put((user["id"], msg_id))
+    app_module._PRINT_QUEUE.join()
+    with app_module._inflight_lock:
+        assert app_module._inflight.get(user["id"], 0) == 0
 
 
 def test_init_migrates_existing_history_for_saved_drawings(tmp_path, monkeypatch):
@@ -318,7 +369,10 @@ def test_retry_reprints_failed_text_and_flips_status(client, monkeypatch):
     r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
-    assert seen == [widgets.friend_message("q_retry_text", "try again", style="caps")]
+    sent = (datetime.fromisoformat(auth_db.get_message(msg_id)["printed_at"])
+            .replace(tzinfo=timezone.utc).astimezone())
+    assert seen == [widgets.friend_message(
+        "q_retry_text", "try again", style="caps", when=sent)]
     row = next(m for m in auth_db.list_messages_for_user(user["id"], limit=5)
                if m["id"] == msg_id)
     assert row["status"] == "printed"

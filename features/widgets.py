@@ -811,11 +811,16 @@ def _name_header(username: str, style: str) -> str:
 
 
 def friend_frame(username: str, *, style: str = "plain",
-                 anonymous: bool = False) -> tuple[str, str]:
+                 anonymous: bool = False,
+                 when: dt.datetime | None = None) -> tuple[str, str]:
     """Markup for the lines that frame a friend print — the "from <name>"
     header and the timestamp footer. Shared by text messages and doodles
-    so the two kinds are visually siblings on paper."""
-    timestamp = dt.datetime.now().strftime("%a %b %-d \u00b7 %I:%M %p").lower()
+    so the two kinds are visually siblings on paper.
+
+    `when` is the moment the friend hit send. Jobs replayed after a
+    restart or retried by the owner can print hours later, and the
+    footer should still say when the message was actually sent."""
+    timestamp = (when or dt.datetime.now()).strftime("%a %b %-d \u00b7 %I:%M %p").lower()
     if anonymous:
         header = "## from anonymous"
     else:
@@ -825,16 +830,18 @@ def friend_frame(username: str, *, style: str = "plain",
 
 def friend_message(username: str, body: str, *,
                    style: str = "plain",
-                   anonymous: bool = False) -> str:
+                   anonymous: bool = False,
+                   when: dt.datetime | None = None) -> str:
     """Format an incoming message from an approved friend for printing.
 
     Uses the same markup vocabulary as the rest of the widgets so the
     rich renderer in features/render.py picks up the heading + dividers.
     `style` picks the display font for the name line. `anonymous=True`
-    replaces the username with "anonymous" and ignores `style`.
+    replaces the username with "anonymous" and ignores `style`. `when`
+    is passed through to friend_frame for the footer.
     """
     body = (body or "").strip()
-    header, footer = friend_frame(username, style=style, anonymous=anonymous)
+    header, footer = friend_frame(username, style=style, anonymous=anonymous, when=when)
     lines = [header, ""]
     for paragraph in body.split("\n"):
         if paragraph.strip() == "!!!":

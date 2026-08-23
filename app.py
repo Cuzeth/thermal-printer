@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 import traceback
-from datetime import datetime, time as dt_time, timedelta
+from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import Any, Callable
 
 from PIL import Image
@@ -853,14 +853,21 @@ _DOODLE_PREFIX = "data:image/png;base64,"
 # one of them blocking on the USB lock for the duration of the other's
 # print. Replaces the per-user 10s rate limit that used to reject bursts.
 #
+# The history row is the job. Enqueue stores what the friend sent (raw
+# body or processed drawing, anonymous flag) and puts only the ids on
+# the queue; the worker rebuilds the print from the row when it gets
+# there. That makes the queue survive restarts for free: rows still
+# 'queued' at boot are pushed back onto the in-memory queue by
+# _replay_queued() below. One caveat — a job that was mid-print when
+# the process died is replayed too, so a crash at exactly the wrong
+# moment can print a receipt twice. Preferable to losing it.
+#
 # Cap exists so a runaway client can't pin unbounded memory; on overflow
 # we return 503 and the friend can retry once the printer catches up.
-# Single-process only — load-bearing alongside `gunicorn --workers 1`.
+# Single-process only — load-bearing alongside `gunicorn --workers 1`
+# (a second worker would replay the same rows and print them twice).
 _PRINT_QUEUE_MAX = 50
-# (user_id, message_id, job_dict) — job is {"kind": "text", "body": <markup>}
-# or {"kind": "doodle", "image": <1-bit PIL image>, "header": <markup>,
-# "footer": <markup>}.
-_PRINT_QUEUE: "queue.Queue[tuple[int, int, dict]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
+_PRINT_QUEUE: "queue.Queue[tuple[int, int]]" = queue.Queue(maxsize=_PRINT_QUEUE_MAX)
 
 # Per-user in-flight cap so one friend can't fill all 50 slots (paper DoS,
 # and anonymous mode makes it socially cheap). Incremented at enqueue,
@@ -879,15 +886,50 @@ def _dec_inflight(user_id: int) -> None:
             _inflight.pop(user_id, None)
 
 
+def _friend_job(msg: dict) -> dict:
+    """Rebuild a friend's print from its history row, the same way for a
+    fresh send, a replay after restart, and an owner retry. Name style is
+    whatever the friend has picked by print time."""
+    style = msg["name_style"] or "plain"
+    # SQLite stamps printed_at in UTC; the footer wants local wall time.
+    sent = (
+        datetime.fromisoformat(msg["printed_at"])
+        .replace(tzinfo=timezone.utc)
+        .astimezone()
+    )
+    if msg["drawing"] is not None:
+        header, footer_markup = widgets.friend_frame(
+            msg["username"], style=style, anonymous=msg["anonymous"], when=sent,
+        )
+        return {
+            "kind": "doodle",
+            "image": Image.open(io.BytesIO(msg["drawing"])),
+            "header": header, "footer": footer_markup,
+        }
+    return {"kind": "text", "body": widgets.friend_message(
+        msg["username"], msg["body"], style=style,
+        anonymous=msg["anonymous"], when=sent,
+    )}
+
+
+def _print_friend_job(job: dict) -> None:
+    if job["kind"] == "doodle":
+        _print_doodle(job)
+    else:
+        _print_body(job["body"])
+
+
 def _print_worker() -> None:
     while True:
-        user_id, msg_id, job = _PRINT_QUEUE.get()
+        user_id, msg_id = _PRINT_QUEUE.get()
         status = "printed"
         try:
-            if job["kind"] == "doodle":
-                _print_doodle(job)
-            else:
-                _print_body(job["body"])
+            msg = auth_db.get_message(msg_id)
+            if msg is None:
+                # The friend (and their rows, via ON DELETE CASCADE) went
+                # away while this sat in the queue. Nothing to print.
+                raise LookupError(f"message {msg_id} no longer exists")
+            _print_friend_job(_friend_job(msg))
         except Exception as e:
             # Async failure — no HTTP response to attach this to. Log and
             # move on so one bad job doesn't wedge the queue for everyone.
@@ -909,6 +951,30 @@ def _print_worker() -> None:
         _PRINT_QUEUE.task_done()
 
 
+def _replay_queued() -> int:
+    """Push rows left 'queued' by a previous process back onto the queue.
+    Runs once at import, before the worker starts and before any request
+    can enqueue, so ordering is just row id. Returns how many it queued."""
+    n = 0
+    for user_id, msg_id in auth_db.list_queued_message_ids():
+        try:
+            _PRINT_QUEUE.put_nowait((user_id, msg_id))
+        except queue.Full:
+            # More leftovers than slots — only possible if the cap was
+            # lowered between runs. Fail the rest honestly so they get a
+            # retry button instead of sitting 'queued' forever.
+            auth_db.set_message_status(msg_id, "failed")
+            continue
+        with _inflight_lock:
+            _inflight[user_id] = _inflight.get(user_id, 0) + 1
+        n += 1
+    if n:
+        print(f"[queue] replaying {n} print(s) left queued by the last run",
+              file=sys.stderr, flush=True)
+    return n
+
+
+_replay_queued()
 threading.Thread(target=_print_worker, name="friend-print-worker", daemon=True).start()
 
 
@@ -1000,14 +1066,13 @@ def friend_preview():
 
 def _enqueue_friend_print(
     user: dict,
-    history_body: str,
-    job: dict,
-    history_drawing: bytes | None = None,
+    body: str,
+    drawing: bytes | None = None,
     anonymous: bool = False,
 ):
     """Shared bookkeeping for every friend print kind: per-user cap,
-    optimistic history row, queue insert, and the crash-safe unwind.
-    Returns a Flask response."""
+    history row (which is also the job — see _PRINT_QUEUE), queue
+    insert, and the crash-safe unwind. Returns a Flask response."""
     with _inflight_lock:
         if _inflight.get(user["id"], 0) >= _PER_USER_QUEUE_CAP:
             return jsonify({
@@ -1024,7 +1089,7 @@ def _enqueue_friend_print(
         # starts 'queued'; the worker flips it to 'printed' or 'failed' so
         # the friend can see whether it actually hit paper.
         msg_id = auth_db.log_message(
-            user["id"], history_body, status="queued", drawing=history_drawing,
+            user["id"], body, status="queued", drawing=drawing,
             anonymous=anonymous,
         )
 
@@ -1032,7 +1097,7 @@ def _enqueue_friend_print(
         # Approximate (the worker may have started one but not yet
         # decremented), but close enough for a UI hint.
         ahead = _PRINT_QUEUE.qsize()
-        _PRINT_QUEUE.put_nowait((user["id"], msg_id, job))
+        _PRINT_QUEUE.put_nowait((user["id"], msg_id))
     except queue.Full:
         _dec_inflight(user["id"])
         auth_db.delete_message(msg_id)  # never entered the queue
@@ -1070,15 +1135,8 @@ def friend_print():
     if len(body) > _MAX_MSG_LEN:
         return jsonify({"ok": False, "error": f"{_MAX_MSG_LEN} character limit"}), 400
 
-    anonymous = bool(data.get("anonymous", False))
-    formatted = widgets.friend_message(
-        user["username"],
-        body,
-        style=user.get("name_style") or "plain",
-        anonymous=anonymous,
-    )
     return _enqueue_friend_print(
-        user, body, {"kind": "text", "body": formatted}, anonymous=anonymous,
+        user, body, anonymous=bool(data.get("anonymous", False)),
     )
 
 
@@ -1111,16 +1169,10 @@ def friend_print_doodle():
     img = image_feat.pad_to_printer_width(img)
     saved = io.BytesIO()
     img.save(saved, format="PNG")
-    anonymous = bool(data.get("anonymous", False))
-    header, footer_markup = widgets.friend_frame(
-        user["username"],
-        style=user.get("name_style") or "plain",
-        anonymous=anonymous,
+    return _enqueue_friend_print(
+        user, "(doodle)", drawing=saved.getvalue(),
+        anonymous=bool(data.get("anonymous", False)),
     )
-    return _enqueue_friend_print(user, "(doodle)", {
-        "kind": "doodle", "image": img,
-        "header": header, "footer": footer_markup,
-    }, history_drawing=saved.getvalue(), anonymous=anonymous)
 
 
 @app.get("/api/history")
@@ -1243,9 +1295,8 @@ def admin_retry_message(msg_id: int):
     Synchronous like every other owner print, not re-queued: the owner
     is usually standing at the printer when they hit retry, and wants
     "printer offline" in the toast now rather than a row that quietly
-    stays red. The job is rebuilt from the stored row (raw body or saved
-    drawing, plus the anonymous flag) the same way the friend routes
-    build it, so the paper comes out identical bar the footer timestamp.
+    stays red. Same job builder as the worker, so the paper comes out
+    identical to what the friend would have gotten.
     """
     def run():
         msg = auth_db.get_message(msg_id)
@@ -1253,21 +1304,7 @@ def admin_retry_message(msg_id: int):
             raise ValueError("no such message")
         if msg["status"] != "failed":
             raise ValueError("only failed prints can be retried")
-        style = msg["name_style"] or "plain"
-        if msg["drawing"] is not None:
-            header, footer_markup = widgets.friend_frame(
-                msg["username"], style=style, anonymous=msg["anonymous"],
-            )
-            _print_doodle({
-                "kind": "doodle",
-                "image": Image.open(io.BytesIO(msg["drawing"])),
-                "header": header, "footer": footer_markup,
-            })
-        else:
-            _print_body(widgets.friend_message(
-                msg["username"], msg["body"], style=style,
-                anonymous=msg["anonymous"],
-            ))
+        _print_friend_job(_friend_job(msg))
         auth_db.set_message_status(msg_id, "printed")
     return _safe(run)
 
