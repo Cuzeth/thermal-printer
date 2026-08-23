@@ -1461,8 +1461,7 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
 .admin-msg { gap: 8px; }
 .admin-msg-head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 .admin-msg-who {
@@ -1472,12 +1471,14 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   letter-spacing: -.01em;
 }
 .admin-msg-when {
+  margin-left: auto;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
+.admin-msg-status.failed { color: var(--coral-text); }
 .admin-msg-body {
   margin: 0;
   padding-left: 12px;

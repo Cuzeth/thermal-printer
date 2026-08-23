@@ -18,6 +18,7 @@ import traceback
 from datetime import datetime, time as dt_time, timedelta
 from typing import Any, Callable
 
+from PIL import Image
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
@@ -1002,6 +1003,7 @@ def _enqueue_friend_print(
     history_body: str,
     job: dict,
     history_drawing: bytes | None = None,
+    anonymous: bool = False,
 ):
     """Shared bookkeeping for every friend print kind: per-user cap,
     optimistic history row, queue insert, and the crash-safe unwind.
@@ -1023,6 +1025,7 @@ def _enqueue_friend_print(
         # the friend can see whether it actually hit paper.
         msg_id = auth_db.log_message(
             user["id"], history_body, status="queued", drawing=history_drawing,
+            anonymous=anonymous,
         )
 
         # qsize() before put = jobs the printer must finish first.
@@ -1067,13 +1070,16 @@ def friend_print():
     if len(body) > _MAX_MSG_LEN:
         return jsonify({"ok": False, "error": f"{_MAX_MSG_LEN} character limit"}), 400
 
+    anonymous = bool(data.get("anonymous", False))
     formatted = widgets.friend_message(
         user["username"],
         body,
         style=user.get("name_style") or "plain",
-        anonymous=bool(data.get("anonymous", False)),
+        anonymous=anonymous,
     )
-    return _enqueue_friend_print(user, body, {"kind": "text", "body": formatted})
+    return _enqueue_friend_print(
+        user, body, {"kind": "text", "body": formatted}, anonymous=anonymous,
+    )
 
 
 @app.post("/api/print/doodle")
@@ -1105,15 +1111,16 @@ def friend_print_doodle():
     img = image_feat.pad_to_printer_width(img)
     saved = io.BytesIO()
     img.save(saved, format="PNG")
+    anonymous = bool(data.get("anonymous", False))
     header, footer_markup = widgets.friend_frame(
         user["username"],
         style=user.get("name_style") or "plain",
-        anonymous=bool(data.get("anonymous", False)),
+        anonymous=anonymous,
     )
     return _enqueue_friend_print(user, "(doodle)", {
         "kind": "doodle", "image": img,
         "header": header, "footer": footer_markup,
-    }, history_drawing=saved.getvalue())
+    }, history_drawing=saved.getvalue(), anonymous=anonymous)
 
 
 @app.get("/api/history")
@@ -1226,6 +1233,43 @@ def admin_list_messages():
     except (TypeError, ValueError):
         limit = 20
     return jsonify({"ok": True, "messages": auth_db.list_messages(limit=limit)})
+
+
+@app.post("/api/admin/messages/<int:msg_id>/retry")
+@require_admin
+def admin_retry_message(msg_id: int):
+    """Reprint a friend message the queue worker marked 'failed'.
+
+    Synchronous like every other owner print, not re-queued: the owner
+    is usually standing at the printer when they hit retry, and wants
+    "printer offline" in the toast now rather than a row that quietly
+    stays red. The job is rebuilt from the stored row (raw body or saved
+    drawing, plus the anonymous flag) the same way the friend routes
+    build it, so the paper comes out identical bar the footer timestamp.
+    """
+    def run():
+        msg = auth_db.get_message(msg_id)
+        if msg is None:
+            raise ValueError("no such message")
+        if msg["status"] != "failed":
+            raise ValueError("only failed prints can be retried")
+        style = msg["name_style"] or "plain"
+        if msg["drawing"] is not None:
+            header, footer_markup = widgets.friend_frame(
+                msg["username"], style=style, anonymous=msg["anonymous"],
+            )
+            _print_doodle({
+                "kind": "doodle",
+                "image": Image.open(io.BytesIO(msg["drawing"])),
+                "header": header, "footer": footer_markup,
+            })
+        else:
+            _print_body(widgets.friend_message(
+                msg["username"], msg["body"], style=style,
+                anonymous=msg["anonymous"],
+            ))
+        auth_db.set_message_status(msg_id, "printed")
+    return _safe(run)
 
 
 @app.post("/api/admin/printer/reset")

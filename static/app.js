@@ -1085,9 +1085,23 @@ async function loadMessages() {
       when.className = "admin-msg-when dim";
       when.textContent = fmtWhen(m.printed_at);
       if (m.status && m.status !== "printed") {
-        when.textContent += ` · ${m.status === "failed" ? "didn't print" : m.status}`;
+        const badge = document.createElement("span");
+        badge.className = "admin-msg-status " + m.status;
+        badge.textContent = m.status === "failed" ? "didn't print" : m.status;
+        when.append(" · ", badge);
       }
       head.append(who, when);
+
+      if (m.status === "failed") {
+        const retry = document.createElement("button");
+        retry.className = "ghost tiny admin-btn admin-btn-approve";
+        retry.textContent = "retry";
+        retry.addEventListener("click", () => guard(async () => {
+          await adminPOST(`/api/admin/messages/${m.id}/retry`);
+          await loadMessages();
+        }, "printed", retry));
+        head.appendChild(retry);
+      }
 
       const body = document.createElement("pre");
       body.className = "admin-msg-body";

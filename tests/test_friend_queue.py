@@ -283,3 +283,115 @@ def test_doodle_counts_against_user_cap(client):
     finally:
         with app_module._inflight_lock:
             app_module._inflight.pop(user["id"], None)
+
+
+# ---------- owner retry ----------
+
+def _admin():
+    import config
+    return {"Authorization": f"Bearer {config.ADMIN_TOKEN}"}
+
+
+def _failed_text(client, name: str, body: str, anonymous: bool = False) -> tuple[dict, int]:
+    """Enqueue a text print, wait for the worker, then mark it failed —
+    the state the owner's retry button acts on."""
+    user = _signed_in_client(client, name)
+    r = client.post("/api/print", json={"body": body, "anonymous": anonymous})
+    assert r.status_code == 200
+    app_module._PRINT_QUEUE.join()
+    msg_id = next(
+        m["id"] for m in auth_db.list_messages_for_user(user["id"], limit=5)
+        if m["body"] == body
+    )
+    auth_db.set_message_status(msg_id, "failed")
+    return user, msg_id
+
+
+def test_retry_reprints_failed_text_and_flips_status(client, monkeypatch):
+    """Retrying a failed text row prints the friend's message as the
+    friend route would have (name + style header) and marks it printed."""
+    user, msg_id = _failed_text(client, "q_retry_text", "try again")
+    auth_db.set_name_style(user["id"], "caps")
+    seen = []
+    monkeypatch.setattr(app_module, "_print_body", lambda body, **kw: seen.append(body))
+
+    r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+    assert seen == [widgets.friend_message("q_retry_text", "try again", style="caps")]
+    row = next(m for m in auth_db.list_messages_for_user(user["id"], limit=5)
+               if m["id"] == msg_id)
+    assert row["status"] == "printed"
+
+
+def test_retry_keeps_anonymous_choice(client, monkeypatch):
+    """A friend who sent anonymously stays anonymous on the reprint — the
+    flag is persisted on the row, not re-derived from the request."""
+    _, msg_id = _failed_text(client, "q_retry_anon", "who dis", anonymous=True)
+    seen = []
+    monkeypatch.setattr(app_module, "_print_body", lambda body, **kw: seen.append(body))
+
+    r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
+    assert r.status_code == 200
+    assert "anonymous" in seen[0]
+    assert "q_retry_anon" not in seen[0]
+
+
+def test_retry_reprints_failed_doodle_from_saved_drawing(client, monkeypatch):
+    """A failed doodle is rebuilt from the PNG kept in history, framed the
+    same way the friend route frames it."""
+    user = _signed_in_client(client, "q_retry_doodle")
+    r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
+    assert r.status_code == 200
+    app_module._PRINT_QUEUE.join()
+    msg_id = next(m["id"] for m in auth_db.list_messages_for_user(user["id"], limit=5)
+                  if m["body"] == "(doodle)")
+    auth_db.set_message_status(msg_id, "failed")
+    seen = []
+    monkeypatch.setattr(app_module, "_print_doodle", lambda job: seen.append(job))
+
+    r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
+    assert r.status_code == 200
+    job = seen[0]
+    assert job["kind"] == "doodle"
+    assert job["image"].size == (576, 576)
+    assert "q_retry_doodle" in job["header"]
+    row = next(m for m in auth_db.list_messages_for_user(user["id"], limit=5)
+               if m["id"] == msg_id)
+    assert row["status"] == "printed"
+
+
+def test_retry_stays_failed_when_printer_is_offline(client, monkeypatch):
+    """A retry that hits an offline printer answers 503 in the printer
+    shape and leaves the row failed so the button is still there."""
+    from printer import PrinterError
+    user, msg_id = _failed_text(client, "q_retry_offline", "still broken")
+
+    def _offline(body, **kw):
+        raise PrinterError("printer offline")
+
+    monkeypatch.setattr(app_module, "_print_body", _offline)
+    r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
+    assert r.status_code == 503
+    assert r.get_json()["kind"] == "printer"
+    row = next(m for m in auth_db.list_messages_for_user(user["id"], limit=5)
+               if m["id"] == msg_id)
+    assert row["status"] == "failed"
+
+
+def test_retry_refuses_rows_that_did_print(client):
+    """Retry is for failures only — a printed row is rejected as input,
+    and an unknown id looks the same."""
+    user = _signed_in_client(client, "q_retry_printed")
+    msg_id = auth_db.log_message(user["id"], "went fine")
+    r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
+    assert r.status_code == 400
+    assert r.get_json()["kind"] == "input"
+    r = client.post("/api/admin/messages/999999/retry", headers=_admin())
+    assert r.status_code == 400
+
+
+def test_retry_requires_admin(client):
+    _, msg_id = _failed_text(client, "q_retry_noauth", "nope")
+    r = client.post(f"/api/admin/messages/{msg_id}/retry")
+    assert r.status_code == 401

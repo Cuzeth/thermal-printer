@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS messages (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body       TEXT    NOT NULL,
   drawing    BLOB,
+  anonymous  INTEGER NOT NULL DEFAULT 0,
   status     TEXT    NOT NULL DEFAULT 'printed',
   printed_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -103,6 +104,13 @@ def init() -> None:
             )
         if "drawing" not in msg_cols:
             conn.execute("ALTER TABLE messages ADD COLUMN drawing BLOB")
+        if "anonymous" not in msg_cols:
+            # Needed so an owner retry reprints the receipt the way the
+            # friend chose it. Pre-column rows default to named, which is
+            # the common case; the anonymous ones can't be recovered.
+            conn.execute(
+                "ALTER TABLE messages ADD COLUMN anonymous INTEGER NOT NULL DEFAULT 0"
+            )
 
         # The print queue lives in process memory, so any row still
         # 'queued' at boot belongs to a job that no longer exists — the
@@ -269,15 +277,37 @@ def log_message(
     body: str,
     status: str = "printed",
     drawing: bytes | None = None,
+    anonymous: bool = False,
 ) -> int:
     if status not in VALID_MESSAGE_STATUSES:
         raise ValueError(f"invalid message status: {status}")
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO messages (user_id, body, status, drawing) VALUES (?, ?, ?, ?)",
-            (user_id, body, status, drawing),
+            "INSERT INTO messages (user_id, body, status, drawing, anonymous) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, body, status, drawing, int(anonymous)),
         )
         return cur.lastrowid
+
+
+def get_message(message_id: int) -> dict | None:
+    """One history row with everything the owner's retry needs to rebuild
+    the print: the raw body or saved drawing, the friend's current name
+    style, and whether they sent it anonymously. Owner-only — no user
+    scoping, unlike get_message_drawing_for_user."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT m.id, m.body, m.status, m.drawing, m.anonymous, "
+            "u.username, u.name_style "
+            "FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?",
+            (message_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        msg = dict(row)
+        msg["drawing"] = bytes(row["drawing"]) if row["drawing"] is not None else None
+        msg["anonymous"] = bool(row["anonymous"])
+        return msg
 
 
 def set_message_status(message_id: int, status: str) -> None:
