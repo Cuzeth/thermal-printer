@@ -24,6 +24,8 @@ body.friends {
   --mark: rgba(32, 35, 33, .35);
   --coral-text: #b83327;
   --signal-orange-text: #b34715;
+  --sel-ground: var(--ink);
+  --sel-text: var(--bone);
   --bg-idx: rgba(32, 35, 33, .05);
   color-scheme: light;
   font-size: 16px;
@@ -238,6 +240,8 @@ label .label {
   --line: var(--border-light);
   --ground: var(--ink);
   --signal-orange-text: var(--signal-orange);
+  --sel-ground: rgba(235, 94, 40, .35);
+  --sel-text: var(--bone);
   --bg-idx: rgba(239, 236, 227, .05);
   background: var(--ink);
   color: var(--bone);
@@ -315,6 +319,8 @@ label .label {
   --mark: rgba(239, 236, 227, .35);
   --coral-text: #f3665b;
   --signal-orange-text: var(--signal-orange);
+  --sel-ground: rgba(235, 94, 40, .35);
+  --sel-text: var(--bone);
   --cut-ground: var(--bone);
   color-scheme: dark;
   background: var(--ink);
@@ -440,6 +446,8 @@ label .label {
   color: var(--text-muted);
 }
 .preview-paper {
+  --sel-ground: var(--ink);
+  --sel-text: var(--paper);
   position: relative;
   display: flex;
   flex-direction: column;

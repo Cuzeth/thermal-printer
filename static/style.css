@@ -34,6 +34,12 @@
      only 2.9:1 on bone, so light grounds re-point this to a darker cut.
      Pure graphics (panel tabs, rails, underlines on ink) keep the hue. */
   --signal-orange-text: var(--signal-orange);
+
+  /* Selection is a state flip, not a highlight: dark grounds wash the
+     ground orange and push the text to full bone; light grounds re-point
+     these to a solid ink invert so the flipped text stays legible. */
+  --sel-ground: rgba(235, 94, 40, .35);
+  --sel-text: var(--bone);
   --danger: var(--signal-coral);
 
   --border-light: rgba(239, 236, 227, .18);
@@ -90,9 +96,7 @@ body {
   line-height: 1.5;
 }
 
-/* Background only: text keeps its own color, so selections stay legible
-   on the ink and bone grounds alike. */
-::selection { background: rgba(235, 94, 40, .35); }
+::selection { background: var(--sel-ground); color: var(--sel-text); }
 
 h1, h2, h3 { text-wrap: balance; }
 p, li, figcaption { text-wrap: pretty; }
@@ -1123,6 +1127,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange-text); outline-of
 }
 
 .paper {
+  --sel-ground: var(--ink);
+  --sel-text: var(--paper);
   position: relative;
   overflow: hidden;
   min-height: 300px;
