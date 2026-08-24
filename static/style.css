@@ -29,6 +29,11 @@
   /* Same story for coral: small coral type needs a lighter cut on dark
      grounds and a much darker one on bone. Marks and fills keep the hue. */
   --coral-text: #f3665b;
+  /* And again for orange doing text or indicator duty (focus rings,
+     index counters, status lamps): the true hue reads 4.7:1 on ink but
+     only 2.9:1 on bone, so light grounds re-point this to a darker cut.
+     Pure graphics (panel tabs, rails, underlines on ink) keep the hue. */
+  --signal-orange-text: var(--signal-orange);
   --danger: var(--signal-coral);
 
   --border-light: rgba(239, 236, 227, .18);
@@ -85,7 +90,9 @@ body {
   line-height: 1.5;
 }
 
-::selection { background: rgba(235, 94, 40, .35); color: var(--bone); }
+/* Background only: text keeps its own color, so selections stay legible
+   on the ink and bone grounds alike. */
+::selection { background: rgba(235, 94, 40, .35); }
 
 h1, h2, h3 { text-wrap: balance; }
 p, li, figcaption { text-wrap: pretty; }
@@ -149,7 +156,7 @@ code {
   font-weight: 500;
   line-height: 1;
   letter-spacing: .08em;
-  color: var(--signal-orange);
+  color: var(--signal-orange-text);
   font-variant-numeric: tabular-nums;
 }
 .kicker {
@@ -194,10 +201,11 @@ code {
 .status[data-state="loading"],
 .status[data-state="pending"] { color: var(--text); }
 .status[data-state="loading"]::before,
-.status[data-state="pending"]::before { background: var(--signal-orange); animation: lamp 900ms steps(2, end) infinite; }
+.status[data-state="pending"]::before { background: var(--signal-orange-text); animation: lamp 900ms steps(2, end) infinite; }
 .status[data-state="error"] { color: var(--text); }
 .status[data-state="error"]::before { background: var(--signal-coral); }
-.status[data-state="dry"]::before { background: var(--signal-orange); }
+.status[data-state="dry"] { color: var(--text); }
+.status[data-state="dry"]::before { background: var(--signal-orange-text); }
 @keyframes lamp { 50% { opacity: .25; } }
 
 /* Divider with an optional label: `<div class="rule-label">name</div>`. */
@@ -289,7 +297,7 @@ code {
   background: var(--signal-orange);
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 14px;
   letter-spacing: .14em;
@@ -470,7 +478,7 @@ code {
 .tab.active { color: var(--text); }
 .tab.active .tab-idx { color: var(--signal-orange); }
 .tab.active::after { scale: 1 1; }
-.tab:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: -2px; }
+.tab:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: -2px; }
 
 /* ---------- main layout ---------- */
 
@@ -656,10 +664,12 @@ textarea {
   outline: none;
   transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
-input::placeholder, textarea::placeholder { color: var(--text-dim); }
+/* Placeholders carry real instructions, so they sit at muted, not dim:
+   dim only clears AA on the dark grounds. */
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
 input:focus, select:focus, textarea:focus {
-  border-color: var(--signal-orange);
-  box-shadow: 0 0 0 1px var(--signal-orange);
+  border-color: var(--signal-orange-text);
+  box-shadow: 0 0 0 1px var(--signal-orange-text);
 }
 textarea {
   resize: vertical;
@@ -707,7 +717,7 @@ input[type=range]::-moz-range-thumb {
   border: 0;
   border-radius: 1px;
 }
-input[type=range]:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: 2px; }
+input[type=range]:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: 2px; }
 .v {
   float: right;
   font-family: var(--mono);
@@ -768,7 +778,10 @@ button:hover:not(:disabled) {
 }
 button:active:not(:disabled) { translate: 0 1px; }
 button:disabled { opacity: .38; cursor: not-allowed; }
-button:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: 2px; }
+/* Ghost buttons start from muted text; the standard disabled fade would
+   push them past discoverable. */
+button.ghost:disabled { opacity: .5; }
+button:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: 2px; }
 
 button.primary {
   background: var(--text);
@@ -1004,7 +1017,7 @@ summary::before {
   font-size: 15px;
   font-weight: 500;
   line-height: 1;
-  color: var(--signal-orange);
+  color: var(--signal-orange-text);
 }
 details[open] > summary::before { content: "\2212"; }
 summary::after {
@@ -1014,11 +1027,11 @@ summary::after {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: .1em;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 [data-pane="codes"] summary::after { content: "C-" counter(det, decimal-leading-zero); }
-summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: -2px; }
+summary:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: -2px; }
 
 .ritem {
   display: grid;
@@ -1196,7 +1209,9 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   letter-spacing: .02em;
   animation: toast-in var(--med) var(--ease);
 }
-.toast.ok { border-left-color: var(--signal-orange); }
+/* Success borrows the ready-lamp green: orange and coral are twenty RGB
+   points apart, and "it printed" vs "it failed" must survive a glance. */
+.toast.ok { border-left-color: var(--sage); }
 .toast.err { border-left-color: var(--signal-coral); }
 @keyframes toast-in {
   from { opacity: 0; translate: 0 6px; }
@@ -1223,6 +1238,13 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   vertical-align: middle;
   user-select: none;
   transition: color var(--fast) var(--ease), background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+/* The visible glyph is 16px; this pad brings the touch/hover target to
+   40px without moving anything on screen. */
+.tip::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
 }
 .tip:hover, .tip:focus-visible {
   background: var(--text);
@@ -1587,8 +1609,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange); outline-offset:
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-#code::placeholder { color: var(--text-dim); opacity: .5; }
-#code:focus { outline: none; border-color: var(--signal-orange); box-shadow: none; }
+#code::placeholder { color: var(--text-dim); }
+#code:focus { outline: none; border-color: var(--signal-orange-text); box-shadow: none; }
 #login-btn { width: 100%; min-height: 48px; margin-top: 20px; }
 #login-err {
   min-height: 20px;

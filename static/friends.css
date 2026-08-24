@@ -23,6 +23,7 @@ body.friends {
   --text-dim: #8a8d88;
   --mark: rgba(32, 35, 33, .35);
   --coral-text: #b83327;
+  --signal-orange-text: #b34715;
   --bg-idx: rgba(32, 35, 33, .05);
   color-scheme: light;
   font-size: 16px;
@@ -207,6 +208,8 @@ label .label {
   --line: rgba(32, 35, 33, .3);
   --line-strong: rgba(32, 35, 33, .65);
   --ground: var(--signal-orange-fill);
+  /* Focus paint has to be ink here: orange-on-orange vanishes. */
+  --signal-orange-text: var(--ink);
   --bg-idx: rgba(32, 35, 33, .08);
   background: var(--signal-orange-fill);
   color: var(--ink);
@@ -234,6 +237,7 @@ label .label {
   --text-muted: #aeb1ac;
   --line: var(--border-light);
   --ground: var(--ink);
+  --signal-orange-text: var(--signal-orange);
   --bg-idx: rgba(239, 236, 227, .05);
   background: var(--ink);
   color: var(--bone);
@@ -310,6 +314,7 @@ label .label {
   --text-dim: #8f918c;
   --mark: rgba(239, 236, 227, .35);
   --coral-text: #f3665b;
+  --signal-orange-text: var(--signal-orange);
   --cut-ground: var(--bone);
   color-scheme: dark;
   background: var(--ink);
@@ -374,7 +379,7 @@ label .label {
 .mode-tab.active { color: var(--text); }
 .mode-tab.active .tab-idx { color: var(--signal-orange); }
 .mode-tab.active::after { scale: 1 1; }
-.mode-tab:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: -2px; }
+.mode-tab:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: -2px; }
 
 #msg-body { margin-top: 8px; min-height: 160px; font-size: 15px; }
 .msg-meta {
@@ -517,6 +522,8 @@ label .label {
 .doodle-tool,
 .brush-size { min-width: 44px; min-height: 44px; }
 .doodle-tool { padding: 9px 12px; font-size: 10px; }
+/* Undo and redo start life disabled; keep them discoverable. */
+.doodle-tool:disabled { opacity: .5; }
 .brush-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
 .brush-picker legend {
   width: 100%;
@@ -534,7 +541,7 @@ label .label {
   padding: 6px 8px;
   flex-direction: column;
   gap: 4px;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: .08em;
   color: var(--text-muted);
 }
@@ -573,13 +580,15 @@ label .label {
 .settings summary::after { content: "S-01"; }
 .settings-current { color: var(--text); }
 .settings .hint { margin: 12px 16px 12px; }
+/* Cells draw their own right/bottom hairlines, the same trick as the
+   console widget grid: a short last row leaves an open slot instead of
+   a painted block where no chip exists. */
 .name-style-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 1px;
   margin: 0 16px;
-  background: var(--line);
-  border: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 .style-chip {
   display: flex;
@@ -590,6 +599,8 @@ label .label {
   min-height: 72px;
   padding: 10px;
   border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: var(--ground);
   color: var(--text);
@@ -599,7 +610,7 @@ label .label {
   transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
 .style-chip:hover:not(:disabled) { background: var(--ground-3); color: var(--text); }
-.style-chip.active { box-shadow: inset 0 0 0 2px var(--signal-orange); }
+.style-chip.active { box-shadow: inset 0 0 0 2px var(--signal-orange-text); }
 .style-chip-label {
   font-family: var(--mono);
   font-size: 9px;
@@ -687,7 +698,7 @@ label .label {
   font-weight: 500;
   line-height: 1.6;
   letter-spacing: .1em;
-  color: var(--signal-orange);
+  color: var(--signal-orange-text);
   font-variant-numeric: tabular-nums;
 }
 .history-item[role="button"]::after {
@@ -704,7 +715,7 @@ label .label {
 }
 .history-item:hover { background: var(--ground-3); }
 .history-item:hover::after { translate: 4px 0; color: var(--text); }
-.history-item:focus-visible { outline: 2px solid var(--signal-orange); outline-offset: 2px; }
+.history-item:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: 2px; }
 .history-when {
   grid-column: 2;
   display: flex;
@@ -733,7 +744,7 @@ label .label {
 .history-status.failed { color: var(--coral-text); border-color: rgba(240, 79, 67, .5); }
 .history-status.failed::before { background: var(--signal-coral); }
 .history-status.queued { color: var(--text); }
-.history-status.queued::before { background: var(--signal-orange); }
+.history-status.queued::before { background: var(--signal-orange-text); }
 .history-body {
   grid-column: 2;
   margin: 0;
@@ -763,7 +774,7 @@ label .label {
 .print-confirmed .composer { animation: print-confirmed .6s var(--ease); }
 @keyframes print-confirmed {
   0%, 100% { box-shadow: none; }
-  35% { box-shadow: 0 0 0 3px var(--signal-orange); }
+  35% { box-shadow: 0 0 0 3px var(--signal-orange-text); }
 }
 
 /* ---------- responsive ---------- */
