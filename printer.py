@@ -223,12 +223,6 @@ def hr(p, char: str = "-") -> None:
     p.text(char * config.RECEIPT_WIDTH + "\n")
 
 
-def center(p, text: str, bold: bool = False) -> None:
-    p.set(align="center", bold=bold)
-    p.text(text + "\n")
-    p.set(align="left", bold=False)
-
-
 def heading(p, text: str) -> None:
     """A nice centered bold double-height heading."""
     p.set(align="center", bold=True, double_height=True, double_width=True)

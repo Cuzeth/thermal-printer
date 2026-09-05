@@ -8,11 +8,13 @@ import io
 import queue
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw
 
 import app as app_module
+import config
 from auth import db as auth_db, session as sess
 from features import widgets
 
@@ -391,25 +393,24 @@ def test_retry_keeps_anonymous_choice(client, monkeypatch):
     assert "q_retry_anon" not in seen[0]
 
 
-def test_retry_reprints_failed_doodle_from_saved_drawing(client, monkeypatch):
-    """A failed doodle is rebuilt from the PNG kept in history, framed the
-    same way the friend route frames it."""
+def test_retry_reprints_failed_doodle_from_saved_drawing(client):
+    """A doodle retry sends the same printer bytes as the original queued
+    print, including its saved drawing, name header, timestamp, and cut."""
     user = _signed_in_client(client, "q_retry_doodle")
     r = client.post("/api/print/doodle", json={"image": _doodle_data_url()})
     assert r.status_code == 200
     app_module._PRINT_QUEUE.join()
+    output = Path(config.DRY_RUN_PATH)
+    original = output.read_bytes()
+    assert original
+    output.write_bytes(b"")
     msg_id = next(m["id"] for m in auth_db.list_messages_for_user(user["id"], limit=5)
                   if m["body"] == "(doodle)")
     auth_db.set_message_status(msg_id, "failed")
-    seen = []
-    monkeypatch.setattr(app_module, "_print_doodle", lambda job: seen.append(job))
 
     r = client.post(f"/api/admin/messages/{msg_id}/retry", headers=_admin())
     assert r.status_code == 200
-    job = seen[0]
-    assert job["kind"] == "doodle"
-    assert job["image"].size == (576, 576)
-    assert "q_retry_doodle" in job["header"]
+    assert output.read_bytes() == original
     row = next(m for m in auth_db.list_messages_for_user(user["id"], limit=5)
                if m["id"] == msg_id)
     assert row["status"] == "printed"

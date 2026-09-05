@@ -157,19 +157,6 @@ def _print_body(body: str, cut: bool = True, rich: bool = True) -> None:
                 footer(p)
 
 
-def _print_doodle(job: dict) -> None:
-    """Header, the drawing, timestamp footer — one tear-off. Header and
-    footer are rasterized like any markup; the doodle goes between them
-    as its own transfer, same buffer-safe shape as _print_sections."""
-    header = render_feat.render_markup(job["header"])
-    footer_img = render_feat.render_markup(job["footer"])
-    with open_printer() as p:
-        _print_image(p, header)
-        _print_image(p, job["image"])
-        _print_image(p, footer_img)
-        footer(p)
-
-
 def _print_sections(sections: list[str]) -> None:
     """Print several markup bodies as back-to-back images on one scroll.
 
@@ -407,82 +394,21 @@ def preview_lab(kind: str):
         return _preview_markup(_lab_body(kind, data))
     return _safe(run)
 
-@app.post("/api/admin/print/weather")
+@app.post("/api/admin/print/weather", defaults={"kind": "weather"})
+@app.post("/api/admin/print/dice", defaults={"kind": "dice"})
+@app.post("/api/admin/print/hn", defaults={"kind": "hn"})
+@app.post("/api/admin/print/onthisday", defaults={"kind": "onthisday"})
+@app.post("/api/admin/print/calendar", defaults={"kind": "calendar"})
+@app.post("/api/admin/print/countdown", defaults={"kind": "countdown"})
+@app.post("/api/admin/print/habits", defaults={"kind": "habits"})
+@app.post("/api/admin/print/advice", defaults={"kind": "advice"})
+@app.post("/api/admin/print/ascii", defaults={"kind": "ascii"})
+@app.post("/api/admin/print/now", defaults={"kind": "now"})
 @require_admin
-def print_weather():
+def print_widget(kind: str):
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("weather", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/dice")
-@require_admin
-def print_dice():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("dice", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/hn")
-@require_admin
-def print_hn():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("hn", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/onthisday")
-@require_admin
-def print_on_this_day():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("onthisday", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/calendar")
-@require_admin
-def print_calendar():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("calendar", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/countdown")
-@require_admin
-def print_countdown():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("countdown", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/habits")
-@require_admin
-def print_habits():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("habits", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/advice")
-@require_admin
-def print_advice():
-    def run():
-        _print_body(_widget_body("advice", {}))
-        return {}
+        _print_body(_widget_body(kind, data))
     return _safe(run)
 
 
@@ -501,52 +427,14 @@ def print_briefing():
     return _safe(run)
 
 
-@app.post("/api/admin/print/todo")
+@app.post("/api/admin/print/todo", defaults={"kind": "todo"})
+@app.post("/api/admin/print/receipt", defaults={"kind": "receipt"})
+@app.post("/api/admin/print/label", defaults={"kind": "label"})
 @require_admin
-def print_todo():
+def print_lab(kind: str):
     def run():
         data = request.get_json(silent=True) or {}
-        _print_body(_lab_body("todo", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/receipt")
-@require_admin
-def print_receipt():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_lab_body("receipt", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/label")
-@require_admin
-def print_label():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_lab_body("label", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/ascii")
-@require_admin
-def print_ascii():
-    def run():
-        data = request.get_json(silent=True) or {}
-        _print_body(_widget_body("ascii", data))
-        return {}
-    return _safe(run)
-
-
-@app.post("/api/admin/print/now")
-@require_admin
-def print_now():
-    def run():
-        _print_body(_widget_body("now", {}))
-        return {}
+        _print_body(_lab_body(kind, data))
     return _safe(run)
 
 
@@ -886,8 +774,8 @@ def _dec_inflight(user_id: int) -> None:
             _inflight.pop(user_id, None)
 
 
-def _friend_job(msg: dict) -> dict:
-    """Rebuild a friend's print from its history row, the same way for a
+def _print_friend_message(msg: dict) -> None:
+    """Print a friend's history row, the same way for a
     fresh send, a replay after restart, and an owner retry. Name style is
     whatever the friend has picked by print time."""
     style = msg["name_style"] or "plain"
@@ -901,22 +789,21 @@ def _friend_job(msg: dict) -> dict:
         header, footer_markup = widgets.friend_frame(
             msg["username"], style=style, anonymous=msg["anonymous"], when=sent,
         )
-        return {
-            "kind": "doodle",
-            "image": Image.open(io.BytesIO(msg["drawing"])),
-            "header": header, "footer": footer_markup,
-        }
-    return {"kind": "text", "body": widgets.friend_message(
-        msg["username"], msg["body"], style=style,
-        anonymous=msg["anonymous"], when=sent,
-    )}
-
-
-def _print_friend_job(job: dict) -> None:
-    if job["kind"] == "doodle":
-        _print_doodle(job)
+        # Render before taking the USB lock; send the frame and drawing as
+        # separate images to stay within the printer's raster buffer.
+        header_img = render_feat.render_markup(header)
+        footer_img = render_feat.render_markup(footer_markup)
+        with Image.open(io.BytesIO(msg["drawing"])) as drawing:
+            with open_printer() as p:
+                _print_image(p, header_img)
+                _print_image(p, drawing)
+                _print_image(p, footer_img)
+                footer(p)
     else:
-        _print_body(job["body"])
+        _print_body(widgets.friend_message(
+            msg["username"], msg["body"], style=style,
+            anonymous=msg["anonymous"], when=sent,
+        ))
 
 
 def _print_worker() -> None:
@@ -929,7 +816,7 @@ def _print_worker() -> None:
                 # The friend (and their rows, via ON DELETE CASCADE) went
                 # away while this sat in the queue. Nothing to print.
                 raise LookupError(f"message {msg_id} no longer exists")
-            _print_friend_job(_friend_job(msg))
+            _print_friend_message(msg)
         except Exception as e:
             # Async failure — no HTTP response to attach this to. Log and
             # move on so one bad job doesn't wedge the queue for everyone.
@@ -1295,7 +1182,7 @@ def admin_retry_message(msg_id: int):
     Synchronous like every other owner print, not re-queued: the owner
     is usually standing at the printer when they hit retry, and wants
     "printer offline" in the toast now rather than a row that quietly
-    stays red. Same job builder as the worker, so the paper comes out
+    stays red. Same print function as the worker, so the paper comes out
     identical to what the friend would have gotten.
     """
     def run():
@@ -1304,7 +1191,7 @@ def admin_retry_message(msg_id: int):
             raise ValueError("no such message")
         if msg["status"] != "failed":
             raise ValueError("only failed prints can be retried")
-        _print_friend_job(_friend_job(msg))
+        _print_friend_message(msg)
         auth_db.set_message_status(msg_id, "printed")
     return _safe(run)
 

@@ -59,12 +59,6 @@ def feed_lines(p, n: int) -> None:
     send_bytes(p, bytes([0x1B, 0x64, n]))
 
 
-def feed_dots(p, n: int) -> None:
-    """Feed `n` dots (1/203 inch on typical 80mm units)."""
-    n = max(0, min(255, int(n)))
-    send_bytes(p, bytes([0x1B, 0x4A, n]))
-
-
 # ---------- cut ----------
 
 def cut(p, partial: bool = False) -> None:
@@ -209,15 +203,6 @@ def parse_raw_input(text: str) -> bytes:
     if not tokens:
         raise ValueError("enter hex bytes or escape sequences")
     return bytes(int(t, 16) for t in tokens)
-
-
-def send_raw(p, text: str) -> int:
-    """Send raw bytes parsed from `text`. Returns how many bytes were sent."""
-    data = parse_raw_input(text)
-    if not data:
-        raise ValueError("nothing to send")
-    send_bytes(p, data)
-    return len(data)
 
 
 # A tiny cheat sheet of common commands, exported for the UI.
