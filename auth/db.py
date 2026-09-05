@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS messages (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   body       TEXT    NOT NULL,
   drawing    BLOB,
+  kind       TEXT    NOT NULL DEFAULT 'text',
   anonymous  INTEGER NOT NULL DEFAULT 0,
   status     TEXT    NOT NULL DEFAULT 'printed',
   printed_at TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -111,6 +112,11 @@ def init() -> None:
             conn.execute(
                 "ALTER TABLE messages ADD COLUMN anonymous INTEGER NOT NULL DEFAULT 0"
             )
+        if "kind" not in msg_cols:
+            conn.execute("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
+            # Existing raster rows are doodles; photos have an explicit kind
+            # so their tall strips never get restored onto the square canvas.
+            conn.execute("UPDATE messages SET kind = 'doodle' WHERE drawing IS NOT NULL")
 
 
 # ---------- users ----------
@@ -275,14 +281,18 @@ def log_message(
     status: str = "printed",
     drawing: bytes | None = None,
     anonymous: bool = False,
+    kind: str | None = None,
 ) -> int:
     if status not in VALID_MESSAGE_STATUSES:
         raise ValueError(f"invalid message status: {status}")
+    kind = kind or ("doodle" if drawing is not None else "text")
+    if kind not in ("text", "doodle", "photo"):
+        raise ValueError(f"invalid message kind: {kind}")
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO messages (user_id, body, status, drawing, anonymous) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (user_id, body, status, drawing, int(anonymous)),
+            "INSERT INTO messages (user_id, body, status, drawing, anonymous, kind) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, body, status, drawing, int(anonymous), kind),
         )
         return cur.lastrowid
 
@@ -295,7 +305,7 @@ def get_message(message_id: int) -> dict | None:
     get_message_drawing_for_user."""
     with db() as conn:
         row = conn.execute(
-            "SELECT m.id, m.user_id, m.body, m.status, m.drawing, m.anonymous, "
+            "SELECT m.id, m.user_id, m.body, m.status, m.drawing, m.anonymous, m.kind, "
             "m.printed_at, u.username, u.name_style "
             "FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?",
             (message_id,),
@@ -354,12 +364,13 @@ def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
     — otherwise a bursty double-print would show in the wrong order."""
     with db() as conn:
         rows = conn.execute(
-            "SELECT id, body, status, printed_at, "
+            "SELECT id, body, kind, anonymous, status, printed_at, "
             "drawing IS NOT NULL AS has_drawing FROM messages "
             "WHERE user_id = ? ORDER BY printed_at DESC, id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
-        return [dict(r) | {"has_drawing": bool(r["has_drawing"])} for r in rows]
+        return [dict(r) | {"has_drawing": bool(r["has_drawing"]),
+                           "anonymous": bool(r["anonymous"])} for r in rows]
 
 
 def get_message_drawing_for_user(message_id: int, user_id: int) -> bytes | None:

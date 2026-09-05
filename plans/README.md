@@ -24,6 +24,7 @@ audits from re-litigating settled questions.
 | 006 | Opt-in scheduled morning briefing (env-driven, off by default) | P2 | M | 001–005 merged | DONE (reviewed after 1 revision — stale worktree base corrected; commit `408c848`) |
 | 007 | Friend doodles — canvas on /m/ printing through the queue | P2 | M | 001 (002 recommended) | DONE (reviewed; commit `07d1bda`) |
 | 008 | "printer looks offline" banner on the friends page | P2 | S | 001–005 merged | DONE (reviewed; commit `d8e5986`) |
+| 009 | Friend photo booth | P2 | M | 001–008 | DONE (167 tests + auth smoke; awaiting parent review and commit) |
 
 All eight plans were executed, reviewed, and fast-forward-merged into
 `main` on 2026-07-06 (owner-directed): fixes `eb34102 → 7258e63 → da3a6e7

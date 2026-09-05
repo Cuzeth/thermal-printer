@@ -162,6 +162,7 @@ async function saveNameStyle(style) {
     toast(style + " selected", "ok");
     // Refresh the preview so they see the new header font immediately.
     schedulePreview();
+    schedulePhotoPreview();
   } catch (err) {
     toast(err.message, "err");
   }
@@ -290,6 +291,20 @@ function historyItem(msg) {
     : msg.body;
 
   li.append(when, body);
+  if (msg.kind === "photo") {
+    body.textContent = msg.body + " · tap to reprint";
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+    li.setAttribute("aria-label", `reopen the photo strip from ${fmtWhen(msg.printed_at)}`);
+    li.addEventListener("click", () => restorePhoto(msg));
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        li.click();
+      }
+    });
+    return li;
+  }
   if (isDoodle) {
     if (msg.has_drawing) {
       li.tabIndex = 0;
@@ -315,6 +330,7 @@ function historyItem(msg) {
   // Click-to-restore: drops the body back into the composer so the friend
   // can tweak + reprint without retyping. No auto-submit.
   li.addEventListener("click", () => {
+    setMode("write");
     const ta = $("#msg-body");
     ta.value = msg.body;
     $("#msg-count").textContent = `${msg.body.length} / 800`;
@@ -356,7 +372,7 @@ async function loadHistory() {
 
 // ---------- send message ----------
 
-// Shared success choreography for both print kinds: flash the screen,
+// Shared success choreography for friend prints: flash the screen,
 // toast an honest "queued" message using the server's `ahead` count, and
 // refresh history so the new row (with its canonical server timestamp)
 // shows up.
@@ -667,21 +683,35 @@ $("#msg-body").addEventListener("input", (e) => {
 
 $("#msg-anon")?.addEventListener("change", schedulePreview);
 
-// ---------- write / draw mode switch ----------
+// ---------- composer mode switch ----------
 
 function setMode(mode) {
-  const isDraw = mode === "draw";
-  $("#msg-form").hidden = isDraw;
-  $("#doodle-panel").hidden = !isDraw;
-  $("#mode-write").classList.toggle("active", !isDraw);
-  $("#mode-draw").classList.toggle("active", isDraw);
-  $("#mode-write").setAttribute("aria-selected", isDraw ? "false" : "true");
-  $("#mode-draw").setAttribute("aria-selected", isDraw ? "true" : "false");
-  if (isDraw) initDoodleCanvas();
+  const panels = { write: "#msg-form", draw: "#doodle-panel", photo: "#photo-panel" };
+  Object.entries(panels).forEach(([key, selector]) => {
+    const selected = key === mode;
+    $(selector).hidden = !selected;
+    const tab = $("#mode-" + key);
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  if (mode === "draw") initDoodleCanvas();
 }
 
 $("#mode-write").addEventListener("click", () => setMode("write"));
 $("#mode-draw").addEventListener("click", () => setMode("draw"));
+$("#mode-photo").addEventListener("click", () => setMode("photo"));
+$("#mode-switch").addEventListener("keydown", (e) => {
+  const modes = ["write", "draw", "photo"];
+  const current = modes.findIndex((mode) => $("#mode-" + mode) === e.target);
+  if (current < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const next = e.key === "Home" ? 0 : e.key === "End" ? modes.length - 1
+    : (current + (e.key === "ArrowRight" ? 1 : -1) + modes.length) % modes.length;
+  setMode(modes[next]);
+  $("#mode-" + modes[next]).focus();
+});
+setMode("write");
 
 document.querySelectorAll(".brush-size").forEach((button) => {
   button.addEventListener("click", () => {

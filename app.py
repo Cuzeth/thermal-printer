@@ -31,6 +31,7 @@ from features import codes as codes_feat
 from features import hardware as hw_feat
 from features import image as image_feat
 from features import led as led_feat
+from features import photo as photo_feat
 from features import render as render_feat
 from features import text as text_feat
 from features import widgets
@@ -774,6 +775,17 @@ def _dec_inflight(user_id: int) -> None:
             _inflight.pop(user_id, None)
 
 
+def _friend_drawing_images(user: dict, drawing: bytes, anonymous: bool, when=None) -> list:
+    """Build the complete raster receipt once for photo preview and printing."""
+    header, footer_markup = widgets.friend_frame(
+        user["username"], style=user.get("name_style") or "plain",
+        anonymous=anonymous, when=when,
+    )
+    with Image.open(io.BytesIO(drawing)) as saved:
+        return [render_feat.render_markup(header), saved.copy(),
+                render_feat.render_markup(footer_markup)]
+
+
 def _print_friend_message(msg: dict) -> None:
     """Print a friend's history row, the same way for a
     fresh send, a replay after restart, and an owner retry. Name style is
@@ -786,19 +798,13 @@ def _print_friend_message(msg: dict) -> None:
         .astimezone()
     )
     if msg["drawing"] is not None:
-        header, footer_markup = widgets.friend_frame(
-            msg["username"], style=style, anonymous=msg["anonymous"], when=sent,
-        )
         # Render before taking the USB lock; send the frame and drawing as
         # separate images to stay within the printer's raster buffer.
-        header_img = render_feat.render_markup(header)
-        footer_img = render_feat.render_markup(footer_markup)
-        with Image.open(io.BytesIO(msg["drawing"])) as drawing:
-            with open_printer() as p:
-                _print_image(p, header_img)
-                _print_image(p, drawing)
-                _print_image(p, footer_img)
-                footer(p)
+        images = _friend_drawing_images(msg, msg["drawing"], msg["anonymous"], when=sent)
+        with open_printer() as p:
+            for img in images:
+                _print_image(p, img)
+            footer(p)
     else:
         _print_body(widgets.friend_message(
             msg["username"], msg["body"], style=style,
@@ -956,6 +962,7 @@ def _enqueue_friend_print(
     body: str,
     drawing: bytes | None = None,
     anonymous: bool = False,
+    kind: str | None = None,
 ):
     """Shared bookkeeping for every friend print kind: per-user cap,
     history row (which is also the job — see _PRINT_QUEUE), queue
@@ -978,6 +985,7 @@ def _enqueue_friend_print(
         msg_id = auth_db.log_message(
             user["id"], body, status="queued", drawing=drawing,
             anonymous=anonymous,
+            kind=kind,
         )
 
         # qsize() before put = jobs the printer must finish first.
@@ -1060,6 +1068,71 @@ def friend_print_doodle():
         user, "(doodle)", drawing=saved.getvalue(),
         anonymous=bool(data.get("anonymous", False)),
     )
+
+
+def _photo_from_form(user: dict) -> tuple[bytes, str, bool]:
+    """Normalize new uploads or fetch a saved strip owned by this friend.
+
+    The stored PNG includes its caption and treatment. Reprints use those
+    exact pixels without re-dithering or needing to retain the original photos.
+    """
+    anonymous = request.form.get("anonymous", "false") == "true"
+    saved_id = request.form.get("saved_id")
+    if saved_id is not None:
+        if request.files:
+            raise ValueError("choose new photos or a saved strip")
+        try:
+            msg = auth_db.get_message(int(saved_id))
+        except (ValueError, OverflowError):
+            msg = None
+        if (msg is None or msg["user_id"] != user["id"]
+                or msg["kind"] != "photo" or msg["drawing"] is None):
+            raise ValueError("saved photo not found")
+        return msg["drawing"], msg["body"], anonymous
+
+    files = request.files.getlist("photos")
+    if not 1 <= len(files) <= photo_feat.MAX_FRAMES:
+        raise ValueError("choose between 1 and 4 photos")
+    caption = request.form.get("caption", "")
+    strip = photo_feat.render_strip(
+        [f.read(photo_feat.MAX_FILE_BYTES + 1) for f in files],
+        treatment=request.form.get("treatment", "soft"), caption=caption,
+    )
+    saved = io.BytesIO()
+    strip.save(saved, format="PNG")
+    label = f"photo booth · {len(files)} frame{'s' if len(files) != 1 else ''}"
+    if caption.strip():
+        label += " · " + " ".join(caption.split())
+    return saved.getvalue(), label, anonymous
+
+
+@app.post("/api/photo/preview")
+@require_allowed
+def friend_photo_preview():
+    def run():
+        user = current_user()
+        drawing, _, anonymous = _photo_from_form(user)
+        images = _friend_drawing_images(user, drawing, anonymous)
+        return {"segments": [image_feat.to_png_data_url(img) for img in images]}
+    return _safe(run)
+
+
+@app.post("/api/print/photo")
+@require_allowed
+def friend_print_photo():
+    user = current_user()
+    try:
+        drawing, body, anonymous = _photo_from_form(user)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc), "kind": "input"}), 400
+    except HTTPException:
+        raise
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "photo could not be prepared",
+                        "kind": "server"}), 500
+    return _enqueue_friend_print(user, body, drawing=drawing,
+                                 anonymous=anonymous, kind="photo")
 
 
 @app.get("/api/history")

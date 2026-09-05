@@ -55,7 +55,7 @@
     <div class="card-head">
       <h1 class="display">print on my desk</h1>
     </div>
-    <p class="lead">send text or a doodle to my thermal printer.</p>
+    <p class="lead">send text, a doodle or a photo strip to my thermal printer.</p>
 
     <div class="guest-actions">
       <button class="signal block arrow" id="go-register">create an account</button>
@@ -240,6 +240,7 @@
         <div class="mode-switch" id="mode-switch" role="tablist" aria-label="print type">
           <button type="button" class="mode-tab active" id="mode-write" role="tab" aria-selected="true" aria-controls="msg-form"><span class="tab-idx" aria-hidden="true">01</span>write</button>
           <button type="button" class="mode-tab" id="mode-draw" role="tab" aria-selected="false" aria-controls="doodle-panel"><span class="tab-idx" aria-hidden="true">02</span>draw</button>
+          <button type="button" class="mode-tab" id="mode-photo" role="tab" aria-selected="false" aria-controls="photo-panel"><span class="tab-idx" aria-hidden="true">03</span>photo booth</button>
         </div>
 
         <form id="msg-form" role="tabpanel" aria-labelledby="mode-write">
@@ -311,6 +312,63 @@
             <button type="button" class="ghost" id="doodle-clear">clear</button>
           </div>
         </div>
+
+        <form id="photo-panel" role="tabpanel" aria-labelledby="mode-photo" hidden>
+          <fieldset id="photo-controls" class="photo-controls">
+            <legend class="sr-only">photo strip editor</legend>
+            <label class="photo-upload">
+              <span class="label">add photos <span id="photo-count">0 / 4</span></span>
+              <input id="photo-files" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="photo-file-hint" />
+            </label>
+            <p class="hint" id="photo-file-hint">1–4 photos, in order. JPEG, PNG or WebP. Crop here before uploading.</p>
+            <p class="photo-saved hint" id="photo-saved" hidden></p>
+            <div id="photo-frames" class="photo-frames" role="group" aria-label="select a frame to crop"></div>
+            <div id="photo-crop" hidden>
+              <div class="photo-crop-heading">
+                <span class="label" id="photo-frame-label">frame 1</span>
+                <div class="row">
+                  <button type="button" class="ghost tiny" id="photo-earlier">move earlier</button>
+                  <button type="button" class="ghost tiny" id="photo-remove">remove</button>
+                </div>
+              </div>
+              <canvas id="photo-canvas" width="576" height="576" role="img" aria-label="square crop of selected photo"></canvas>
+              <div class="photo-sliders">
+                <label><span class="label">zoom</span><input id="photo-zoom" type="range" min="1" max="3" value="1" step="0.05" /></label>
+                <label><span class="label">horizontal</span><input id="photo-x" type="range" min="0" max="100" value="50" /></label>
+                <label><span class="label">vertical</span><input id="photo-y" type="range" min="0" max="100" value="50" /></label>
+              </div>
+            </div>
+            <div id="photo-options" class="photo-options">
+              <label><span class="label">treatment</span>
+                <select id="photo-treatment">
+                  <option value="soft">soft grain</option>
+                  <option value="contrast">high contrast</option>
+                  <option value="ink">solid ink</option>
+                </select>
+              </label>
+              <label><span class="label">caption <span class="dim">optional</span></span>
+                <input id="photo-caption" type="text" maxlength="160" placeholder="a little moment on paper" />
+              </label>
+            </div>
+            <label class="anon-toggle">
+              <input type="checkbox" id="photo-anon" />
+              <span>anonymous <em>(no name)</em></span>
+            </label>
+          </fieldset>
+          <div class="preview-block">
+            <div class="preview-label-row">
+              <div class="preview-label">print preview</div>
+              <span class="preview-progress status" id="photo-progress" data-state="idle" hidden></span>
+            </div>
+            <div class="preview-paper photo-paper" id="photo-paper" aria-live="polite" aria-busy="false">
+              <p class="preview-placeholder">add photos to build your strip</p>
+            </div>
+          </div>
+          <div class="row">
+            <button type="submit" class="signal" id="photo-send" disabled>print strip</button>
+            <button type="button" class="ghost" id="photo-reset" disabled>start over</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -344,5 +402,6 @@
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="{{ url_for('static', filename='friends.js') }}"></script>
+<script src="{{ url_for('static', filename='photo.js') }}"></script>
 </body>
 </html>

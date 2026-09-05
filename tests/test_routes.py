@@ -299,7 +299,7 @@ def test_friend_history_returns_own_messages_only(client):
     # Each row has the shape the UI expects.
     for m in msgs:
         assert set(m.keys()) == {
-            "id", "body", "status", "printed_at", "has_drawing",
+            "id", "body", "kind", "anonymous", "status", "printed_at", "has_drawing",
         }
         assert m["has_drawing"] is False
 

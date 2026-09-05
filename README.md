@@ -34,7 +34,11 @@
 
 **Friends page** — `/` · public at <https://print.cuzeth.com>, via Cloudflare Tunnel.
 
-Friends register with a username + password, sit pending until you approve them from the Admin tab, then send you messages that print immediately with their name attached. Supports the same markup vocabulary as the composer.
+Friends register with a username + password, sit pending until you approve them from the Admin tab, then send messages, doodles or photo strips through the durable print queue. Text supports the same markup vocabulary as the composer. Prints include their name unless they choose anonymous.
+
+**Photo booth:** choose 1–4 JPEG, PNG or WebP photos, select each frame to adjust its square crop with zoom and position sliders, and use **move earlier** to set the strip order. Pick soft grain, high contrast or solid ink, add an optional caption (160 characters), then check the server-rendered print preview and send. The print button waits for the current preview; changing a crop or treatment invalidates the previous one.
+
+Photos are cropped on the device before upload. The editor accepts originals up to 20 MB and 30 million pixels, retains smaller editing copies, and sends only 576 px square PNGs. Export HEIC as JPEG first. The server independently limits uploads to four still JPEG/PNG/WebP frames, 4 MB and 30 million pixels each, within the existing 16 MB request cap. Only the finished monochrome strip is stored, with its caption; original photos and EXIF metadata are not retained. Tap a photo in **your prints** to preview and explicitly reprint those saved pixels. Add new photos to edit a new strip. Queue caps, restart replay, anonymous printing and owner retries work the same as other friend prints.
 
 **Security model:** one Cloudflare Tunnel, one hostname, and the app defends itself. `print.cuzeth.com` fronts `127.0.0.1:5005` with no edge auth ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)); friends get signed-cookie sessions, and the owner unlocks `/admin` with an RFC 6238 TOTP code (`auth/totp.py`, secret in `.env`, enrolled in any authenticator app). Admin sessions expire after 12 hours; each code is single-use (replay guard), and the login carries per-IP *and* global failure lockouts because 6-digit codes are a small space (`auth/admin.py`). `/api/admin/*` also accepts `Bearer ADMIN_TOKEN` for curl and the smoke tests. Flask must bind to `127.0.0.1` so the tunnel is the only way in — the rate limiters trust the last `X-Forwarded-For` hop, which only Cloudflare should be appending.
 
@@ -147,6 +151,7 @@ features/
   codes.py              QR + barcode (preview in PIL, print via ESC/POS native)
   hardware.py           cash drawer, cut, feed, density, status, raw bytes
   image.py              upload → grayscale → dither/threshold → 1-bit
+  photo.py              bounded photo frames → thermal strip + caption
   led.py                LED protocol candidates for vendor-specific units
   markup.py             shared inline-markup grammar (spans: bold/underline/big)
   render.py             PIL-based rich-text rasterizer (growable canvas)
@@ -166,6 +171,7 @@ templates/
 static/
   app.js / style.css    main GUI
   friends.js / .css     friends page
+  photo.js             local photo crops + server preview + saved-strip reprints
 tests/                  pytest: render / widgets / image / routes / security / totp / queue
 scripts/
   test_auth_flow.py     Flask-test-client auth smoke
