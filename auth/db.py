@@ -444,6 +444,21 @@ def list_messages(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def list_message_summaries(limit: int = 20, *, include_undelivered: bool = False) -> list[dict]:
+    """Owner troubleshooting starts with metadata, never senders or contents.
+
+    Future, queued and cancelled prints stay out of the default log entirely.
+    Fetching a summary must not accidentally spoil a receipt waiting to arrive.
+    """
+    where = "" if include_undelivered else "WHERE status IN ('printed', 'failed')"
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id, kind, status, printed_at FROM messages "
+            f"{where} ORDER BY printed_at DESC, id DESC LIMIT ?", (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
     """Pending capsules first, then recent prints newest first. Powers the personal
     history panel on the friends page — no JOIN to users (it's always the caller's own

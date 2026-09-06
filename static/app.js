@@ -18,6 +18,7 @@ const state = {
 
 function activateTab(t, { focus = false } = {}) {
   const pane = t.dataset.tab;
+  if (state.activePane === "admin" && pane !== "admin") closePrintLog();
   state.activePane = pane;
   $$(".tab").forEach((x) => {
     const on = x === t;
@@ -1150,66 +1151,179 @@ async function loadBlocked() {
   }
 }
 
-async function loadMessages() {
-  const list = $("#admin-msgs-list");
-  list.replaceChildren();
-  try {
-    const { messages } = await adminGET("/api/admin/messages?limit=20");
-    if (!messages.length) return list.appendChild(emptyState("no prints yet"));
-    messages.forEach((m) => {
-      const card = document.createElement("div");
-      card.className = "wid admin-msg";
+// Contents are fetched only after an individual reveal. Closing the log also
+// invalidates pending requests, so a slow response cannot restore a surprise.
+let printLogRevision = 0;
+let printLogAbort = null;
+let includeUndelivered = false;
 
-      const head = document.createElement("div");
-      head.className = "admin-msg-head";
-      const who = document.createElement("span");
-      who.className = "admin-msg-who";
-      who.textContent = m.username;
-      const when = document.createElement("span");
-      when.className = "admin-msg-when dim";
-      when.textContent = fmtWhen(m.printed_at);
-      if (m.deliver_at) {
-        when.textContent += " · delivery " + new Date(m.deliver_at).toLocaleString();
-      }
-      if (m.status && m.status !== "printed") {
-        const badge = document.createElement("span");
-        badge.className = "admin-msg-status " + m.status;
-        badge.textContent = m.status === "failed" ? "didn't print" : m.status;
-        when.append(" · ", badge);
-      }
-      head.append(who, when);
+function printLogIsCurrent(revision) {
+  return revision === printLogRevision && state.activePane === "admin"
+    && $("#admin-print-log").open && !document.hidden;
+}
 
-      if (m.status === "failed") {
-        const retry = document.createElement("button");
-        retry.className = "ghost tiny admin-btn admin-btn-approve";
-        retry.textContent = "retry";
-        retry.addEventListener("click", () => guard(async () => {
-          await adminPOST(`/api/admin/messages/${m.id}/retry`);
-          await loadMessages();
-        }, "printed", retry));
-        head.appendChild(retry);
-      }
+function setUndeliveredConfirmation(open) {
+  $("#admin-undelivered-confirm").hidden = !open;
+  $("#admin-include-undelivered").setAttribute("aria-expanded", String(open));
+}
 
+function setUndeliveredScope(include) {
+  includeUndelivered = include;
+  setUndeliveredConfirmation(false);
+  $("#admin-include-undelivered").textContent = include ? "hide undelivered prints" : "include undelivered prints";
+  $("#admin-log-scope").textContent = include
+    ? "Undelivered prints are included. Contents stay concealed until you reveal one."
+    : "Undelivered prints are hidden.";
+}
+
+function clearPrintLog() {
+  printLogRevision++;
+  printLogAbort?.abort();
+  printLogAbort = null;
+  $("#admin-msgs-list").replaceChildren();
+  setUndeliveredScope(false);
+}
+
+function closePrintLog() {
+  $("#admin-print-log").open = false;
+  clearPrintLog();
+}
+
+function messageSummaryCard(m, revision, signal) {
+  const card = document.createElement("div");
+  card.className = "wid admin-msg";
+  const head = document.createElement("div");
+  head.className = "admin-msg-head";
+  const title = document.createElement("span");
+  title.className = "admin-msg-who";
+  title.textContent = `print #${m.id}`;
+  const when = document.createElement("span");
+  when.className = "admin-msg-when dim";
+  when.textContent = `${m.kind} · ${fmtWhen(m.printed_at)}`;
+  const badge = document.createElement("span");
+  badge.className = "admin-msg-status " + m.status;
+  badge.textContent = m.status === "failed" ? "didn't print" : m.status;
+  head.append(title, when, badge);
+
+  const content = document.createElement("div");
+  content.className = "admin-msg-content";
+  content.id = `admin-print-content-${m.id}`;
+  content.hidden = true;
+  const actions = document.createElement("div");
+  actions.className = "row admin-msg-actions";
+  const reveal = document.createElement("button");
+  reveal.type = "button";
+  reveal.className = "ghost tiny";
+  reveal.textContent = "reveal content";
+  reveal.setAttribute("aria-expanded", "false");
+  reveal.setAttribute("aria-controls", content.id);
+  reveal.addEventListener("click", async () => {
+    if (!printLogIsCurrent(revision)) return;
+    if (!content.hidden) {
+      content.replaceChildren();
+      content.hidden = true;
+      reveal.textContent = "reveal content";
+      reveal.setAttribute("aria-expanded", "false");
+      return;
+    }
+    setButtonBusy(reveal, true);
+    try {
+      const { message } = await postJSON(`/api/admin/messages/${m.id}/reveal`, {
+        include_undelivered: includeUndelivered,
+      }, { signal });
+      if (!printLogIsCurrent(revision)) return;
+      const sender = document.createElement("div");
+      sender.className = "admin-row-meta";
+      sender.textContent = `from ${message.username}${message.anonymous ? " · sent anonymously" : ""}`;
+      if (message.deliver_at) sender.textContent += " · delivery " + new Date(message.deliver_at).toLocaleString();
       const body = document.createElement("pre");
       body.className = "admin-msg-body";
-      body.textContent = m.body;
+      body.textContent = message.body;
+      content.append(sender, body);
+      if (message.image) {
+        const image = document.createElement("img");
+        image.src = message.image;
+        image.alt = message.kind === "photo" ? "Saved photo strip" : "Saved doodle";
+        content.appendChild(image);
+      }
+      content.hidden = false;
+      reveal.textContent = "hide content";
+      reveal.setAttribute("aria-expanded", "true");
+    } catch (e) {
+      if (printLogIsCurrent(revision)) toast(e.message, "err");
+    } finally {
+      setButtonBusy(reveal, false);
+    }
+  });
+  actions.appendChild(reveal);
+  if (m.status === "failed") {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "ghost tiny admin-btn admin-btn-approve";
+    retry.textContent = "retry";
+    retry.addEventListener("click", () => guard(async () => {
+      await adminPOST(`/api/admin/messages/${m.id}/retry`);
+      await loadMessages();
+    }, "printed", retry));
+    actions.appendChild(retry);
+  }
+  card.append(head, actions, content);
+  return card;
+}
 
-      card.append(head, body);
-      list.appendChild(card);
-    });
+async function loadMessages() {
+  if (!printLogIsCurrent(printLogRevision)) return;
+  printLogAbort?.abort();
+  printLogAbort = new AbortController();
+  const { signal } = printLogAbort;
+  const revision = ++printLogRevision;
+  const list = $("#admin-msgs-list");
+  list.replaceChildren(emptyState("loading print log…"));
+  try {
+    const scope = includeUndelivered ? "&include_undelivered=1" : "";
+    const { messages } = await apiFetch(`/api/admin/messages?limit=20${scope}`, { method: "GET", signal });
+    if (!printLogIsCurrent(revision)) return;
+    list.replaceChildren();
+    if (!messages.length) return list.appendChild(emptyState(includeUndelivered ? "no prints yet" : "no completed or failed prints"));
+    messages.forEach((m) => list.appendChild(messageSummaryCard(m, revision, signal)));
   } catch (e) {
-    list.appendChild(emptyState("error: " + e.message));
+    if (printLogIsCurrent(revision)) list.replaceChildren(emptyState("error: " + e.message));
   }
 }
 
 async function refreshAdmin() {
-  await Promise.all([loadPending(), loadAllowed(), loadBlocked(), loadMessages()]);
+  await Promise.all([loadPending(), loadAllowed(), loadBlocked()]);
 }
 
 $("#admin-refresh-pending").addEventListener("click", () => guard(loadPending, "refreshed"));
 $("#admin-refresh-allowed").addEventListener("click", () => guard(loadAllowed, "refreshed"));
 $("#admin-refresh-blocked").addEventListener("click", () => guard(loadBlocked, "refreshed"));
 $("#admin-refresh-msgs").addEventListener("click", () => guard(loadMessages, "refreshed"));
+$("#admin-print-log").addEventListener("toggle", () => {
+  if ($("#admin-print-log").open) loadMessages();
+  else clearPrintLog();
+});
+$("#admin-include-undelivered").addEventListener("click", () => {
+  if (includeUndelivered) {
+    setUndeliveredScope(false);
+    loadMessages();
+  } else {
+    setUndeliveredConfirmation($("#admin-undelivered-confirm").hidden);
+  }
+});
+$("#admin-keep-surprises").addEventListener("click", () => {
+  setUndeliveredConfirmation(false);
+  $("#admin-include-undelivered").focus();
+});
+$("#admin-show-undelivered").addEventListener("click", () => {
+  setUndeliveredScope(true);
+  $("#admin-include-undelivered").focus();
+  loadMessages();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) closePrintLog();
+});
+window.addEventListener("pagehide", closePrintLog);
 
 // ---------- keyboard ----------
 

@@ -583,24 +583,24 @@ def test_admin_lifecycle_requires_bearer(client):
 
 
 def test_admin_messages_lists_all_users_newest_first(client, auth):
-    """Admin messages feed spans users, includes usernames, honors limit."""
+    """Admin summaries span users in stable order without revealing contents."""
     from auth import db as auth_db
 
     user_a = auth_db.create_pending_user("adm_msgs_a", "hunter2hunter")
     user_b = auth_db.create_pending_user("adm_msgs_b", "hunter2hunter")
-    auth_db.log_message(user_a["id"], "message from a")
-    auth_db.log_message(user_b["id"], "message from b")
+    message_a = auth_db.log_message(user_a["id"], "message from a")
+    message_b = auth_db.log_message(user_b["id"], "message from b")
 
     r = client.get("/api/admin/messages", headers=auth)
     assert r.status_code == 200
     body = r.get_json()
     assert body["ok"] is True
-    bodies = [m["body"] for m in body["messages"]]
-    assert "message from a" in bodies
-    assert "message from b" in bodies
+    ids = [m["id"] for m in body["messages"]]
+    assert ids.index(message_b) < ids.index(message_a)
     for m in body["messages"]:
-        assert set(m.keys()) == {"id", "body", "status", "printed_at", "username", "deliver_at"}
+        assert set(m.keys()) == {"id", "kind", "status", "printed_at"}
 
     r = client.get("/api/admin/messages?limit=1", headers=auth)
     assert r.status_code == 200
     assert len(r.get_json()["messages"]) == 1
+    assert r.get_json()["messages"][0]["id"] == message_b

@@ -31,7 +31,9 @@
 | **Labs** | Todo list, label maker, fake receipt. |
 | **Hardware** | Cash drawer, beep, feed, cut, density, code page, LED (best-effort), status query. |
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
-| **Admin** | Approve / block / delete friends, review recent prints. |
+| **Admin** | Approve / block / delete friends, deliberately reveal prints for troubleshooting. |
+
+**Keep prints a surprise:** Admin opens with account management only. The closed **print troubleshooting** section fetches a metadata-only log when opened; senders, text and images require **reveal content** on an individual print. Scheduled, queued and cancelled prints are excluded until you choose **include undelivered prints** and confirm. Failed prints can still be retried without revealing them. Closing the log, switching console tabs or leaving the browser page clears revealed contents and resets that opt-in. This is friction against accidental spoilers, not a new permission boundary: the authenticated owner retains troubleshooting access.
 
 **Paper Arcade:** pick a puzzle in the owner console's **arcade** tab and choose **new puzzle**. Check the receipt preview, then **print puzzle** to print that exact puzzle and its solution QR. The selection stays when you switch console tabs; **new puzzle** makes another. Printing and retrying never choose a different puzzle. The supported hardware widths are 576 px (80mm) and 384 px (58mm).
 

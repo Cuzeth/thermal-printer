@@ -659,13 +659,25 @@ mail package</textarea>
         <div id="admin-blocked-list" class="admin-list"></div>
       </div>
 
-      <div class="admin-section">
-        <div class="admin-head">
-          <h3>recent prints</h3>
-          <button class="ghost tiny" id="admin-refresh-msgs">refresh</button>
+      <details class="admin-print-log" id="admin-print-log">
+        <summary>print troubleshooting</summary>
+        <div class="admin-log-tools">
+          <p class="help">Keep the surprises on paper. This log shows only completed or failed jobs, with senders and contents concealed until you reveal one.</p>
+          <div class="row">
+            <button type="button" class="ghost tiny" id="admin-refresh-msgs">refresh log</button>
+            <button type="button" class="ghost tiny" id="admin-include-undelivered" aria-expanded="false" aria-controls="admin-undelivered-confirm">include undelivered prints</button>
+          </div>
+          <div id="admin-undelivered-confirm" class="admin-log-confirm" hidden>
+            <p>These prints haven't arrived yet. Include them only if you need to investigate a delivery. Their contents will still stay concealed.</p>
+            <div class="row">
+              <button type="button" class="ghost" id="admin-keep-surprises">keep surprises</button>
+              <button type="button" class="ghost" id="admin-show-undelivered">include them</button>
+            </div>
+          </div>
+          <p class="help" id="admin-log-scope" role="status">Undelivered prints are hidden.</p>
         </div>
         <div id="admin-msgs-list" class="admin-list"></div>
-      </div>
+      </details>
     </div>
 
   </section>

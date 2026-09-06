@@ -1440,7 +1440,41 @@ def admin_list_messages():
         limit = max(1, min(200, int(request.args.get("limit", 20))))
     except (TypeError, ValueError):
         limit = 20
-    return jsonify({"ok": True, "messages": auth_db.list_messages(limit=limit)})
+    response = jsonify({"ok": True, "messages": auth_db.list_message_summaries(
+        limit=limit, include_undelivered=request.args.get("include_undelivered") == "1",
+    )})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/admin/messages/<int:msg_id>/reveal")
+@require_admin
+def admin_reveal_message(msg_id: int):
+    """An explicit, individual reveal keeps ordinary account management spoiler-free.
+
+    This is deliberate friction for the owner, not an additional auth boundary.
+    Undelivered content needs a separate opt-in, even for a known message id.
+    """
+    def run():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            raise ValueError("send a JSON object")
+        msg = auth_db.get_message(msg_id)
+        if msg is None:
+            raise ValueError("print not found")
+        if msg["status"] not in ("printed", "failed") and data.get("include_undelivered") is not True:
+            raise ValueError("include undelivered prints before revealing this one")
+        detail = {key: msg[key] for key in (
+            "id", "body", "kind", "status", "username", "anonymous", "printed_at", "deliver_at",
+        )}
+        detail["image"] = (
+            "data:image/png;base64," + base64.b64encode(msg["drawing"]).decode("ascii")
+            if msg["drawing"] is not None else None
+        )
+        return {"message": detail}
+    response = app.make_response(_safe(run))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.post("/api/admin/messages/<int:msg_id>/retry")

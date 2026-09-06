@@ -1552,6 +1552,7 @@ main.arcade-solution {
 .admin-msg { gap: 8px; }
 .admin-msg-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
@@ -1582,6 +1583,16 @@ main.arcade-solution {
   color: var(--text);
   background: transparent;
 }
+
+.admin-print-log > summary { color: var(--text-muted); font-family: var(--mono); font-size: 12px; }
+.admin-print-log > summary::after { content: none; }
+.admin-print-log button { min-height: 44px; }
+.admin-log-tools .help { margin-top: 14px; }
+.admin-log-confirm { padding: 12px; border: 1px solid var(--line-strong); }
+.admin-log-confirm p { margin: 0; font-size: 13px; color: var(--text-muted); }
+.admin-msg-actions { margin: 0; }
+.admin-msg-content { display: grid; gap: 12px; }
+.admin-msg-content img { display: block; max-width: 100%; width: 288px; height: auto; outline: 1px solid rgba(255, 255, 255, .1); }
 
 /* ---------- owner login ---------- */
 
