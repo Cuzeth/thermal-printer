@@ -27,11 +27,11 @@
 | **Image** | Drop an image, tune contrast/brightness/threshold, Floyd–Steinberg dither, print. |
 | **Codes** | QR + 1D barcodes (CODE128, CODE39, EAN-13, EAN-8, UPC-A, ITF, CODABAR). Preview in the browser, print natively via ESC/POS. |
 | **Widgets** | Morning briefing combo, weather (wttr.in), Hacker News, on-this-day (Wikipedia), advice, calendar, countdown, habit tracker, dice, ASCII art, "now" card. |
+| **Arcade** | Sudoku, mazes and word searches, with exact receipt previews and solution QR codes. |
 | **Labs** | Todo list, label maker, fake receipt. |
 | **Hardware** | Cash drawer, beep, feed, cut, density, code page, LED (best-effort), status query. |
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
 | **Admin** | Approve / block / delete friends, review recent prints. |
-| **Arcade** | Sudoku, mazes and word searches, with exact receipt previews and solution QR codes. |
 
 **Paper Arcade:** pick a puzzle in the owner console's **arcade** tab and choose **new puzzle**. Check the receipt preview, then **print puzzle** to print that exact puzzle and its solution QR. The selection stays when you switch console tabs; **new puzzle** makes another. Printing and retrying never choose a different puzzle. The supported hardware widths are 576 px (80mm) and 384 px (58mm).
 
