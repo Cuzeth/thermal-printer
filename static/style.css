@@ -1470,6 +1470,33 @@ main.arcade-solution {
 
 /* ---------- admin tab ---------- */
 
+.admin-failed-prints {
+  margin-top: 28px;
+  padding: 16px 18px;
+  border: 1px solid rgba(235, 94, 40, .35);
+  border-left: 3px solid var(--signal-orange);
+  background: rgba(235, 94, 40, .06);
+}
+.admin-failed-heading { display: flex; align-items: center; gap: 12px; }
+.admin-failed-icon { flex: 0 0 auto; color: var(--signal-orange-text); }
+.admin-failed-copy { flex: 1; min-width: 0; }
+.admin-failed-copy h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.admin-failed-copy p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
+.admin-failed-prints button { margin-top: 0; }
+.admin-failed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(235, 94, 40, .2);
+}
+.admin-failed-row .admin-msg-head { gap: 4px 12px; }
+.admin-failed-row .admin-msg-who { font-size: 12px; }
+.admin-failed-row .admin-msg-when { margin-left: 0; }
+.admin-failed-row .admin-msg-actions { flex-shrink: 0; }
+
 .admin-section { margin-top: 36px; }
 .admin-section:first-of-type { margin-top: 0; }
 

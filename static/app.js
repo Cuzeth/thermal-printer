@@ -1158,22 +1158,26 @@ async function loadFailedMessages() {
   if (retryingPrint) return;
   const revision = ++failedPrintsRevision;
   const list = $("#admin-failed-list");
+  const banner = $("#admin-failed-banner");
   try {
     const { messages } = await adminGET("/api/admin/messages?status=failed&limit=20");
     if (revision !== failedPrintsRevision) return;
     list.replaceChildren();
-    if (!messages.length) return list.appendChild(emptyState("no failed prints"));
+    banner.hidden = messages.length === 0;
+    if (!messages.length) return;
+    $("#admin-failed-title").textContent = messages.length === 1
+      ? "A print needs a retry" : "Some prints need a retry";
     messages.forEach((m) => {
       const card = document.createElement("div");
-      card.className = "wid admin-msg";
+      card.className = "admin-failed-row";
       const actions = document.createElement("div");
       actions.className = "row admin-msg-actions";
       actions.appendChild(retryMessageButton(m.id));
-      card.append(messageSummaryHead(m), actions);
+      card.append(messageSummaryHead(m, false), actions);
       list.appendChild(card);
     });
   } catch (e) {
-    if (revision === failedPrintsRevision) list.replaceChildren(emptyState("couldn't check failed prints: " + e.message));
+    if (revision === failedPrintsRevision) toast("couldn't check failed prints: " + e.message, "err");
   }
 }
 
@@ -1238,7 +1242,7 @@ function closePrintLog() {
   clearPrintLog();
 }
 
-function messageSummaryHead(m) {
+function messageSummaryHead(m, showStatus = true) {
   const head = document.createElement("div");
   head.className = "admin-msg-head";
   const title = document.createElement("span");
@@ -1250,7 +1254,8 @@ function messageSummaryHead(m) {
   const badge = document.createElement("span");
   badge.className = "admin-msg-status " + m.status;
   badge.textContent = m.status === "failed" ? "didn't print" : m.status;
-  head.append(title, when, badge);
+  head.append(title, when);
+  if (showStatus) head.appendChild(badge);
   return head;
 }
 
