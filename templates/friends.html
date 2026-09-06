@@ -227,7 +227,7 @@
     <div class="card-head">
       <h1>new print</h1>
     </div>
-    <div class="printer-banner" id="printer-banner" hidden>printer offline. new prints will stay queued.</div>
+    <div class="printer-banner" id="printer-banner" hidden>printer looks offline. delivery may fail; check your prints for the result.</div>
 
     <div class="composer-wrap">
       <span class="panel-tab" aria-hidden="true">tx / 01</span>
@@ -236,6 +236,23 @@
         <div class="composer-head">
           <span class="t-label">composer</span>
         </div>
+
+        <fieldset class="delivery-controls" aria-describedby="delivery-hint">
+          <legend class="label">delivery</legend>
+          <label><span class="label">when</span>
+            <select id="delivery-mode">
+              <option value="now">print now</option>
+              <option value="later">time capsule</option>
+            </select>
+          </label>
+          <label id="delivery-date-label" hidden><span class="label">date and time</span>
+            <input id="delivery-date" type="datetime-local" step="60" aria-describedby="delivery-hint" />
+          </label>
+          <p class="hint" id="delivery-hint" aria-live="polite">send to the printer queue.</p>
+          {% if quiet_hours %}
+          <p class="hint delivery-quiet">quiet hours: {{ quiet_hours.start.strftime('%H:%M') }}–{{ quiet_hours.end.strftime('%H:%M') }} {{ quiet_hours.zone.key }}. Prints in that window wait until it ends.</p>
+          {% endif %}
+        </fieldset>
 
         <div class="mode-switch" id="mode-switch" role="tablist" aria-label="print type">
           <button type="button" class="mode-tab active" id="mode-write" role="tab" aria-selected="true" aria-controls="msg-form"><span class="tab-idx" aria-hidden="true">01</span>write</button>
@@ -391,7 +408,7 @@
         </div>
         <button type="button" class="ghost tiny" id="history-refresh" title="reload your prints">refresh</button>
       </div>
-      <p class="history-hint dim">tap a print to edit it.</p>
+      <p class="history-hint dim">waiting capsules stay at the top. Cancel before delivery starts; tap other prints to reuse them.</p>
       <ul id="history-list" class="history-list"></ul>
       <p class="history-empty dim" id="history-empty" hidden>no prints yet</p>
     </div>

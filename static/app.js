@@ -1084,6 +1084,9 @@ async function loadMessages() {
       const when = document.createElement("span");
       when.className = "admin-msg-when dim";
       when.textContent = fmtWhen(m.printed_at);
+      if (m.deliver_at) {
+        when.textContent += " · delivery " + new Date(m.deliver_at).toLocaleString();
+      }
       if (m.status && m.status !== "printed") {
         const badge = document.createElement("span");
         badge.className = "admin-msg-status " + m.status;

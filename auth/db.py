@@ -117,6 +117,10 @@ def init() -> None:
             # Existing raster rows are doodles; photos have an explicit kind
             # so their tall strips never get restored onto the square canvas.
             conn.execute("UPDATE messages SET kind = 'doodle' WHERE drawing IS NOT NULL")
+        for column in ("deliver_at", "requested_for"):
+            if column not in msg_cols:
+                conn.execute(f"ALTER TABLE messages ADD COLUMN {column} TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_msgs_delivery ON messages(status, deliver_at)")
 
 
 # ---------- users ----------
@@ -246,6 +250,13 @@ def set_status(user_id: int, status: str) -> None:
             )
         else:
             conn.execute("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
+            # Revocation also burns pending capsules, so approving again later
+            # cannot unexpectedly deliver an old backlog.
+            conn.execute(
+                "UPDATE messages SET status = 'cancelled' WHERE user_id = ? "
+                "AND deliver_at IS NOT NULL AND status IN ('scheduled', 'queued')",
+                (user_id,),
+            )
 
 
 def delete_user(user_id: int) -> None:
@@ -264,15 +275,93 @@ def set_name_style(user_id: int, style: str) -> None:
 
 # ---------- messages ----------
 
-# Lifecycle of a friend print: logged 'queued' at enqueue, flipped to
-# 'printed' or 'failed' by the queue worker. Rows written synchronously
+# Lifecycle of a friend print: 'scheduled' while waiting for a delivery
+# date or quiet hours, 'queued' after dispatch, then 'printed' or 'failed'.
+# Friends can cancel while scheduled; revocation cancels pending capsules.
+# Rows written synchronously
 # (tests, pre-status data) default to 'printed'.
 #
 # The row is the durable job. It holds the raw body or the saved drawing
 # plus the anonymous flag, and the worker rebuilds the print from it —
 # so a row still 'queued' after a restart is simply replayed
 # (app._replay_queued), not lost.
-VALID_MESSAGE_STATUSES = ("queued", "printed", "failed")
+VALID_MESSAGE_STATUSES = ("scheduled", "queued", "printed", "failed", "cancelled")
+
+
+class CapsuleLimit(ValueError):
+    """A durable pending limit was reached, distinct from invalid content."""
+
+
+def schedule_message(user_id: int, body: str, deliver_at: str,
+                     requested_for: str | None, drawing: bytes | None = None,
+                     anonymous: bool = False, kind: str | None = None) -> int:
+    from features.delivery import PER_USER_CAP, TOTAL_CAP
+
+    kind = kind or ("doodle" if drawing is not None else "text")
+    if kind not in ("text", "doodle", "photo"):
+        raise ValueError(f"invalid message kind: {kind}")
+    with db() as conn:
+        # Reserve the SQLite writer before counting: simultaneous submissions
+        # must share the limits, including capsules already claimed by the queue.
+        conn.execute("BEGIN IMMEDIATE")
+        if not conn.execute("SELECT 1 FROM users WHERE id = ? AND status = 'allowed'",
+                            (user_id,)).fetchone():
+            raise ValueError("sender is no longer approved")
+        counts = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(user_id = ?), 0) AS own "
+            "FROM messages WHERE deliver_at IS NOT NULL "
+            "AND status IN ('scheduled', 'queued')", (user_id,),
+        ).fetchone()
+        if counts["own"] >= PER_USER_CAP:
+            raise CapsuleLimit(f"{PER_USER_CAP} capsules already waiting; cancel one first")
+        if counts["total"] >= TOTAL_CAP:
+            raise CapsuleLimit("capsule storage full; try again after deliveries finish")
+        cur = conn.execute(
+            "INSERT INTO messages (user_id, body, status, drawing, anonymous, kind, "
+            "deliver_at, requested_for) VALUES (?, ?, 'scheduled', ?, ?, ?, ?, ?)",
+            (user_id, body, drawing, int(anonymous), kind, deliver_at, requested_for),
+        )
+        return cur.lastrowid
+
+
+def due_message_ids(now: str) -> list[tuple[int, int]]:
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT user_id, id FROM messages WHERE status = 'scheduled' "
+            "AND deliver_at <= ? ORDER BY deliver_at, id", (now,),
+        ).fetchall()
+        return [(r["user_id"], r["id"]) for r in rows]
+
+
+def claim_scheduled(message_id: int, now: str) -> bool:
+    """Cancellation and claim compete on this conditional write; one wins."""
+    with db() as conn:
+        cur = conn.execute(
+            "UPDATE messages SET status = 'queued' WHERE id = ? "
+            "AND status = 'scheduled' AND deliver_at <= ? "
+            "AND user_id IN (SELECT id FROM users WHERE status = 'allowed')",
+            (message_id, now),
+        )
+        return cur.rowcount == 1
+
+
+def defer_message(message_id: int, deliver_at: str) -> bool:
+    """Release a queue claim for quiet hours or queue pressure, never revive cancellation."""
+    with db() as conn:
+        cur = conn.execute(
+            "UPDATE messages SET status = 'scheduled', deliver_at = ? "
+            "WHERE id = ? AND status IN ('queued', 'scheduled')", (deliver_at, message_id),
+        )
+        return cur.rowcount == 1
+
+
+def cancel_scheduled(message_id: int, user_id: int) -> bool:
+    with db() as conn:
+        cur = conn.execute(
+            "UPDATE messages SET status = 'cancelled' WHERE id = ? "
+            "AND user_id = ? AND status = 'scheduled'", (message_id, user_id),
+        )
+        return cur.rowcount == 1
 
 
 def log_message(
@@ -306,7 +395,8 @@ def get_message(message_id: int) -> dict | None:
     with db() as conn:
         row = conn.execute(
             "SELECT m.id, m.user_id, m.body, m.status, m.drawing, m.anonymous, m.kind, "
-            "m.printed_at, u.username, u.name_style "
+            "m.printed_at, m.deliver_at, m.requested_for, u.username, u.name_style, "
+            "u.status AS user_status "
             "FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?",
             (message_id,),
         ).fetchone()
@@ -346,7 +436,7 @@ def list_messages(limit: int = 20) -> list[dict]:
     with db() as conn:
         # Tie-break on id so same-second prints sort newest-first too.
         rows = conn.execute(
-            "SELECT m.id, m.body, m.status, m.printed_at, u.username "
+            "SELECT m.id, m.body, m.status, m.printed_at, m.deliver_at, u.username "
             "FROM messages m JOIN users u ON u.id = m.user_id "
             "ORDER BY m.printed_at DESC, m.id DESC LIMIT ?",
             (limit,),
@@ -355,18 +445,19 @@ def list_messages(limit: int = 20) -> list[dict]:
 
 
 def list_messages_for_user(user_id: int, limit: int = 50) -> list[dict]:
-    """Every print this user has made, newest first. Powers the personal
+    """Pending capsules first, then recent prints newest first. Powers the personal
     history panel on the friends page — no JOIN to users (it's always the caller's own
     row), no username field in the result.
 
     `printed_at` is second-precision in SQLite, so two rapid prints can tie.
-    We break the tie with `id DESC` to keep the newest-first ordering stable
-    — otherwise a bursty double-print would show in the wrong order."""
+    We break the tie with `id DESC` to keep the newest-first ordering stable.
+    Scheduled rows stay at the top so 50 newer prints cannot hide a capsule's
+    cancel action before its future delivery date."""
     with db() as conn:
         rows = conn.execute(
-            "SELECT id, body, kind, anonymous, status, printed_at, "
+            "SELECT id, body, kind, anonymous, status, printed_at, deliver_at, requested_for, "
             "drawing IS NOT NULL AS has_drawing FROM messages "
-            "WHERE user_id = ? ORDER BY printed_at DESC, id DESC LIMIT ?",
+            "WHERE user_id = ? ORDER BY (status = 'scheduled') DESC, printed_at DESC, id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
         return [dict(r) | {"has_drawing": bool(r["has_drawing"]),

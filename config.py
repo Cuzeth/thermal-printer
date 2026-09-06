@@ -76,6 +76,12 @@ DEFAULT_LOCATION = os.getenv("DEFAULT_LOCATION", "Phoenix")
 # never printing.
 BRIEFING_SCHEDULE = os.getenv("BRIEFING_SCHEDULE", "").strip()
 
+# Both times empty = off. Only friend prints are held during this window;
+# manual owner prints and the briefing keep their own behavior.
+FRIEND_QUIET_START = os.getenv("FRIEND_QUIET_START", "").strip()
+FRIEND_QUIET_END = os.getenv("FRIEND_QUIET_END", "").strip()
+FRIEND_QUIET_TIMEZONE = os.getenv("FRIEND_QUIET_TIMEZONE", "America/Phoenix").strip()
+
 DATA_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).parent / "data"))).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 

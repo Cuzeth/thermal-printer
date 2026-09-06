@@ -28,6 +28,7 @@ from auth import db as auth_db
 from auth.admin import admin_auth_bp
 from auth.session import current_user, is_admin_request, require_admin, require_allowed
 from features import codes as codes_feat
+from features import delivery
 from features import hardware as hw_feat
 from features import image as image_feat
 from features import led as led_feat
@@ -58,6 +59,8 @@ app.config.update(
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_auth_bp)
 auth_db.init()
+_quiet_hours = delivery.parse_quiet(config.FRIEND_QUIET_START, config.FRIEND_QUIET_END,
+                                   config.FRIEND_QUIET_TIMEZONE)
 
 
 @app.after_request
@@ -83,6 +86,7 @@ def friends_index():
         "friends.html",
         width=config.RECEIPT_WIDTH,
         pixel_width=config.PRINTER_PIXEL_WIDTH,
+        quiet_hours=_quiet_hours,
     )
 
 
@@ -816,12 +820,27 @@ def _print_worker() -> None:
     while True:
         user_id, msg_id = _PRINT_QUEUE.get()
         status = "printed"
+        skipped = False
         try:
             msg = auth_db.get_message(msg_id)
             if msg is None:
                 # The friend (and their rows, via ON DELETE CASCADE) went
                 # away while this sat in the queue. Nothing to print.
                 raise LookupError(f"message {msg_id} no longer exists")
+            if msg["status"] != "queued":
+                skipped = True
+                continue
+            if msg["deliver_at"] is not None and msg["user_status"] != "allowed":
+                auth_db.set_message_status(msg_id, "cancelled")
+                skipped = True
+                continue
+            now = delivery.utc_now()
+            if _quiet_hours and _quiet_hours.contains(now):
+                # Queue time is not print time: a receipt accepted before bed
+                # may only reach this worker after the quiet window begins.
+                auth_db.defer_message(msg_id, delivery.stamp(_quiet_hours.release(now)))
+                skipped = True
+                continue
             _print_friend_message(msg)
         except Exception as e:
             # Async failure — no HTTP response to attach this to. Log and
@@ -834,14 +853,15 @@ def _print_worker() -> None:
                 file=sys.stderr,
                 flush=True,
             )
-        try:
-            # Flip the history row so the friend can see whether it actually
-            # hit paper. A DB hiccup here must not kill the worker thread.
-            auth_db.set_message_status(msg_id, status)
-        except Exception:
-            traceback.print_exc()
-        _dec_inflight(user_id)
-        _PRINT_QUEUE.task_done()
+        finally:
+            try:
+                if not skipped:
+                    # A DB hiccup must not kill the worker or leak a cap slot.
+                    auth_db.set_message_status(msg_id, status)
+            except Exception:
+                traceback.print_exc()
+            _dec_inflight(user_id)
+            _PRINT_QUEUE.task_done()
 
 
 def _replay_queued() -> int:
@@ -850,6 +870,15 @@ def _replay_queued() -> int:
     can enqueue, so ordering is just row id. Returns how many it queued."""
     n = 0
     for user_id, msg_id in auth_db.list_queued_message_ids():
+        msg = auth_db.get_message(msg_id)
+        if msg and msg["deliver_at"] is not None:
+            # Durable capsules re-enter through the due dispatcher, which
+            # applies its current caps and quiet hours before claiming again.
+            if msg["user_status"] != "allowed":
+                auth_db.set_message_status(msg_id, "cancelled")
+            else:
+                auth_db.defer_message(msg_id, msg["deliver_at"])
+            continue
         try:
             _PRINT_QUEUE.put_nowait((user_id, msg_id))
         except queue.Full:
@@ -869,6 +898,51 @@ def _replay_queued() -> int:
 
 _replay_queued()
 threading.Thread(target=_print_worker, name="friend-print-worker", daemon=True).start()
+
+
+def _dispatch_due(now: datetime | None = None) -> int:
+    """Claim due capsules into the existing queue; pressure leaves them durable."""
+    now = now or delivery.utc_now()
+    stamp = delivery.stamp(now)
+    count = 0
+    for user_id, msg_id in auth_db.due_message_ids(stamp):
+        if _quiet_hours and _quiet_hours.contains(now):
+            auth_db.defer_message(msg_id, delivery.stamp(_quiet_hours.release(now)))
+            continue
+        # The same lock that reserves immediate sends covers claim + put. A
+        # fast worker cannot decrement before this claim's increment, and a
+        # second dispatcher cannot enqueue the same row twice.
+        with _inflight_lock:
+            if _inflight.get(user_id, 0) >= _PER_USER_QUEUE_CAP:
+                continue
+            if not auth_db.claim_scheduled(msg_id, stamp):
+                continue
+            try:
+                _PRINT_QUEUE.put_nowait((user_id, msg_id))
+            except queue.Full:
+                auth_db.defer_message(msg_id, stamp)
+                break
+            except Exception:
+                auth_db.defer_message(msg_id, stamp)
+                raise
+            _inflight[user_id] = _inflight.get(user_id, 0) + 1
+            count += 1
+    return count
+
+
+def _capsule_scheduler() -> None:
+    while True:
+        try:
+            _dispatch_due()
+        except Exception:
+            traceback.print_exc()
+        time.sleep(delivery.POLL_SECONDS)
+
+
+# Tests exercise individual ticks with a fixed clock. Avoid a racing background
+# tick while they temporarily point the shared config at a migration fixture.
+if "pytest" not in sys.modules:
+    threading.Thread(target=_capsule_scheduler, name="capsule-scheduler", daemon=True).start()
 
 
 # ---------- scheduled briefing (opt-in) ----------
@@ -963,10 +1037,33 @@ def _enqueue_friend_print(
     drawing: bytes | None = None,
     anonymous: bool = False,
     kind: str | None = None,
+    requested_for=None,
 ):
     """Shared bookkeeping for every friend print kind: per-user cap,
     history row (which is also the job — see _PRINT_QUEUE), queue
     insert, and the crash-safe unwind. Returns a Flask response."""
+    try:
+        now = delivery.utc_now()
+        requested = delivery.parse_requested(requested_for, now)
+        effective = _quiet_hours.release(requested or now) if _quiet_hours else requested
+        if effective is not None and (requested is not None or effective > now):
+            msg_id = auth_db.schedule_message(
+                user["id"], body, delivery.stamp(effective),
+                delivery.stamp(requested) if requested else None,
+                drawing=drawing, anonymous=anonymous, kind=kind,
+            )
+            return jsonify({"ok": True, "scheduled": True, "id": msg_id,
+                            "deliver_at": delivery.stamp(effective),
+                            "quiet_held": effective > (requested or now)})
+    except auth_db.CapsuleLimit as exc:
+        return jsonify({"ok": False, "error": str(exc), "kind": "capsule_cap"}), 429
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc), "kind": "input"}), 400
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "capsule could not be saved",
+                        "kind": "server"}), 500
+
     with _inflight_lock:
         if _inflight.get(user["id"], 0) >= _PER_USER_QUEUE_CAP:
             return jsonify({
@@ -1032,6 +1129,7 @@ def friend_print():
 
     return _enqueue_friend_print(
         user, body, anonymous=bool(data.get("anonymous", False)),
+        requested_for=data.get("deliver_at"),
     )
 
 
@@ -1067,6 +1165,7 @@ def friend_print_doodle():
     return _enqueue_friend_print(
         user, "(doodle)", drawing=saved.getvalue(),
         anonymous=bool(data.get("anonymous", False)),
+        requested_for=data.get("deliver_at"),
     )
 
 
@@ -1132,7 +1231,8 @@ def friend_print_photo():
         return jsonify({"ok": False, "error": "photo could not be prepared",
                         "kind": "server"}), 500
     return _enqueue_friend_print(user, body, drawing=drawing,
-                                 anonymous=anonymous, kind="photo")
+                                 anonymous=anonymous, kind="photo",
+                                 requested_for=request.form.get("deliver_at"))
 
 
 @app.get("/api/history")
@@ -1165,6 +1265,22 @@ def friend_history_drawing(message_id: int):
         return jsonify({"ok": False, "error": "drawing not found"}), 404
     encoded = base64.b64encode(drawing).decode("ascii")
     return jsonify({"ok": True, "image": _DOODLE_PREFIX + encoded})
+
+
+@app.post("/api/history/<int:message_id>/cancel")
+@require_allowed
+def friend_cancel_capsule(message_id: int):
+    try:
+        if not auth_db.cancel_scheduled(message_id, current_user()["id"]):
+            # Missing/other-user rows deliberately look like a capsule already
+            # claimed for printing, without revealing another friend's history.
+            return jsonify({"ok": False, "error": "capsule is no longer waiting; refresh your prints",
+                            "kind": "conflict"}), 409
+        return jsonify({"ok": True, "cancelled": True})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": "capsule could not be cancelled",
+                        "kind": "server"}), 500
 
 
 @app.get("/api/printer")

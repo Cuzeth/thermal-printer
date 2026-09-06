@@ -106,6 +106,7 @@ const NAME_STYLES = [
 
 function applyMe(user) {
   me = user;
+  clearTimeout(historyTimer);
   setPendingPolling(!!user && user.status === "pending");
   setPrinterPolling(!!user && user.status === "allowed");
   const who = $("#who");
@@ -254,7 +255,7 @@ async function updatePreview() {
 // SQLite returns "YYYY-MM-DD HH:MM:SS" in UTC; show the local short form.
 function fmtWhen(iso) {
   if (!iso) return "";
-  const d = new Date(iso.replace(" ", "T") + "Z");
+  const d = new Date(iso.endsWith("Z") ? iso : iso.replace(" ", "T") + "Z");
   if (isNaN(d)) return iso;
   return d.toLocaleString(undefined, {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -281,6 +282,11 @@ function historyItem(msg) {
     badge.className = "history-status queued";
     badge.textContent = "queued";
     when.appendChild(badge);
+  } else if (["scheduled", "cancelled"].includes(msg.status)) {
+    const badge = document.createElement("span");
+    badge.className = "history-status " + msg.status;
+    badge.textContent = msg.status === "scheduled" ? "waiting" : "cancelled";
+    when.appendChild(badge);
   }
 
   const body = document.createElement("pre");
@@ -291,6 +297,42 @@ function historyItem(msg) {
     : msg.body;
 
   li.append(when, body);
+  if (msg.deliver_at) {
+    const delivery = document.createElement("div");
+    delivery.className = "history-delivery";
+    const past = new Date(msg.deliver_at) <= new Date();
+    delivery.textContent = `${msg.status === "scheduled" && past ? "due; waiting for queue" : "delivery"}: ${fmtDelivery(msg.deliver_at)}`;
+    if (msg.requested_for && msg.requested_for !== msg.deliver_at) {
+      delivery.textContent += ` · requested ${fmtDelivery(msg.requested_for)}`;
+    }
+    li.append(delivery);
+  }
+  if (msg.status === "scheduled") {
+    // This row has a native cancel button and no restore handler or button
+    // role. Enter/Space on cancel can never bubble into a reprint action.
+    li.classList.add("history-capsule");
+    body.textContent = isDoodle ? "drawing" : msg.body;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost tiny history-cancel";
+    cancel.textContent = "cancel capsule";
+    cancel.setAttribute("aria-label", `cancel capsule for ${fmtDelivery(msg.deliver_at)}`);
+    cancel.addEventListener("click", async () => {
+      cancel.disabled = true;
+      cancel.textContent = "cancelling";
+      try {
+        await postJSON(`/api/history/${msg.id}/cancel`, {});
+        toast("capsule cancelled");
+      } catch (error) {
+        toast(error.message, "err");
+      } finally {
+        await loadHistory();
+        $("#history-refresh").focus();
+      }
+    });
+    li.append(cancel);
+    return li;
+  }
   if (msg.kind === "photo") {
     body.textContent = msg.body + " · tap to reprint";
     li.tabIndex = 0;
@@ -348,8 +390,10 @@ function historyItem(msg) {
 }
 
 const HISTORY_EMPTY_DEFAULT = "no prints yet";
+let historyTimer = null;
 
 async function loadHistory() {
+  clearTimeout(historyTimer);
   const list = $("#history-list");
   const empty = $("#history-empty");
   try {
@@ -362,6 +406,9 @@ async function loadHistory() {
     // Restore the default copy — a previous failed load may have replaced it.
     empty.textContent = HISTORY_EMPTY_DEFAULT;
     empty.hidden = items.length > 0;
+    if ((j.messages || []).some((msg) => ["scheduled", "queued"].includes(msg.status))) {
+      pollHistory();
+    }
   } catch (err) {
     // Non-fatal: show a lightweight error row but leave the form usable.
     list.replaceChildren();
@@ -369,6 +416,66 @@ async function loadHistory() {
     empty.textContent = "history failed: " + err.message;
   }
 }
+
+function pollHistory() {
+  historyTimer = setTimeout(() => {
+    if (me?.status !== "allowed") return;
+    // Preserve keyboard focus while someone is choosing an archive action.
+    if (document.activeElement?.closest(".history-item")) return pollHistory();
+    loadHistory();
+  }, 15_000);
+}
+
+// ---------- delivery choice (shared by all three composer modes) ----------
+
+function fmtDelivery(iso) {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric", hour: "numeric",
+    minute: "2-digit", timeZoneName: "short",
+  });
+}
+
+function localInputValue(date) {
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function deliveryAt() {
+  if ($("#delivery-mode").value === "now") return null;
+  const value = $("#delivery-date").value;
+  const date = new Date(value);
+  if (!value || isNaN(date) || localInputValue(date) !== value) {
+    throw new Error("choose a valid local date and time");
+  }
+  if (date <= new Date()) throw new Error("delivery must be in the future");
+  if (date.getTime() > Date.now() + 365 * 86_400_000) throw new Error("choose a date within 365 days");
+  return date.toISOString();
+}
+
+function updateDeliveryControls() {
+  const later = $("#delivery-mode").value === "later";
+  $("#delivery-date-label").hidden = !later;
+  const date = $("#delivery-date");
+  date.min = localInputValue(new Date(Date.now() + 60_000));
+  date.max = localInputValue(new Date(Date.now() + 365 * 86_400_000));
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let note = "send to the printer queue.";
+  if (later) {
+    note = `your time: ${zone}. Up to 365 days ahead; 10 capsules can wait at once.`;
+    if (date.value) {
+      try { note = `delivery: ${fmtDelivery(deliveryAt())} (${zone}). Cancel from your prints before it enters the queue.`; }
+      catch (error) { note = error.message + ` (${zone})`; }
+    }
+  }
+  $("#delivery-hint").textContent = note;
+  $("#msg-form button[type=submit]").textContent = later ? "save capsule" : "print it";
+  $("#doodle-send").textContent = later ? "save capsule" : "print it";
+  if (typeof photoControls === "function") photoControls();
+}
+
+$("#delivery-mode").addEventListener("change", updateDeliveryControls);
+$("#delivery-date").addEventListener("input", updateDeliveryControls);
+updateDeliveryControls();
 
 // ---------- send message ----------
 
@@ -382,7 +489,11 @@ function celebrateQueued(j) {
   requestAnimationFrame(() => card?.classList.add("print-confirmed"));
   setTimeout(() => card?.classList.remove("print-confirmed"), 700);
   const ahead = Number(j.ahead) || 0;
-  toast(ahead > 0 ? `queued: ${ahead} ahead` : "printing", "ok");
+  toast(j.scheduled ? `${j.quiet_held ? "held for quiet hours" : "capsule saved"}: ${fmtDelivery(j.deliver_at)}`
+    : ahead > 0 ? `queued: ${ahead} ahead` : "printing", "ok");
+  $("#delivery-mode").value = "now";
+  $("#delivery-date").value = "";
+  updateDeliveryControls();
   loadHistory().catch((err) => console.warn("history refresh failed:", err));
   refreshPrinterBanner().catch(() => {});
 }
@@ -391,7 +502,7 @@ async function sendMessage() {
   const body = $("#msg-body").value.trim();
   if (!body) return;
   const anonymous = !!$("#msg-anon")?.checked;
-  const j = await postJSON("/api/print", { body, anonymous });
+  const j = await postJSON("/api/print", { body, anonymous, deliver_at: deliveryAt() });
   $("#msg-body").value = "";
   $("#msg-count").textContent = "0 / 800";
   // Reset anon back to the default so it doesn't silently stick.
@@ -588,7 +699,7 @@ async function sendDoodle() {
   const canvas = $("#doodle-canvas");
   const anonymous = !!$("#doodle-anon")?.checked;
   const image = canvas.toDataURL("image/png");
-  const j = await postJSON("/api/print/doodle", { image, anonymous });
+  const j = await postJSON("/api/print/doodle", { image, anonymous, deliver_at: deliveryAt() });
   resetDoodle();
   if ($("#doodle-anon")) $("#doodle-anon").checked = false;
   celebrateQueued(j);

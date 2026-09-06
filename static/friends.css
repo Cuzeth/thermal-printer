@@ -680,6 +680,23 @@ label .label {
 
 /* ---------- history: the archive column ---------- */
 
+.delivery-controls { border: 0; border-bottom: 1px solid var(--line); padding: 0 0 20px; margin: 20px 24px; display: grid; grid-template-columns: 1fr 1.5fr; gap: 12px; min-width: 0; }
+.delivery-controls legend { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); padding: 0 0 8px; }
+.delivery-controls label { min-width: 0; margin: 0; }
+.delivery-controls input, .delivery-controls select { min-height: 44px; min-width: 0; font-variant-numeric: tabular-nums; }
+.delivery-controls .hint { grid-column: 1 / -1; text-wrap: pretty; }
+.delivery-controls .delivery-quiet { border-left: 2px solid var(--signal-orange-text); padding-left: 10px; }
+.history-delivery { grid-column: 2 / -1; margin-top: 10px; font-family: var(--mono); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.history-capsule { cursor: default; }
+.history-cancel { grid-column: 2 / -1; justify-self: start; min-height: 44px; margin-top: 10px; }
+.history-when { flex-wrap: wrap; }
+.history-status.scheduled { color: var(--signal-orange-text); }
+.history-status.scheduled::before { background: currentColor; }
+
+@media (max-width: 480px) {
+  .delivery-controls { grid-template-columns: 1fr; }
+}
+
 .history { position: relative; z-index: 1; }
 .history-head {
   display: grid;

@@ -40,6 +40,14 @@ Friends register with a username + password, sit pending until you approve them 
 
 Photos are cropped on the device before upload. The editor accepts originals up to 20 MB and 30 million pixels, retains smaller editing copies, and sends only 576 px square PNGs. Export HEIC as JPEG first. The server independently limits uploads to four still JPEG/PNG/WebP frames, 4 MB and 30 million pixels each, within the existing 16 MB request cap. Only the finished monochrome strip is stored, with its caption; original photos and EXIF metadata are not retained. Tap a photo in **your prints** to preview and explicitly reprint those saved pixels. Add new photos to edit a new strip. Queue caps, restart replay, anonymous printing and owner retries work the same as other friend prints.
 
+**Time capsules:** choose **time capsule** under delivery, pick a future date and time, then save your text, doodle or photo strip. Saved photo reprints can be scheduled too. The picker uses your browser's local timezone and shows the resolved instant; the server requires an explicit offset and stores UTC. Missing spring-forward times are rejected by the picker. For an ambiguous autumn time, the browser selects the earlier occurrence and shows its timezone abbreviation before you save. Sending successfully resets delivery to **print now**.
+
+Up to 10 outstanding capsules per friend and 200 across the printer can wait, each up to 365 days ahead. These SQLite limits include claimed capsules and bound the waiting image backlog separately from the existing queue caps. Waiting capsules stay at the top of **your prints**, even after newer receipts; they show the effective delivery date and a **cancel capsule** button. Cancellation is atomic and ends when the queue claims a capsule. Blocking a sender cancels their pending capsules; deleting them removes their rows. Already-started physical prints cannot be recalled.
+
+The dispatcher checks every 15 seconds and catches up overdue capsules after a restart. Due jobs honor the same 3-per-friend and 50-job queue limits; a full queue leaves them waiting for another tick. Printer failures become **didn't print** in history, with the owner's existing retry action; they are not retried indefinitely. The existing crash tradeoff still applies: a restart during the physical print may print that receipt twice. The receipt footer preserves when the capsule was created; delivery dates appear in the web history.
+
+**Optional quiet hours:** set both `FRIEND_QUIET_START=22:00` and `FRIEND_QUIET_END=07:00` to hold friend prints overnight. Both empty (the default) means off. `FRIEND_QUIET_TIMEZONE` defaults to `America/Phoenix` and accepts IANA timezone names independently of the Pi's local timezone. Restart after changing these settings. The start is inclusive and end exclusive; same-day windows work too. In DST zones, nonexistent end times release at the next allowed real minute, and repeated minutes follow the configured wall-clock rule. Quiet hours apply to immediate sends, explicit capsules, and jobs reaching the worker after the window starts, including restart recovery. The effective release time appears after saving and in history. Already accepted jobs that cross the boundary are retained even if that temporarily exceeds the waiting cap. Owner manual prints and scheduled briefings keep their normal behavior.
+
 **Security model:** one Cloudflare Tunnel, one hostname, and the app defends itself. `print.cuzeth.com` fronts `127.0.0.1:5005` with no edge auth ([deploy/cloudflared-config.yml](deploy/cloudflared-config.yml)); friends get signed-cookie sessions, and the owner unlocks `/admin` with an RFC 6238 TOTP code (`auth/totp.py`, secret in `.env`, enrolled in any authenticator app). Admin sessions expire after 12 hours; each code is single-use (replay guard), and the login carries per-IP *and* global failure lockouts because 6-digit codes are a small space (`auth/admin.py`). `/api/admin/*` also accepts `Bearer ADMIN_TOKEN` for curl and the smoke tests. Flask must bind to `127.0.0.1` so the tunnel is the only way in — the rate limiters trust the last `X-Forwarded-For` hop, which only Cloudflare should be appending.
 
 Abuse limits (all in-memory, reset on restart):
@@ -109,6 +117,8 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
 | `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
 | `BRIEFING_SCHEDULE` | no | (off) | Set `HH:MM` (24h) to auto-print the morning briefing daily. Empty = off. |
+| `FRIEND_QUIET_START` / `FRIEND_QUIET_END` | no | (off) | Set both to different `HH:MM` times to hold friend prints during that window; leave both empty to disable. |
+| `FRIEND_QUIET_TIMEZONE` | no | `America/Phoenix` | IANA timezone for friend quiet hours, independent of browser and Pi timezones. |
 | `USB_VENDOR_ID` / `USB_PRODUCT_ID` | no | `0x0483` / `0x5720` | Match your printer. |
 | `RECEIPT_WIDTH` / `PRINTER_PIXEL_WIDTH` | no | `42` / `576` | 42 cols / 576 px = 80mm. For 58mm use `32` / `384`. |
 | `DATA_DIR` | no | `./data` | SQLite + `last_print.bin` live here. |
@@ -152,6 +162,7 @@ features/
   hardware.py           cash drawer, cut, feed, density, status, raw bytes
   image.py              upload → grayscale → dither/threshold → 1-bit
   photo.py              bounded photo frames → thermal strip + caption
+  delivery.py           UTC capsule validation + quiet-hours calendar math
   led.py                LED protocol candidates for vendor-specific units
   markup.py             shared inline-markup grammar (spans: bold/underline/big)
   render.py             PIL-based rich-text rasterizer (growable canvas)

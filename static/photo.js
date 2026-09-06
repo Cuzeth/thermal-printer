@@ -14,7 +14,8 @@ function photoControls() {
   $("#photo-controls").disabled = photoBusy;
   $("#photo-files").disabled = photoFrames.length === 4;
   $("#photo-send").disabled = photoBusy || !hasPhotos || photoReadyRevision !== photoRevision;
-  $("#photo-send").textContent = photoBusy ? "working" : photoSavedId !== null ? "reprint strip" : "print strip";
+  $("#photo-send").textContent = photoBusy ? "working" : $("#delivery-mode").value === "later"
+    ? "save capsule" : photoSavedId !== null ? "reprint strip" : "print strip";
   $("#photo-reset").disabled = photoBusy || !hasPhotos;
   $("#photo-options").hidden = photoSavedId !== null;
   $("#photo-count").textContent = `${photoFrames.length} / 4`;
@@ -277,7 +278,10 @@ $("#photo-panel").addEventListener("submit", async (event) => {
   photoBusy = true;
   photoControls();
   try {
-    const result = await postPhoto("/api/print/photo", await photoFormData());
+    const deliverAt = deliveryAt();
+    const form = await photoFormData();
+    if (deliverAt) form.append("deliver_at", deliverAt);
+    const result = await postPhoto("/api/print/photo", form);
     resetPhotos();
     celebrateQueued(result);
   } catch (error) {

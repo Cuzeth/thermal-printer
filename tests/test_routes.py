@@ -300,6 +300,7 @@ def test_friend_history_returns_own_messages_only(client):
     for m in msgs:
         assert set(m.keys()) == {
             "id", "body", "kind", "anonymous", "status", "printed_at", "has_drawing",
+            "deliver_at", "requested_for",
         }
         assert m["has_drawing"] is False
 
@@ -598,7 +599,7 @@ def test_admin_messages_lists_all_users_newest_first(client, auth):
     assert "message from a" in bodies
     assert "message from b" in bodies
     for m in body["messages"]:
-        assert set(m.keys()) == {"id", "body", "status", "printed_at", "username"}
+        assert set(m.keys()) == {"id", "body", "status", "printed_at", "username", "deliver_at"}
 
     r = client.get("/api/admin/messages?limit=1", headers=auth)
     assert r.status_code == 200
