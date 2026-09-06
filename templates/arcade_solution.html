@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>{{ puzzle.title + ' solution' if puzzle else 'Puzzle unavailable' }} · Paper Arcade</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="arcade-solution-page">
+  <main class="arcade-solution">
+    <header>
+      <p class="arcade-eyebrow">Paper Arcade</p>
+      <h1>{{ puzzle.title + ' solution' if puzzle else 'Puzzle unavailable' }}</h1>
+      {% if puzzle %}
+      <p>No. {{ puzzle.number }} · Match this number to your receipt.</p>
+      {% else %}
+      <p>This puzzle link is no longer available. Ask the printer owner for a new puzzle.</p>
+      {% endif %}
+    </header>
+    {% if puzzle %}
+    <img class="arcade-solution-image" src="{{ data_url }}" width="{{ puzzle.width }}" alt="{{ puzzle.title }} solution for puzzle {{ puzzle.number }}{% if puzzle.kind == 'maze' %}; follow the dotted line from the top opening to the bottom opening{% elif puzzle.kind == 'wordsearch' %}; letters belonging to the hidden words are underlined{% endif %}" />
+    {% if puzzle.kind == 'sudoku' %}
+    <details>
+      <summary>Read solution as text</summary>
+      <table class="arcade-grid" aria-label="Solved Sudoku">
+        <tbody>{% for row in puzzle.solution %}<tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </details>
+    {% elif puzzle.kind == 'wordsearch' %}
+    <h2>Word locations</h2>
+    <p>Rows run from top to bottom. Columns run from left to right, starting at 1.</p>
+    <ul>{% for item in puzzle.placements %}<li><strong>{{ item.word }}</strong>: row {{ item.cells[0][0] + 1 }}, column {{ item.cells[0][1] + 1 }} to row {{ item.cells[-1][0] + 1 }}, column {{ item.cells[-1][1] + 1 }}.</li>{% endfor %}</ul>
+    {% else %}
+    <p>Follow the dotted line. Enter at the top-left opening and leave at the bottom-right opening.</p>
+    <details>
+      <summary>Read the path as coordinates</summary>
+      <p>Each pair is (row, column), starting at 1 in the top left.</p>
+      <p class="arcade-path">{% for r, c in puzzle.path %}({{ r + 1 }}, {{ c + 1 }}){% if not loop.last %} → {% endif %}{% endfor %}</p>
+    </details>
+    {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

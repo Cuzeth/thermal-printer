@@ -31,6 +31,17 @@
 | **Hardware** | Cash drawer, beep, feed, cut, density, code page, LED (best-effort), status query. |
 | **Console** | Raw ESC/POS byte sender with a built-in cheat sheet. Accepts hex (`1b 40 48 69`) or Python escapes (`\x1b@Hi\n`). |
 | **Admin** | Approve / block / delete friends, review recent prints. |
+| **Arcade** | Sudoku, mazes and word searches, with exact receipt previews and solution QR codes. |
+
+**Paper Arcade:** pick a puzzle in the owner console's **arcade** tab and choose **new puzzle**. Check the receipt preview, then **print puzzle** to print that exact puzzle and its solution QR. The selection stays when you switch console tabs; **new puzzle** makes another. Printing and retrying never choose a different puzzle. The supported hardware widths are 576 px (80mm) and 384 px (58mm).
+
+Everything is generated locally. Sudoku varies one verified, uniquely solvable 30-clue template by permuting digits, rows, columns and transposition; this preserves its single solution. Mazes have one path between every pair of cells. Word searches hide eight nature words in all eight directions. There are no external services, custom-word editors or scheduled arcade prints.
+
+Scanning the QR opens `/arcade/solution/<signed identifier>` without a login. This is a deliberate **public, read-only solution page**: anyone with the receipt/link can see that generated puzzle's solution, and nothing from friend accounts or print history. Creation, preview and printing stay under `/api/admin/arcade/*` and require owner authentication. Signed payloads are bounded and validated before generation. The solution page offers a solved Sudoku grid, dotted maze path or underlined word letters with exact word coordinates.
+
+Solution links use `https://print.cuzeth.com` by default. In explicit `DRY_RUN` or `DEV_BYPASS_ADMIN` mode they default to `http://127.0.0.1:5005` (or configured `PORT`), which opens only on that computer. To scan a local demo from a phone, set `PUBLIC_BASE_URL` to an existing reachable HTTP(S) origin that forwards to the app; keep the app bound to loopback. The override also supports another production hostname. Request Host and forwarding headers never select the printed address. If the configured origin or paper width changes after previewing, make a new puzzle before printing.
+
+Keep the existing production `SECRET_KEY` persistent: it signs versioned puzzle identifiers as well as login sessions. Solution links survive app restarts with the same key and generator version; rotating the key invalidates old links. No puzzle database or expiry is needed. Future generator changes must retain version 1 behavior for existing receipts; fixture tests pin those identities. QR codes use four-module quiet zones and integer pixel modules, and all arcade rasters use the existing buffer-safe image printer helper.
 
 **Friends page** — `/` · public at <https://print.cuzeth.com>, via Cloudflare Tunnel.
 
@@ -108,13 +119,14 @@ Everything is env-driven with sensible defaults. Copy [`.env.example`](.env.exam
 
 | Variable | Required? | Default | Notes |
 |---|---|---|---|
-| `SECRET_KEY` | yes (prod) | random per boot | Flask session signing. Persist to keep sessions across restarts. |
+| `SECRET_KEY` | yes (prod) | random per boot | Flask sessions and Paper Arcade links. Persist across restarts to keep both valid. |
 | `ADMIN_TOKEN` | yes (prod) | random per boot | Bearer alternative to the TOTP session for `/api/admin/*` — used by curl and the smoke tests. |
 | `TOTP_SECRET` | yes (prod) | (empty) | Base32 secret behind the `/admin` login. Generate + enroll with `python3 scripts/gen_totp.py`. Empty = TOTP login fails closed (Bearer still works). |
 | `HOST` / `PORT` | no | `127.0.0.1` / `5005` | Must be `127.0.0.1` in prod — only cloudflared may reach the app, because the rate limiters trust the last `X-Forwarded-For` hop. |
 | `DEV_BYPASS_ADMIN` | no | `false` | Skips the TOTP login entirely. Set `true` for local dev; **never** on the Pi. |
 | `COOKIE_SECURE` | no | `true` | Secure-flag session cookies. Default fits prod (both hostnames are HTTPS). For local HTTP dev, set `COOKIE_SECURE=false` — otherwise the browser drops the session cookie and friends can't stay signed in. |
 | `DRY_RUN` | no | `false` | Write ESC/POS bytes to `data/last_print.bin` instead of USB. |
+| `PUBLIC_BASE_URL` | no | `https://print.cuzeth.com` | Origin for Arcade solution QR links; explicit DRY_RUN/dev bypass defaults to loopback and `PORT`. Set a reachable origin for phone scans of a local demo. |
 | `DEFAULT_LOCATION` | no | `Phoenix` | Fallback city for the weather widget and morning briefing; also prefills the GUI inputs. |
 | `BRIEFING_SCHEDULE` | no | (off) | Set `HH:MM` (24h) to auto-print the morning briefing daily. Empty = off. |
 | `FRIEND_QUIET_START` / `FRIEND_QUIET_END` | no | (off) | Set both to different `HH:MM` times to hold friend prints during that window; leave both empty to disable. |
@@ -163,6 +175,7 @@ features/
   image.py              upload → grayscale → dither/threshold → 1-bit
   photo.py              bounded photo frames → thermal strip + caption
   delivery.py           UTC capsule validation + quiet-hours calendar math
+  arcade.py             versioned local puzzles, signed solution links + raster receipts
   led.py                LED protocol candidates for vendor-specific units
   markup.py             shared inline-markup grammar (spans: bold/underline/big)
   render.py             PIL-based rich-text rasterizer (growable canvas)
@@ -179,6 +192,7 @@ templates/
   index.html            main GUI (tabs), served at /admin
   admin_login.html      the TOTP code prompt
   friends.html          public friends page, served at /
+  arcade_solution.html  public, signed-link puzzle solutions only
 static/
   app.js / style.css    main GUI
   friends.js / .css     friends page

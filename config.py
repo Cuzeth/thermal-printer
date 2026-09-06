@@ -64,6 +64,11 @@ PORT = _env_int("PORT", 5005)
 
 DRY_RUN = _env_bool("DRY_RUN", False)
 
+# Optional origin for Paper Arcade solution QR codes. Empty uses the production
+# hostname, or loopback in explicit DRY_RUN/dev bypass mode. Never use request
+# Host headers here: an untrusted hostname must not end up on a paper receipt.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip()
+
 # Fallback city for the weather widget + morning briefing. One source of
 # truth — the GUI inputs are prefilled from this too, so the placeholder
 # and the server default can't drift apart.

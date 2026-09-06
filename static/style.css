@@ -651,6 +651,7 @@ input[type=checkbox] {
 input[type=text],
 input[type=number],
 input[type=date],
+input[type=datetime-local],
 input[type=file],
 input[type=password],
 select,
@@ -1176,6 +1177,8 @@ summary:focus-visible { outline: 2px solid var(--signal-orange-text); outline-of
   outline-offset: -1px;
 }
 .imgwrap img.preview-result { animation: preview-result-in var(--med) var(--ease) both; }
+/* Repeated puzzle generation needs a stable, immediately readable grid. */
+body:has(#pane-arcade.active) .imgwrap img.preview-result { animation: none; }
 .imgwrap .segcut {
   height: 14px;
   margin: 6px -14px;
@@ -1196,6 +1199,66 @@ summary:focus-visible { outline: 2px solid var(--signal-orange-text); outline-of
 }
 
 /* ---------- toast ---------- */
+
+/* ---------- paper arcade ---------- */
+
+.arcade-description { min-height: 3.6em; margin-top: 14px; }
+.arcade-actions button { min-height: 44px; }
+.arcade-status { font-variant-numeric: tabular-nums; min-height: 3em; }
+.arcade-solution-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--signal-orange-text);
+  text-underline-offset: 4px;
+}
+.arcade-solution-link[hidden] { display: none; }
+.arcade-solution-link:focus-visible { outline: 2px solid var(--signal-orange-text); outline-offset: 4px; }
+.arcade-note { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 20px; }
+
+.arcade-solution-page {
+  --ground: var(--bone);
+  --ground-2: #e5e1d6;
+  --ground-3: #dcd8cd;
+  --text: var(--ink);
+  --text-muted: #5b5d57;
+  --text-dim: #676a61;
+  --line: var(--border-dark);
+  --line-strong: var(--border-dark-strong);
+  --sel-ground: var(--ink);
+  --sel-text: var(--bone);
+  --signal-orange-text: #b13e17;
+  background: var(--ground);
+  color: var(--text);
+}
+main.arcade-solution {
+  display: block;
+  width: min(100%, 640px);
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  line-height: 1.6;
+}
+.arcade-eyebrow { font-family: var(--mono); text-transform: uppercase; letter-spacing: .1em; font-size: 12px; }
+.arcade-solution h1 { font-size: clamp(28px, 7vw, 42px); line-height: 1.15; text-wrap: balance; }
+.arcade-solution h2 { font-size: 24px; margin: 24px 0 8px; }
+.arcade-solution p { text-wrap: pretty; }
+.arcade-solution-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 28px auto;
+  background: white;
+  image-rendering: pixelated;
+  outline: 1px solid rgba(0, 0, 0, .1);
+}
+.arcade-solution details { border: 1px solid var(--border-dark); padding: 12px; margin-top: 20px; }
+.arcade-solution details > :not(summary) { margin-inline: 0; }
+.arcade-solution summary { min-height: 44px; cursor: pointer; display: list-item; }
+.arcade-solution summary::after { content: none; }
+.arcade-solution summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.arcade-grid { border-collapse: collapse; width: 100%; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.arcade-grid td { text-align: center; border: 1px solid var(--border-dark); padding: 6px 0; }
+.arcade-path { font-family: var(--mono); font-size: 13px; }
 
 .toast {
   position: fixed;

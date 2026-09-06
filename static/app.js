@@ -10,6 +10,8 @@ const state = {
   previewOwner: null,
   previewKind: null,
   previewTrigger: null,
+  arcade: null,
+  arcadeBusy: false,
 };
 
 // ---------- tabs ----------
@@ -134,6 +136,7 @@ const PREVIEW_TITLES = {
   codes: "code preview",
   widgets: "widget preview",
   labs: "lab preview",
+  arcade: "puzzle preview",
 };
 
 function setPreviewStatus(label, kind = "idle") {
@@ -225,7 +228,88 @@ function configurePreviewForPane(pane) {
   if (pane === "codes") showPreviewPlaceholder("select QR or barcode");
   if (pane === "widgets") showPreviewPlaceholder("select a widget");
   if (pane === "labs") showPreviewPlaceholder("select a lab");
+  if (pane === "arcade") showArcadePreview();
 }
+
+// ---------- paper arcade ----------
+
+const ARCADE_DESCRIPTIONS = {
+  sudoku: "Fill the 9 × 9 grid. Every row, column and box contains 1–9, with one solution.",
+  maze: "Find your way from the opening at the top left to the exit at the bottom right.",
+  wordsearch: "Find eight nature words in a 12 × 12 grid. Look across, down, diagonally and backwards.",
+};
+
+function showArcadePreview() {
+  if (state.activePane !== "arcade") return;
+  if (state.arcade) {
+    const token = beginPreview("arcade");
+    showPreviewImage(state.arcade.data_url);
+    finishPreview("arcade", token, "no. " + state.arcade.number);
+  } else {
+    showPreviewPlaceholder(state.arcadeBusy ? "making your puzzle" : "choose a puzzle, then make a new one");
+    setPreviewStatus(state.arcadeBusy ? "making puzzle" : "waiting", state.arcadeBusy ? "loading" : "idle");
+  }
+}
+
+function setArcadeBusy(busy, action = "") {
+  state.arcadeBusy = busy;
+  $("#arcade-kind").disabled = busy;
+  setButtonBusy($("#arcade-new"), busy && action === "new");
+  $("#arcade-new").disabled = busy;
+  setButtonBusy($("#arcade-print"), busy && action === "print");
+  $("#arcade-print").disabled = busy || !state.arcade;
+  $("#arcade-new").textContent = busy && action === "new" ? "making puzzle" : "new puzzle";
+  $("#arcade-print").textContent = busy && action === "print" ? "printing" : "print puzzle";
+}
+
+$("#arcade-kind").addEventListener("change", () => {
+  state.arcade = null;
+  $("#arcade-description").textContent = ARCADE_DESCRIPTIONS[$("#arcade-kind").value];
+  $("#arcade-solution-link").hidden = true;
+  $("#arcade-status").textContent = "Make a puzzle to see it on the receipt.";
+  setArcadeBusy(false);
+  showArcadePreview();
+});
+
+$("#arcade-new").addEventListener("click", async () => {
+  if (state.arcadeBusy) return;
+  state.arcade = null;
+  $("#arcade-solution-link").hidden = true;
+  $("#arcade-status").textContent = "Making your puzzle...";
+  setArcadeBusy(true, "new");
+  showArcadePreview();
+  try {
+    // Keep the result even if the owner switches tabs while it is rendering.
+    // The shared preview only changes when Arcade is still the active pane.
+    state.arcade = await postJSON("/api/admin/arcade/new", { kind: $("#arcade-kind").value });
+    $("#arcade-status").textContent = "Puzzle " + state.arcade.number + " is ready. Print this one or make another.";
+    const link = $("#arcade-solution-link");
+    link.href = state.arcade.solution_url;
+    link.hidden = false;
+  } catch (e) {
+    $("#arcade-status").textContent = e.message;
+    toast(e.message, "err");
+  } finally {
+    setArcadeBusy(false);
+    showArcadePreview();
+  }
+});
+
+$("#arcade-print").addEventListener("click", async () => {
+  if (state.arcadeBusy || !state.arcade) return;
+  setArcadeBusy(true, "print");
+  $("#arcade-status").textContent = "Printing puzzle " + state.arcade.number + "...";
+  try {
+    await postJSON("/api/admin/arcade/print", { token: state.arcade.token });
+    $("#arcade-status").textContent = "Printed puzzle " + state.arcade.number + ". Its solution QR is on the receipt.";
+    toast("puzzle printed");
+  } catch (e) {
+    $("#arcade-status").textContent = e.message;
+    toast(e.message, "err");
+  } finally {
+    setArcadeBusy(false);
+  }
+});
 
 async function refreshComposePreview() {
   const owner = "compose";

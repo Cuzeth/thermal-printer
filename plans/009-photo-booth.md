@@ -1,6 +1,6 @@
 # 009 — Friend photo booth
 
-Status: DONE (implemented and validated; awaiting parent review and commit)
+Status: DONE (implemented, validated and reviewed; commit `943a953`)
 
 ## Plan
 

@@ -27,6 +27,7 @@ from auth import auth_bp
 from auth import db as auth_db
 from auth.admin import admin_auth_bp
 from auth.session import current_user, is_admin_request, require_admin, require_allowed
+from features import arcade
 from features import codes as codes_feat
 from features import delivery
 from features import hardware as hw_feat
@@ -202,6 +203,85 @@ def _safe(handler: Callable[[], Any]):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": "server error", "kind": "server"}), 500
+
+
+# ---------- paper arcade ----------
+
+def _arcade_base_url() -> str:
+    return arcade.public_base_url(config.PUBLIC_BASE_URL,
+                                  local=config.DRY_RUN or config.DEV_BYPASS_ADMIN,
+                                  port=config.PORT)
+
+
+def _arcade_request() -> dict:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValueError("send a JSON object")
+    return data
+
+
+def _arcade_preview(token: str) -> dict:
+    spec = arcade.read_token(token, app.secret_key)
+    base = _arcade_base_url()
+    arcade.require_current_settings(spec, config.PRINTER_PIXEL_WIDTH, base)
+    puzzle = arcade.generate(spec)
+    url = arcade.solution_url(base, token)
+    img = arcade.render(puzzle, url)
+    return {"token": token, "kind": spec["kind"], "number": puzzle["number"],
+            "solution_url": url, "data_url": image_feat.to_png_data_url(img),
+            "width": img.width, "height": img.height}
+
+
+@app.post("/api/admin/arcade/new")
+@require_admin
+def arcade_new():
+    def run():
+        data = _arcade_request()
+        token = arcade.new_token(data.get("kind"), config.PRINTER_PIXEL_WIDTH,
+                                 _arcade_base_url(), app.secret_key)
+        return _arcade_preview(token)
+    return _safe(run)
+
+
+@app.post("/api/admin/arcade/preview")
+@require_admin
+def arcade_preview():
+    return _safe(lambda: _arcade_preview(_arcade_request().get("token")))
+
+
+@app.post("/api/admin/arcade/print")
+@require_admin
+def arcade_print():
+    def run():
+        token = _arcade_request().get("token")
+        spec = arcade.read_token(token, app.secret_key)
+        base = _arcade_base_url()
+        arcade.require_current_settings(spec, config.PRINTER_PIXEL_WIDTH, base)
+        # Reconstruct only this signed version/seed, never mint another one.
+        # Both preview and print use the same raster path, including the QR.
+        img = arcade.render(arcade.generate(spec), arcade.solution_url(base, token))
+        with open_printer() as p:
+            _print_image(p, img)
+            footer(p)
+        return {"token": token}
+    return _safe(run)
+
+
+@app.get("/arcade/solution/<token>")
+def arcade_solution(token):
+    # Deliberately public, read-only exception: anyone holding a receipt may
+    # scan its solution. The signature is verified before bounded generation;
+    # this route has no friend/message lookup and cannot invoke the printer.
+    try:
+        puzzle = arcade.generate(arcade.read_token(token, app.secret_key))
+    except ValueError:
+        return render_template("arcade_solution.html", puzzle=None), 404
+    response = app.make_response(render_template(
+        "arcade_solution.html", puzzle=puzzle,
+        data_url=image_feat.to_png_data_url(arcade.render(puzzle, solution=True)),
+    ))
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 # ---------- text composer ----------

@@ -1,6 +1,6 @@
 # 010 — Time capsules and optional quiet hours
 
-Status: DONE (214 tests, auth smoke and JS syntax checks passed; awaiting commit).
+Status: DONE (214 tests, auth smoke and JS syntax checks passed; reviewed and committed as `5946df1`).
 Scope: friends' text, doodles and photo strips, including
 saved-strip reprints. Owner prints and the daily briefing retain their behavior.
 

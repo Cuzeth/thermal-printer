@@ -25,7 +25,8 @@ audits from re-litigating settled questions.
 | 007 | Friend doodles — canvas on /m/ printing through the queue | P2 | M | 001 (002 recommended) | DONE (reviewed; commit `07d1bda`) |
 | 008 | "printer looks offline" banner on the friends page | P2 | S | 001–005 merged | DONE (reviewed; commit `d8e5986`) |
 | 009 | Friend photo booth | P2 | M | 001–008 | DONE (167 tests + auth smoke; commit `943a953`) |
-| 010 | Time capsules and optional friend quiet hours | P2 | M | 009 | DONE (214 tests + auth smoke + JS syntax checks; awaiting commit) |
+| 010 | Time capsules and optional friend quiet hours | P2 | M | 009 | DONE (214 tests + auth smoke + JS syntax checks; commit `5946df1`) |
+| 011 | Paper Arcade: Sudoku, mazes and word searches | P2 | M | 010 | DONE (316 tests + auth smoke + JS syntax checks; parent review passed) |
 
 All eight plans were executed, reviewed, and fast-forward-merged into
 `main` on 2026-07-06 (owner-directed): fixes `eb34102 → 7258e63 → da3a6e7
