@@ -1586,7 +1586,7 @@ main.arcade-solution {
 
 .admin-print-log > summary { color: var(--text-muted); font-family: var(--mono); font-size: 12px; }
 .admin-print-log > summary::after { content: none; }
-.admin-print-log button { min-height: 44px; }
+.admin-print-log button, .admin-failed-prints button { min-height: 44px; }
 .admin-log-tools .help { margin-top: 14px; }
 .admin-log-confirm { padding: 12px; border: 1px solid var(--line-strong); }
 .admin-log-confirm p { margin: 0; font-size: 13px; color: var(--text-muted); }

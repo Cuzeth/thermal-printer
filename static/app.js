@@ -1151,6 +1151,55 @@ async function loadBlocked() {
   }
 }
 
+let failedPrintsRevision = 0;
+let retryingPrint = false;
+
+async function loadFailedMessages() {
+  if (retryingPrint) return;
+  const revision = ++failedPrintsRevision;
+  const list = $("#admin-failed-list");
+  try {
+    const { messages } = await adminGET("/api/admin/messages?status=failed&limit=20");
+    if (revision !== failedPrintsRevision) return;
+    list.replaceChildren();
+    if (!messages.length) return list.appendChild(emptyState("no failed prints"));
+    messages.forEach((m) => {
+      const card = document.createElement("div");
+      card.className = "wid admin-msg";
+      const actions = document.createElement("div");
+      actions.className = "row admin-msg-actions";
+      actions.appendChild(retryMessageButton(m.id));
+      card.append(messageSummaryHead(m), actions);
+      list.appendChild(card);
+    });
+  } catch (e) {
+    if (revision === failedPrintsRevision) list.replaceChildren(emptyState("couldn't check failed prints: " + e.message));
+  }
+}
+
+function retryMessageButton(id) {
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "ghost tiny admin-btn admin-btn-approve";
+  retry.textContent = "retry";
+  retry.addEventListener("click", () => {
+    // Both lists can show the same failed job. Keep a second click or a
+    // pending list refresh from enabling another retry while paper is moving.
+    if (retryingPrint) return;
+    return guard(async () => {
+      retryingPrint = true;
+      failedPrintsRevision++;
+      try {
+        await adminPOST(`/api/admin/messages/${id}/retry`);
+      } finally {
+        retryingPrint = false;
+        await Promise.all([loadFailedMessages(), loadMessages()]);
+      }
+    }, "printed", retry);
+  });
+  return retry;
+}
+
 // Contents are fetched only after an individual reveal. Closing the log also
 // invalidates pending requests, so a slow response cannot restore a surprise.
 let printLogRevision = 0;
@@ -1189,9 +1238,7 @@ function closePrintLog() {
   clearPrintLog();
 }
 
-function messageSummaryCard(m, revision, signal) {
-  const card = document.createElement("div");
-  card.className = "wid admin-msg";
+function messageSummaryHead(m) {
   const head = document.createElement("div");
   head.className = "admin-msg-head";
   const title = document.createElement("span");
@@ -1204,7 +1251,12 @@ function messageSummaryCard(m, revision, signal) {
   badge.className = "admin-msg-status " + m.status;
   badge.textContent = m.status === "failed" ? "didn't print" : m.status;
   head.append(title, when, badge);
+  return head;
+}
 
+function messageSummaryCard(m, revision, signal) {
+  const card = document.createElement("div");
+  card.className = "wid admin-msg";
   const content = document.createElement("div");
   content.className = "admin-msg-content";
   content.id = `admin-print-content-${m.id}`;
@@ -1256,18 +1308,8 @@ function messageSummaryCard(m, revision, signal) {
     }
   });
   actions.appendChild(reveal);
-  if (m.status === "failed") {
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "ghost tiny admin-btn admin-btn-approve";
-    retry.textContent = "retry";
-    retry.addEventListener("click", () => guard(async () => {
-      await adminPOST(`/api/admin/messages/${m.id}/retry`);
-      await loadMessages();
-    }, "printed", retry));
-    actions.appendChild(retry);
-  }
-  card.append(head, actions, content);
+  if (m.status === "failed") actions.appendChild(retryMessageButton(m.id));
+  card.append(messageSummaryHead(m), actions, content);
   return card;
 }
 
@@ -1292,9 +1334,10 @@ async function loadMessages() {
 }
 
 async function refreshAdmin() {
-  await Promise.all([loadPending(), loadAllowed(), loadBlocked()]);
+  await Promise.all([loadPending(), loadAllowed(), loadBlocked(), loadFailedMessages()]);
 }
 
+$("#admin-refresh-failed").addEventListener("click", () => guard(loadFailedMessages, "refreshed"));
 $("#admin-refresh-pending").addEventListener("click", () => guard(loadPending, "refreshed"));
 $("#admin-refresh-allowed").addEventListener("click", () => guard(loadAllowed, "refreshed"));
 $("#admin-refresh-blocked").addEventListener("click", () => guard(loadBlocked, "refreshed"));
@@ -1322,6 +1365,7 @@ $("#admin-show-undelivered").addEventListener("click", () => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) closePrintLog();
+  else if (state.activePane === "admin") loadFailedMessages();
 });
 window.addEventListener("pagehide", closePrintLog);
 

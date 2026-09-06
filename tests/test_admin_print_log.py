@@ -50,6 +50,47 @@ def test_log_excludes_undelivered_and_never_prefetches_contents(client, auth):
         assert user["username"] not in response.get_data(as_text=True)
 
 
+def test_failed_feed_finds_older_failures_without_revealing_other_jobs(client, auth):
+    """Newer successful or scheduled jobs cannot push an unresolved failure out."""
+    user = friend()
+    failed_id = auth_db.log_message(user["id"], "secret failed print", status="failed")
+    for _ in range(25):
+        auth_db.log_message(user["id"], "printed already")
+    for status in ("scheduled", "queued", "cancelled"):
+        auth_db.log_message(user["id"], "future surprise", status=status)
+    for suffix in ("", "&include_undelivered=1"):
+        response = client.get("/api/admin/messages?status=failed&limit=1" + suffix, headers=auth)
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
+        assert response.get_json()["messages"] == [{
+            "id": failed_id, "kind": "text", "status": "failed",
+            "printed_at": auth_db.get_message(failed_id)["printed_at"],
+        }]
+
+
+def test_failed_feed_tracks_unsuccessful_then_successful_retry(client, auth, monkeypatch):
+    """A failed retry stays actionable; a successful retry clears the visible list."""
+    from printer import PrinterError
+
+    msg_id = auth_db.log_message(friend()["id"], "secret receipt", status="failed")
+    printed = []
+
+    def offline(message):
+        raise PrinterError("printer offline")
+
+    monkeypatch.setattr(app_module, "_print_friend_message", offline)
+    response = client.post(f"/api/admin/messages/{msg_id}/retry", headers=auth)
+    assert response.status_code == 503
+    messages = client.get("/api/admin/messages?status=failed", headers=auth).get_json()["messages"]
+    assert [message["id"] for message in messages] == [msg_id]
+    monkeypatch.setattr(app_module, "_print_friend_message", lambda message: printed.append(message["body"]))
+    response = client.post(f"/api/admin/messages/{msg_id}/retry", headers=auth)
+    assert response.status_code == 200
+    assert "secret receipt" not in response.get_data(as_text=True)
+    assert printed == ["secret receipt"]
+    assert client.get("/api/admin/messages?status=failed", headers=auth).get_json()["messages"] == []
+
+
 @pytest.mark.parametrize("status", ["scheduled", "queued", "cancelled"])
 def test_undelivered_reveal_requires_explicit_boolean_opt_in(client, auth, status):
     """Knowing an id cannot accidentally reveal a print that has not arrived."""

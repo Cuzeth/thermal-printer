@@ -1442,6 +1442,7 @@ def admin_list_messages():
         limit = 20
     response = jsonify({"ok": True, "messages": auth_db.list_message_summaries(
         limit=limit, include_undelivered=request.args.get("include_undelivered") == "1",
+        failed_only=request.args.get("status") == "failed",
     )})
     response.headers["Cache-Control"] = "no-store"
     return response

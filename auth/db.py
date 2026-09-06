@@ -444,13 +444,18 @@ def list_messages(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_message_summaries(limit: int = 20, *, include_undelivered: bool = False) -> list[dict]:
+def list_message_summaries(
+    limit: int = 20, *, include_undelivered: bool = False, failed_only: bool = False,
+) -> list[dict]:
     """Owner troubleshooting starts with metadata, never senders or contents.
 
     Future, queued and cancelled prints stay out of the default log entirely.
     Fetching a summary must not accidentally spoil a receipt waiting to arrive.
     """
-    where = "" if include_undelivered else "WHERE status IN ('printed', 'failed')"
+    if failed_only:
+        where = "WHERE status = 'failed'"
+    else:
+        where = "" if include_undelivered else "WHERE status IN ('printed', 'failed')"
     with db() as conn:
         rows = conn.execute(
             "SELECT id, kind, status, printed_at FROM messages "
