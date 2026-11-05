@@ -1,20 +1,17 @@
-# Upper bounds = "known-good majors". The Pi installs straight from this
-# file, so a surprise major bump would land as a broken printer at
-# runtime. Raise a bound deliberately, run the suite, then deploy.
-Flask>=3.0.0,<4
-python-escpos>=3.1,<4
-Pillow>=10.0.0,<12
-requests>=2.31.0,<3
-pyusb>=1.2.1,<2
-qrcode>=7.4.2,<9
-python-barcode>=0.15.1,<1
-gunicorn>=21.0,<24
+Flask>=3.1.3
+python-escpos>=3.1
+Pillow>=13.0.0
+requests>=2.34.2
+pyusb>=1.3.1
+qrcode>=8.2
+python-barcode>=0.16.1
+gunicorn>=26.2.0
 # Arabic shaping + bidirectional reordering. PIL/FreeType draws
 # characters in the order they appear in the string, so without these
 # libraries Arabic prints letter-reversed. arabic-reshaper picks the
 # joining forms, python-bidi applies UAX #9 to produce visual order.
-arabic-reshaper>=3.0.0,<4
-python-bidi>=0.4.2,<1
+arabic-reshaper>=3.1.0
+python-bidi>=0.6.12
 
 # dev-only (CI runs pytest; real install is fine too — few MB):
 # pytest
